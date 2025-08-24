@@ -23,6 +23,7 @@ class StorageService {
   // Keys for regular storage
   static const String _userKey = 'user_data';
   static const String _isLoggedInKey = 'is_logged_in';
+  static const String _biometricEnabledKey = 'biometric_enabled';
 
   // Save authentication data
   static Future<void> saveAuthData({
@@ -84,6 +85,7 @@ class StorageService {
       _secureStorage.delete(key: _tokenKey), // Clear token from secure storage
       prefs.remove(_userKey),
       prefs.setBool(_isLoggedInKey, false),
+      prefs.remove(_biometricEnabledKey),
     ]);
   }
 
@@ -143,5 +145,16 @@ class StorageService {
     } catch (e) {
       // Migration failed, but continue normally
     }
+  }
+
+  // Biometric authentication preferences
+  static Future<void> setBiometricEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_biometricEnabledKey, enabled);
+  }
+
+  static Future<bool> isBiometricEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_biometricEnabledKey) ?? false;
   }
 }

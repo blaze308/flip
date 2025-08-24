@@ -91,8 +91,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       const Spacer(flex: 1),
 
                       // SVG Illustration
-                      Container(
-                        height: 300,
+                      SizedBox(
+                        height: 280,
                         width: double.infinity,
                         child: SvgPicture.asset(
                           'assets/svg/onboarding_one.svg',
@@ -118,17 +118,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       const SizedBox(height: 24),
 
                       // Description text
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20.0),
                         child: Text(
                           'Watch Fun Video, Party And Live Streams,\nChat With People From Around The Globe,\nAnd Get Rewards!',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize:
+                                MediaQuery.of(context).size.width < 360
+                                    ? 13
+                                    : 14,
                             fontWeight: FontWeight.w400,
                             color: Colors.white70,
-                            height: 1.5,
-                            letterSpacing: 0.3,
+                            height: 1.4,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ),

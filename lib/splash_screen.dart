@@ -90,55 +90,43 @@ class _SplashScreenState extends State<SplashScreen>
                           boxShadow: [
                             // Multiple layers of glow for dramatic effect
                             BoxShadow(
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white.withOpacity(0.3),
                               blurRadius: 100,
                               spreadRadius: 50,
                             ),
-                            BoxShadow(
-                              color: Colors.white.withOpacity(0.6),
-                              blurRadius: 150,
-                              spreadRadius: 80,
-                            ),
-                            BoxShadow(
-                              color: Colors.white.withOpacity(0.3),
-                              blurRadius: 200,
-                              spreadRadius: 100,
-                            ),
                           ],
                         ),
-                        child: Container(
-                          width: 200,
-                          height: 200,
-                          child: SvgPicture.asset(
-                            'assets/svg/logo.svg',
-                            width: 200,
-                            height: 200,
-                            fit: BoxFit.contain,
-                          ),
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          width: 300,
+                          height: 300,
+                          fit: BoxFit.contain,
                         ),
                       ),
 
-                      const SizedBox(height: 40),
-
                       // App name with elegant typography
-                      ShaderMask(
-                        shaderCallback:
-                            (bounds) => const LinearGradient(
-                              colors: [
-                                Color(0xFF4ECDC4), // Teal
-                                Color(0xFF44A08D), // Green
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ).createShader(bounds),
-                        child: const Text(
-                          'ANCIENTFLIP',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w300,
-                            letterSpacing: 4.0,
-                            color: Colors.white,
-                          ),
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'ANCIENT',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w300,
+                                letterSpacing: 4.0,
+                                color: Colors.white,
+                              ),
+                            ),
+                            TextSpan(
+                              text: 'FLIP',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w300,
+                                letterSpacing: 4.0,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
 
@@ -157,20 +145,6 @@ class _SplashScreenState extends State<SplashScreen>
                             ],
                           ),
                           borderRadius: BorderRadius.circular(1),
-                        ),
-                      ),
-
-                      const SizedBox(height: 60),
-
-                      // Loading indicator
-                      SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            const Color(0xFF4ECDC4).withOpacity(0.7),
-                          ),
                         ),
                       ),
                     ],

@@ -76,11 +76,20 @@ class FirebaseAuthService {
         // Save user data locally
         await _saveUserDataLocally(user);
 
+        // Sync with backend
+        try {
+          await BackendService.syncUser();
+        } catch (e) {
+          print('Backend sync failed during registration: $e');
+          // Continue even if backend sync fails
+        }
+
         return AuthResult(
           success: true,
           message:
               'Registration successful! Please check your email to verify your account.',
           user: user,
+          shouldShowBiometricSetup: true,
         );
       } else {
         return AuthResult(
@@ -740,8 +749,14 @@ class AuthResult {
   final bool success;
   final String message;
   final User? user;
+  final bool shouldShowBiometricSetup;
 
-  AuthResult({required this.success, required this.message, this.user});
+  AuthResult({
+    required this.success,
+    required this.message,
+    this.user,
+    this.shouldShowBiometricSetup = false,
+  });
 }
 
 // Updated UserData model to work with Firebase

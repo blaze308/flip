@@ -45,6 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Face ID permission -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Use Face ID to authenticate and securely access your account</string>
 	<!-- Firebase and OAuth Configuration -->
 	<key>CFBundleURLTypes</key>
 	<array>
@@ -53,8 +56,8 @@
 			<string>REVERSED_CLIENT_ID</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<!-- This will be replaced with your actual REVERSED_CLIENT_ID from GoogleService-Info.plist -->
-				<string>YOUR_REVERSED_CLIENT_ID_HERE</string>
+				<!-- REVERSED_CLIENT_ID from GoogleService-Info.plist -->
+				<string>com.googleusercontent.apps.979501294062-9phc9i29ugicf894gc7rbemsmni3j7ip</string>
 			</array>
 		</dict>
 	</array>

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'splash_screen.dart';
 import 'onboarding_screen.dart';
 import 'onboarding_screen_two.dart';
@@ -12,10 +13,12 @@ import 'new_password_screen.dart';
 import 'phone_registration_screen.dart';
 import 'otp_verification_screen.dart';
 import 'home_screen.dart';
+import 'biometric_setup_screen.dart';
+import 'biometric_login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const AncientFlipApp());
 }
 
@@ -49,6 +52,8 @@ class AncientFlipApp extends StatelessWidget {
         '/phone-registration': (context) => const PhoneRegistrationScreen(),
         '/otp-verification': (context) => const OtpVerificationScreen(),
         '/home': (context) => const HomeScreen(),
+        '/biometric-setup': (context) => const BiometricSetupScreen(),
+        '/biometric-login': (context) => const BiometricLoginScreen(),
       },
     );
   }

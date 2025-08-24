@@ -89,11 +89,11 @@ class _RegisterScreenState extends State<RegisterScreen>
       return 'Password is required';
     }
     if (value.length < 8) {
-      return 'Password must be at least 8 characters';
+      return 'Password must be at least 6 characters';
     }
-    if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)').hasMatch(value)) {
-      return 'Password must contain uppercase, lowercase, and number';
-    }
+    // if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)').hasMatch(value)) {
+    //   return 'Password must contain uppercase, lowercase, and number';
+    // }
     return null;
   }
 
@@ -122,7 +122,13 @@ class _RegisterScreenState extends State<RegisterScreen>
                 duration: const Duration(seconds: 3),
               ),
             );
-            Navigator.of(context).pushReplacementNamed('/home');
+
+            // Navigate to biometric setup if it should be shown, otherwise go to home
+            if (result.shouldShowBiometricSetup) {
+              Navigator.of(context).pushReplacementNamed('/biometric-setup');
+            } else {
+              Navigator.of(context).pushReplacementNamed('/home');
+            }
           }
         } else {
           if (mounted) {

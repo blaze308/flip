@@ -101,8 +101,8 @@ class _OnboardingScreenThreeState extends State<OnboardingScreenThree>
                       // Main SVG Illustration with scale animation
                       Transform.scale(
                         scale: _scaleAnimation.value,
-                        child: Container(
-                          height: 300,
+                        child: SizedBox(
+                          height: 280,
                           width: double.infinity,
                           child: SvgPicture.asset(
                             'assets/svg/onboarding_three.svg',
@@ -129,17 +129,20 @@ class _OnboardingScreenThreeState extends State<OnboardingScreenThree>
                       const SizedBox(height: 24),
 
                       // Description text
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10.0),
                         child: Text(
                           'Watch 24/7 Live Stream To Kill Boredom In\nThis Digital Era With AncientFlip',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize:
+                                MediaQuery.of(context).size.width < 360
+                                    ? 13
+                                    : 14,
                             fontWeight: FontWeight.w400,
                             color: Colors.white70,
-                            height: 1.5,
-                            letterSpacing: 0.3,
+                            height: 1.4,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ),

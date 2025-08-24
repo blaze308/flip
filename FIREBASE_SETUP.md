@@ -41,7 +41,7 @@ The following configurations have been automatically implemented:
 **⚠️ REQUIRED - You must do this manually**
 
 1. In Firebase Console, click "Add app" and select Android
-2. Enter your Android package name: `com.example.flip`
+2. Enter your Android package name: `ancientplustech.ancient.flipflip`
 3. **IMPORTANT**: Download the `google-services.json` file
 4. **IMPORTANT**: Place it in `flip/android/app/` directory (next to build.gradle.kts)
 5. The SHA-1 fingerprint is optional for development
@@ -61,7 +61,7 @@ flip/
 **⚠️ REQUIRED - You must do this manually**
 
 1. In Firebase Console, click "Add app" and select iOS
-2. Enter your iOS bundle ID: `com.example.flip`
+2. Enter your iOS bundle ID: `ancientplustech.ancient.flipflip`
 3. **IMPORTANT**: Download the `GoogleService-Info.plist` file
 4. **IMPORTANT**: Open `flip/ios/Runner.xcworkspace` in Xcode
 5. **IMPORTANT**: Drag `GoogleService-Info.plist` into the Runner folder in Xcode
@@ -169,7 +169,7 @@ Add the SHA-1 fingerprint to Firebase Console > Project Settings > Your Android 
 
 3. **Google Sign-In not working**:
 
-   - Check that package name matches exactly: `com.example.flip`
+   - Check that package name matches exactly: `ancientplustech.ancient.flipflip`
    - Verify SHA-1 fingerprint is added (for production)
    - Ensure `REVERSED_CLIENT_ID` is correctly set in Info.plist
 

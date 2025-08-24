@@ -50,6 +50,9 @@ dependencies:
   device_info_plus: ^10.1.2
   package_info_plus: ^8.0.2
 
+  # Biometric authentication
+  local_auth: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/firebase_auth_service.dart';
+import 'services/biometric_auth_service.dart';
+import 'services/storage_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isPasswordVisible = false;
   bool _isLoading = false;
   bool _saveMe = false;
+  bool _biometricAvailable = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -49,6 +52,67 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _animationController.forward();
+    _checkBiometricAvailability();
+  }
+
+  Future<void> _checkBiometricAvailability() async {
+    final isEnabled = await BiometricAuthService.isBiometricEnabled();
+    final availability =
+        await BiometricAuthService.checkBiometricAvailability();
+
+    setState(() {
+      _biometricAvailable = isEnabled && availability.isAvailable;
+    });
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final result = await BiometricAuthService.quickLogin();
+
+    if (result.success) {
+      // Check if user is still logged in with Firebase
+      final isLoggedIn = await StorageService.isLoggedIn();
+      final hasValidToken = await StorageService.hasValidToken();
+
+      if (isLoggedIn && hasValidToken) {
+        // User is authenticated, navigate to home
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        // Need to re-authenticate with Firebase
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please sign in again for security'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (result.errorType != BiometricErrorType.userCancel) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -452,6 +516,71 @@ class _LoginScreenState extends State<LoginScreen>
                                     ),
                           ),
                         ),
+
+                        // Biometric Login Button (if available)
+                        if (_biometricAvailable) ...[
+                          const SizedBox(height: 16),
+
+                          // Divider
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.white.withOpacity(0.3),
+                                  thickness: 1,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Text(
+                                  'or',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.white.withOpacity(0.3),
+                                  thickness: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Biometric Login Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  _isLoading ? null : _handleBiometricLogin,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF4ECDC4),
+                                side: const BorderSide(
+                                  color: Color(0xFF4ECDC4),
+                                  width: 2,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(Icons.fingerprint, size: 24),
+                              label: const Text(
+                                'Use Biometric',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
 
                         const SizedBox(height: 24),
 

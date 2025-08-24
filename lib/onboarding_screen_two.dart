@@ -73,15 +73,15 @@ class _OnboardingScreenTwoState extends State<OnboardingScreenTwo>
                   children: [
                     // Wave background - positioned on top right
                     Positioned(
-                      top: 0,
-                      right: 0,
+                      top: -10,
+                      right: -10,
                       child: Transform.scale(
                         scale: _waveAnimation.value,
                         child: SvgPicture.asset(
                           'assets/svg/onboarding_two_wave.svg',
                           fit: BoxFit.contain,
-                          width: 200,
-                          height: 150,
+
+                          height: 100,
                         ),
                       ),
                     ),
@@ -117,8 +117,8 @@ class _OnboardingScreenTwoState extends State<OnboardingScreenTwo>
                           const Spacer(flex: 1),
 
                           // Main SVG Illustration
-                          Container(
-                            height: 300,
+                          SizedBox(
+                            height: 250,
                             width: double.infinity,
                             child: SvgPicture.asset(
                               'assets/svg/onboarding_two.svg',
@@ -144,17 +144,22 @@ class _OnboardingScreenTwoState extends State<OnboardingScreenTwo>
                           const SizedBox(height: 24),
 
                           // Description text
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16.0),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10.0,
+                            ),
                             child: Text(
-                              'AncientFlip LIVE PARTY Allows You To Live-\nStream Your Favorite Moments, Make\nFriends From All Around The World.',
+                              'AncientFlip LIVE/PARTY Allows You To Live-\nStream Your Favorite Moments, Make\nFriends From All Around The World.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize:
+                                    MediaQuery.of(context).size.width < 360
+                                        ? 13
+                                        : 14,
                                 fontWeight: FontWeight.w400,
                                 color: Colors.white70,
-                                height: 1.5,
-                                letterSpacing: 0.3,
+                                height: 1.4,
+                                letterSpacing: 0.2,
                               ),
                             ),
                           ),

@@ -8,7 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 class BackendService {
   // Update this URL to your backend server
   static const String baseUrl =
-      'http://localhost:3000'; // Change for production
+      'http://172.20.10.4:3000'; // Replace with your computer's IP address
 
   // Timeout duration for HTTP requests
   static const Duration timeoutDuration = Duration(seconds: 30);

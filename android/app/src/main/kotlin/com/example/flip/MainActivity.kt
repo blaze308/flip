@@ -1,4 +1,4 @@
-package com.example.flip
+package ancientplustech.ancient.flip
 
 import io.flutter.embedding.android.FlutterActivity
 

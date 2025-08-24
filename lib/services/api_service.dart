@@ -3,25 +3,25 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'http://172.20.10.4:3000/api';
   static const Duration timeoutDuration = Duration(seconds: 30);
 
   // Headers for API requests
   static Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
 
   // Headers with authentication token
   static Map<String, String> _headersWithAuth(String token) => {
-        ..._headers,
-        'Authorization': 'Bearer $token',
-      };
+    ..._headers,
+    'Authorization': 'Bearer $token',
+  };
 
   // Handle HTTP exceptions
   static ApiException _handleHttpError(http.Response response) {
     final Map<String, dynamic> errorData;
-    
+
     try {
       errorData = json.decode(response.body);
     } catch (e) {
@@ -86,11 +86,7 @@ class ApiService {
       final headers = token != null ? _headersWithAuth(token) : _headers;
 
       final response = await http
-          .post(
-            uri,
-            headers: headers,
-            body: json.encode(data),
-          )
+          .post(uri, headers: headers, body: json.encode(data))
           .timeout(timeoutDuration);
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -123,11 +119,7 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final data = {
-      'fullName': fullName,
-      'email': email,
-      'password': password,
-    };
+    final data = {'fullName': fullName, 'email': email, 'password': password};
 
     final response = await _post('/auth/register', data);
     return AuthResponse.fromJson(response);
@@ -138,10 +130,7 @@ class ApiService {
     required String email,
     required String password,
   }) async {
-    final data = {
-      'email': email,
-      'password': password,
-    };
+    final data = {'email': email, 'password': password};
 
     final response = await _post('/auth/login', data);
     return AuthResponse.fromJson(response);
@@ -165,11 +154,7 @@ class ApiException implements Exception {
   final int statusCode;
   final List<String>? errors;
 
-  ApiException({
-    required this.message,
-    required this.statusCode,
-    this.errors,
-  });
+  ApiException({required this.message, required this.statusCode, this.errors});
 
   @override
   String toString() {
@@ -198,9 +183,10 @@ class AuthResponse {
     return AuthResponse(
       success: json['success'] ?? false,
       message: json['message'] ?? '',
-      user: json['data']?['user'] != null
-          ? UserData.fromJson(json['data']['user'])
-          : null,
+      user:
+          json['data']?['user'] != null
+              ? UserData.fromJson(json['data']['user'])
+              : null,
       token: json['data']?['token'],
     );
   }
@@ -230,12 +216,10 @@ class UserData {
       fullName: json['fullName'] ?? '',
       email: json['email'] ?? '',
       isEmailVerified: json['isEmailVerified'] ?? false,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : null,
-      lastLogin: json['lastLogin'] != null
-          ? DateTime.parse(json['lastLogin'])
-          : null,
+      createdAt:
+          json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      lastLogin:
+          json['lastLogin'] != null ? DateTime.parse(json['lastLogin']) : null,
     );
   }
 
@@ -258,8 +242,6 @@ class UserProfile {
   UserProfile({required this.user});
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
-    return UserProfile(
-      user: UserData.fromJson(json['user']),
-    );
+    return UserProfile(user: UserData.fromJson(json['user']));
   }
 }

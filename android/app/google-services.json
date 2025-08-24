@@ -1,0 +1,122 @@
+{
+  "project_info": {
+    "project_number": "490623785866",
+    "project_id": "ancientflip-cee4f",
+    "storage_bucket": "ancientflip-cee4f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:490623785866:android:c6be34bf88eb1f06c58673",
+        "android_client_info": {
+          "package_name": "ancientplustech.ancient.flip"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "490623785866-rk0njq8oj8njtniqt9m9v96snuae1tve.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ancientplustech.ancient.flip",
+            "certificate_hash": "81a8b9838547bf347496bcd989ddf4781961c697"
+          }
+        },
+        {
+          "client_id": "490623785866-ihoie5kj47k45rieuruid5pmcdj6bf7n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDK_SKo75NpxxbnG3ZqhUjM7QFUZ6ytWQ8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "490623785866-ihoie5kj47k45rieuruid5pmcdj6bf7n.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "ancientplustech.ancient.flip"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:490623785866:android:1d7de92731859ba1c58673",
+        "android_client_info": {
+          "package_name": "com.ancientplus.flip"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "490623785866-cvqojh7o0esk5ub51mqp9e02o0t4ddt6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ancientplus.flip",
+            "certificate_hash": "0661314794d517d81105cd68e8e3a70818977efb"
+          }
+        },
+        {
+          "client_id": "490623785866-mhiti5gimg87hdueg8ovaqo1j7tp7pea.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ancientplus.flip",
+            "certificate_hash": "81a8b9838547bf347496bcd989ddf4781961c697"
+          }
+        },
+        {
+          "client_id": "490623785866-qk1ej2kch2lang8utf6fj36l3381c651.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ancientplus.flip",
+            "certificate_hash": "a5edf1afb0a121cfca8acf5afd7bc280c19cab56"
+          }
+        },
+        {
+          "client_id": "490623785866-rjteith5vh40vdm9cf8nu3658r3rldsn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ancientplus.flip",
+            "certificate_hash": "07e3e6cd00e308f6dfb1177c8cc5334419e93073"
+          }
+        },
+        {
+          "client_id": "490623785866-ihoie5kj47k45rieuruid5pmcdj6bf7n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDK_SKo75NpxxbnG3ZqhUjM7QFUZ6ytWQ8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "490623785866-ihoie5kj47k45rieuruid5pmcdj6bf7n.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "ancientplustech.ancient.flip"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
