@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'api_service.dart';
+import 'firebase_auth_service.dart';
 
 class StorageService {
   // Secure storage for sensitive data (tokens)
@@ -58,7 +58,7 @@ class StorageService {
 
     if (userJson != null) {
       try {
-        final userMap = json.decode(userJson);
+        final userMap = json.decode(userJson) as Map<String, dynamic>;
         return UserData.fromJson(userMap);
       } catch (e) {
         // If there's an error parsing, clear the corrupted data

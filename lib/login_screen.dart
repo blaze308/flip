@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'services/api_service.dart';
-import 'services/storage_service.dart';
+import 'services/firebase_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -84,25 +83,19 @@ class _LoginScreenState extends State<LoginScreen>
       });
 
       try {
-        // Call the login API
-        final response = await ApiService.login(
+        // Call Firebase auth login
+        final result = await FirebaseAuthService.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
 
-        if (response.success &&
-            response.user != null &&
-            response.token != null) {
-          // Save authentication data locally
-          await StorageService.saveAuthData(
-            token: response.token!,
-            user: response.user!,
-          );
-
+        if (result.success && result.user != null) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Welcome back, ${response.user!.fullName}!'),
+                content: Text(
+                  'Welcome back, ${result.user!.displayName ?? 'User'}!',
+                ),
                 backgroundColor: const Color(0xFF4ECDC4),
                 duration: const Duration(seconds: 3),
               ),
@@ -113,22 +106,12 @@ class _LoginScreenState extends State<LoginScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(response.message),
+                content: Text(result.message),
                 backgroundColor: Colors.red,
                 duration: const Duration(seconds: 4),
               ),
             );
           }
-        }
-      } on ApiException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
-          );
         }
       } catch (e) {
         if (mounted) {
@@ -146,6 +129,104 @@ class _LoginScreenState extends State<LoginScreen>
             _isLoading = false;
           });
         }
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await FirebaseAuthService.signInWithGoogle();
+
+      if (result.success && result.user != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome, ${result.user!.displayName ?? 'User'}!'),
+              backgroundColor: const Color(0xFF4ECDC4),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Google sign in failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await FirebaseAuthService.signInWithApple();
+
+      if (result.success && result.user != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Welcome, ${result.user!.displayName ?? 'User'}!'),
+              backgroundColor: const Color(0xFF4ECDC4),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Apple sign in failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -451,9 +532,8 @@ class _LoginScreenState extends State<LoginScreen>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: TextButton(
-                                  onPressed: () {
-                                    // TODO: Implement Google sign in
-                                  },
+                                  onPressed:
+                                      _isLoading ? null : _handleGoogleSignIn,
                                   child: const Text(
                                     'G',
                                     style: TextStyle(
@@ -496,9 +576,8 @@ class _LoginScreenState extends State<LoginScreen>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: TextButton(
-                                  onPressed: () {
-                                    // TODO: Implement Apple sign in
-                                  },
+                                  onPressed:
+                                      _isLoading ? null : _handleAppleSignIn,
                                   child: const Icon(
                                     Icons.apple,
                                     color: Colors.white,

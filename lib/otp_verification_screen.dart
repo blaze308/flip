@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'services/firebase_auth_service.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key});
@@ -22,6 +23,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   int _resendCountdown = 30;
   Timer? _timer;
   String _phoneNumber = '';
+  String _verificationId = '';
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -56,13 +58,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     _animationController.forward();
     _startResendTimer();
 
-    // Get phone number from arguments
+    // Get phone number and verification ID from arguments
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
         setState(() {
           _phoneNumber = args['phoneNumber'] ?? '';
+          _verificationId = args['verificationId'] ?? '';
         });
       }
     });
@@ -128,22 +131,46 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
       return;
     }
 
+    if (_verificationId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verification ID not found. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // Simulate OTP verification
-      await Future.delayed(const Duration(seconds: 2));
+      // Verify OTP using Firebase
+      final result = await FirebaseAuthService.verifyPhoneNumber(
+        verificationId: _verificationId,
+        smsCode: otpCode,
+      );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Phone number verified successfully!'),
-            backgroundColor: Color(0xFF4ECDC4),
-          ),
-        );
-        Navigator.of(context).pushReplacementNamed('/home');
+      if (result.success && result.user != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Phone number verified successfully!'),
+              backgroundColor: Color(0xFF4ECDC4),
+            ),
+          );
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

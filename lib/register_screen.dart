@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'services/api_service.dart';
-import 'services/storage_service.dart';
+import 'services/firebase_auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -105,27 +104,19 @@ class _RegisterScreenState extends State<RegisterScreen>
       });
 
       try {
-        // Call the registration API
-        final response = await ApiService.register(
+        // Call Firebase auth registration
+        final result = await FirebaseAuthService.registerWithEmailAndPassword(
           fullName: _fullNameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
 
-        if (response.success &&
-            response.user != null &&
-            response.token != null) {
-          // Save authentication data locally
-          await StorageService.saveAuthData(
-            token: response.token!,
-            user: response.user!,
-          );
-
+        if (result.success && result.user != null) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Welcome ${response.user!.fullName}! Registration successful!',
+                  'Welcome ${result.user!.displayName ?? 'User'}! Registration successful!',
                 ),
                 backgroundColor: const Color(0xFF4ECDC4),
                 duration: const Duration(seconds: 3),
@@ -137,22 +128,12 @@ class _RegisterScreenState extends State<RegisterScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(response.message),
+                content: Text(result.message),
                 backgroundColor: Colors.red,
                 duration: const Duration(seconds: 4),
               ),
             );
           }
-        }
-      } on ApiException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
-          );
         }
       } catch (e) {
         if (mounted) {

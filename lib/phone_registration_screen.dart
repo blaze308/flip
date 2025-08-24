@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'services/firebase_auth_service.dart';
 
 class PhoneRegistrationScreen extends StatefulWidget {
   const PhoneRegistrationScreen({super.key});
@@ -113,17 +114,47 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
       });
 
       try {
-        // Simulate API call for phone verification
-        await Future.delayed(const Duration(seconds: 2));
+        final phoneNumber =
+            '$_selectedCountryCode${_phoneController.text.replaceAll(RegExp(r'[^\d]'), '')}';
 
-        if (mounted) {
-          // Navigate to OTP verification screen
-          Navigator.of(context).pushNamed(
-            '/otp-verification',
-            arguments: {
-              'phoneNumber': '$_selectedCountryCode ${_phoneController.text}',
-            },
-          );
+        // Send verification code using Firebase
+        final result = await FirebaseAuthService.sendPhoneVerificationCode(
+          phoneNumber: phoneNumber,
+          onCodeSent: (String verificationId) {
+            if (mounted) {
+              // Navigate to OTP verification screen with verification ID
+              Navigator.of(context).pushNamed(
+                '/otp-verification',
+                arguments: {
+                  'phoneNumber': phoneNumber,
+                  'verificationId': verificationId,
+                },
+              );
+            }
+          },
+          onVerificationFailed: (String error) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(error),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 4),
+                ),
+              );
+            }
+          },
+        );
+
+        if (!result.success) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result.message),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
         }
       } catch (e) {
         if (mounted) {
@@ -162,7 +193,7 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.white.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -232,7 +263,7 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                         // Back button
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
@@ -283,7 +314,9 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                                     children: [
                                       Icon(
                                         Icons.phone,
-                                        color: Colors.white.withOpacity(0.7),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.7,
+                                        ),
                                         size: 20,
                                       ),
                                       const SizedBox(width: 8),
@@ -298,7 +331,9 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                                       const SizedBox(width: 4),
                                       Icon(
                                         Icons.keyboard_arrow_down,
-                                        color: Colors.white.withOpacity(0.7),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.7,
+                                        ),
                                         size: 20,
                                       ),
                                     ],
@@ -310,7 +345,7 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                               Container(
                                 width: 1,
                                 height: 24,
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                               ),
 
                               // Phone number input
@@ -344,7 +379,9 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                                   decoration: InputDecoration(
                                     hintText: 'Phone Number',
                                     hintStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.6),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
                                       fontSize: 16,
                                     ),
                                     border: InputBorder.none,
@@ -410,12 +447,14 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                               Navigator.of(context).pop();
                             },
                             style: TextButton.styleFrom(
-                              backgroundColor: Colors.white.withOpacity(0.1),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.1,
+                              ),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 side: BorderSide(
-                                  color: Colors.white.withOpacity(0.3),
+                                  color: Colors.white.withValues(alpha: 0.3),
                                 ),
                               ),
                             ),

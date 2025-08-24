@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'services/firebase_auth_service.dart';
 
 class ForgetPasswordScreen extends StatefulWidget {
   const ForgetPasswordScreen({super.key});
@@ -76,22 +77,45 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen>
     });
 
     try {
-      // Simulate API call for password reset
-      await Future.delayed(const Duration(seconds: 2));
+      if (_selectedMethod == 'email') {
+        // Send password reset email using Firebase
+        final result = await FirebaseAuthService.sendPasswordResetEmail(
+          _inputController.text.trim(),
+        );
 
-      if (mounted) {
-        // Navigate to verification screen with method and contact info
+        if (mounted) {
+          if (result.success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Password reset email sent! Check your inbox.'),
+                backgroundColor: Color(0xFF4ECDC4),
+                duration: Duration(seconds: 4),
+              ),
+            );
+            Navigator.of(context).pop(); // Go back to login
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result.message),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+      } else {
+        // For phone method, navigate to verification screen (not implemented in Firebase reset)
         final contactInfo =
             _inputController.text.isNotEmpty
                 ? _inputController.text
-                : (_selectedMethod == 'email'
-                    ? 'joseph****@gmail.com'
-                    : '+1 ****-***-1234');
+                : '+1 ****-***-1234';
 
-        Navigator.of(context).pushNamed(
-          '/reset-verification',
-          arguments: {'method': _selectedMethod, 'contactInfo': contactInfo},
-        );
+        if (mounted) {
+          Navigator.of(context).pushNamed(
+            '/reset-verification',
+            arguments: {'method': _selectedMethod, 'contactInfo': contactInfo},
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -136,7 +160,7 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen>
                         // Back button
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
@@ -171,7 +195,7 @@ class _ForgetPasswordScreenState extends State<ForgetPasswordScreen>
                           'Select which contact details should we use to reset your password',
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                             height: 1.4,
                           ),
                         ),
