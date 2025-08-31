@@ -6,6 +6,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'storage_service.dart';
 import 'backend_service.dart';
+import 'user_service.dart';
+import '../models/user_model.dart';
 
 class FirebaseAuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -73,23 +75,35 @@ class FirebaseAuthService {
         // Send email verification
         await user.sendEmailVerification();
 
-        // Save user data locally
-        await _saveUserDataLocally(user);
-
-        // Sync with backend
+        // Create user model and save
+        bool backendSyncSuccess = false;
+        String? syncError;
         try {
-          await BackendService.syncUser();
+          await UserService.createUserFromFirebase(
+            user,
+            username: _generateUsernameFromFullName(fullName),
+          );
+          backendSyncSuccess = true;
+          print(
+            'User model created and synced successfully during registration',
+          );
         } catch (e) {
-          print('Backend sync failed during registration: $e');
-          // Continue even if backend sync fails
+          syncError = e.toString();
+          print('User model creation/sync failed during registration: $e');
+          // Fallback to old method
+          await _saveUserDataLocally(user);
         }
 
         return AuthResult(
-          success: true,
+          success: backendSyncSuccess, // Only success if backend sync worked
           message:
-              'Registration successful! Please check your email to verify your account.',
+              backendSyncSuccess
+                  ? 'Registration successful! Account created and synced.'
+                  : 'Account created in Firebase but couldn\'t sync with our servers. Please try again or contact support.',
           user: user,
-          shouldShowBiometricSetup: true,
+          shouldShowBiometricSetup: backendSyncSuccess,
+          backendSyncFailed: !backendSyncSuccess,
+          syncError: syncError,
         );
       } else {
         return AuthResult(
@@ -126,7 +140,15 @@ class FirebaseAuthService {
 
       final User? user = result.user;
       if (user != null) {
-        await _saveUserDataLocally(user);
+        // Initialize/update user in UserService
+        try {
+          await UserService.initializeUser();
+          await UserService.updateLastActive();
+        } catch (e) {
+          print('Failed to initialize user service: $e');
+          // Fallback to old method
+          await _saveUserDataLocally(user);
+        }
 
         // Sync with backend
         try {
@@ -202,17 +224,31 @@ class FirebaseAuthService {
         await _saveUserDataLocally(user);
 
         // Sync with backend
+        bool backendSyncSuccess = false;
+        String? syncError;
         try {
           await BackendService.syncUser();
+          backendSyncSuccess = true;
+          print('Backend sync successful during Google sign in');
+
+          // Update UserService with the current user data
+          await UserService.createUserFromFirebase(user);
+          print('UserService updated with Google sign-in user data');
         } catch (e) {
+          syncError = e.toString();
           print('Backend sync failed during Google sign in: $e');
-          // Continue even if backend sync fails
         }
 
         return AuthResult(
-          success: true,
-          message: 'Successfully signed in with Google!',
+          success: backendSyncSuccess,
+          message:
+              backendSyncSuccess
+                  ? 'Successfully signed in with Google!'
+                  : 'Google sign in successful but couldn\'t sync with our servers.',
           user: user,
+          shouldShowBiometricSetup: backendSyncSuccess,
+          backendSyncFailed: !backendSyncSuccess,
+          syncError: syncError,
         );
       } else {
         return AuthResult(
@@ -291,17 +327,27 @@ class FirebaseAuthService {
         await _saveUserDataLocally(user);
 
         // Sync with backend
+        bool backendSyncSuccess = false;
+        String? syncError;
         try {
           await BackendService.syncUser();
+          backendSyncSuccess = true;
+          print('Backend sync successful during Apple sign in');
         } catch (e) {
+          syncError = e.toString();
           print('Backend sync failed during Apple sign in: $e');
-          // Continue even if backend sync fails
         }
 
         return AuthResult(
-          success: true,
-          message: 'Successfully signed in with Apple!',
+          success: backendSyncSuccess,
+          message:
+              backendSyncSuccess
+                  ? 'Successfully signed in with Apple!'
+                  : 'Apple sign in successful but couldn\'t sync with our servers.',
           user: user,
+          shouldShowBiometricSetup: backendSyncSuccess,
+          backendSyncFailed: !backendSyncSuccess,
+          syncError: syncError,
         );
       } else {
         return AuthResult(
@@ -621,6 +667,7 @@ class FirebaseAuthService {
         _auth.signOut(),
         _googleSignIn.signOut(),
         StorageService.clearAuthData(),
+        UserService.clearUser(),
       ]);
 
       return AuthResult(
@@ -742,6 +789,31 @@ class FirebaseAuthService {
         return e.message ?? 'An error occurred. Please try again.';
     }
   }
+
+  // Helper method to generate username from full name
+  static String _generateUsernameFromFullName(String fullName) {
+    if (fullName.isEmpty) return 'user${DateTime.now().millisecondsSinceEpoch}';
+    final username = fullName
+        .toLowerCase()
+        .replaceAll(
+          RegExp(r'[^a-z0-9\s]'),
+          '',
+        ) // Remove special chars except spaces
+        .replaceAll(RegExp(r'\s+'), '_') // Replace spaces with underscores
+        .replaceAll(
+          RegExp(r'_+'),
+          '_',
+        ) // Replace multiple underscores with single
+        .replaceAll(
+          RegExp(r'^_|_$'),
+          '',
+        ); // Remove leading/trailing underscores
+
+    // If result is empty after cleaning, fallback to timestamp
+    if (username.isEmpty) return 'user${DateTime.now().millisecondsSinceEpoch}';
+
+    return username;
+  }
 }
 
 // Auth result model
@@ -750,12 +822,16 @@ class AuthResult {
   final String message;
   final User? user;
   final bool shouldShowBiometricSetup;
+  final bool backendSyncFailed;
+  final String? syncError;
 
   AuthResult({
     required this.success,
     required this.message,
     this.user,
     this.shouldShowBiometricSetup = false,
+    this.backendSyncFailed = false,
+    this.syncError,
   });
 }
 

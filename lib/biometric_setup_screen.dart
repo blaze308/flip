@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'services/biometric_auth_service.dart';
+import 'services/message_service.dart';
+import 'widgets/custom_toaster.dart';
 
 class BiometricSetupScreen extends StatefulWidget {
   const BiometricSetupScreen({super.key});
@@ -70,12 +72,9 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen>
 
     if (success) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Biometric authentication enabled successfully!'),
-            backgroundColor: Color(0xFF4ECDC4),
-            duration: Duration(seconds: 2),
-          ),
+        context.showSuccessToaster(
+          MessageService.getMessage('biometric_setup_success'),
+          devMessage: 'Biometric authentication enabled successfully',
         );
 
         // Navigate to home screen
@@ -87,12 +86,9 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen>
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to enable biometric authentication'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
+        context.showErrorToaster(
+          MessageService.getMessage('biometric_setup_failed'),
+          devMessage: 'Failed to enable biometric authentication',
         );
       }
     }

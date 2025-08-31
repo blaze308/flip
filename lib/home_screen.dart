@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'services/storage_service.dart';
+import 'dart:async';
 import 'services/firebase_auth_service.dart';
+import 'services/message_service.dart';
+import 'services/user_service.dart';
+import 'services/post_service.dart';
+import 'services/event_bus.dart';
+import 'widgets/custom_toaster.dart';
+import 'widgets/post_menu_widget.dart';
+import 'models/user_model.dart';
+import 'models/post_model.dart';
+import 'create_post_type_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,74 +20,27 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  UserData? _userData;
+  UserModel? _currentUser;
   bool _isLoading = true;
   int _currentIndex = 0;
   late PageController _pageController;
   late AnimationController _fabAnimationController;
   late Animation<double> _fabAnimation;
+  late ScrollController _scrollController;
 
-  // Sample data for the feed
-  final List<Post> _posts = [
-    Post(
-      id: '1',
-      username: 'Blendart Art',
-      timeAgo: '8h',
-      content: '3D Abstract Art Creation',
-      imageUrl: null,
-      likes: 325,
-      comments: 98,
-      isLiked: true,
-      userAvatar: 'https://i.pravatar.cc/150?img=1',
-      type: PostType.art,
-    ),
-    Post(
-      id: '2',
-      username: 'Alexander Walker',
-      timeAgo: '6h',
-      content: 'What Do You Think About The News?',
-      imageUrl: null,
-      likes: 325,
-      comments: 98,
-      isLiked: true,
-      userAvatar: 'https://i.pravatar.cc/150?img=2',
-      type: PostType.text,
-    ),
-  ];
+  // Posts data - will be loaded from API
+  final List<PostModel> _posts = [];
+  bool _isLoadingPosts = false;
+  StreamSubscription<PostCreatedEvent>? _postCreatedSubscription;
 
-  final List<StoryUser> _storyUsers = [
-    StoryUser(
-      name: 'You',
-      avatar: 'https://i.pravatar.cc/150?img=0',
-      hasStory: false,
-      isCurrentUser: true,
-    ),
-    StoryUser(
-      name: 'Jacob',
-      avatar: 'https://i.pravatar.cc/150?img=3',
-      hasStory: true,
-    ),
-    StoryUser(
-      name: 'Luna',
-      avatar: 'https://i.pravatar.cc/150?img=4',
-      hasStory: true,
-    ),
-    StoryUser(
-      name: 'John',
-      avatar: 'https://i.pravatar.cc/150?img=5',
-      hasStory: true,
-    ),
-    StoryUser(
-      name: 'Natali',
-      avatar: 'https://i.pravatar.cc/150?img=6',
-      hasStory: true,
-    ),
-  ];
+  // Story users - will be populated dynamically
+  List<StoryUser> _storyUsers = [];
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _scrollController = ScrollController();
     _fabAnimationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -88,31 +50,104 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
     _fabAnimationController.forward();
     _loadUserData();
+    _loadPosts();
+
+    // Listen for post creation events
+    _postCreatedSubscription = EventBus().on<PostCreatedEvent>().listen((
+      event,
+    ) {
+      print(
+        '🔄 Post created event received: ${event.postType} post ${event.postId}',
+      );
+      _refreshAfterPostCreation();
+    });
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _scrollController.dispose();
     _fabAnimationController.dispose();
+    _postCreatedSubscription?.cancel();
     super.dispose();
   }
 
   Future<void> _loadUserData() async {
     try {
-      final userData = await StorageService.getUserData();
+      print('🏠 HomeScreen: Loading user data...');
+      await UserService.initializeUser();
+      final currentUser = UserService.currentUser;
+
+      // Log user data
+      if (currentUser != null) {
+        print('🏠 HomeScreen: User loaded successfully');
+        print('   - UID: ${currentUser.uid}');
+        print('   - Email: ${currentUser.email}');
+        print('   - Display Name: ${currentUser.displayName}');
+        print(
+          '   - Profile Image: ${currentUser.profileImageUrl ?? "No image"}',
+        );
+        print('   - Username: ${currentUser.username}');
+        print('   - Is Active: ${currentUser.isActive}');
+        print('   - Account Type: ${currentUser.accountType}');
+      } else {
+        print('🏠 HomeScreen: No user data available');
+      }
+
       if (mounted) {
         setState(() {
-          _userData = userData;
+          _currentUser = currentUser;
+          _populateStoryUsers();
           _isLoading = false;
         });
       }
     } catch (e) {
+      print('🏠 HomeScreen: Error loading user data: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
     }
+  }
+
+  void _populateStoryUsers() {
+    // Debug logging for story avatar
+    print('🏠 HomeScreen: Populating story users...');
+    print('   - Current user profile image: ${_currentUser?.profileImageUrl}');
+    print(
+      '   - Using avatar URL: ${_currentUser?.profileImageUrl ?? 'https://i.pravatar.cc/150?img=0'}',
+    );
+
+    _storyUsers = [
+      StoryUser(
+        name: 'You',
+        avatar:
+            _currentUser?.profileImageUrl ?? 'https://i.pravatar.cc/150?img=0',
+        hasStory: false,
+        isCurrentUser: true,
+      ),
+      StoryUser(
+        name: 'Jacob',
+        avatar: 'https://i.pravatar.cc/150?img=3',
+        hasStory: true,
+      ),
+      StoryUser(
+        name: 'Luna',
+        avatar: 'https://i.pravatar.cc/150?img=4',
+        hasStory: true,
+      ),
+      StoryUser(
+        name: 'John',
+        avatar: 'https://i.pravatar.cc/150?img=5',
+        hasStory: true,
+      ),
+      StoryUser(
+        name: 'Natali',
+        avatar: 'https://i.pravatar.cc/150?img=6',
+        hasStory: true,
+      ),
+    ];
   }
 
   Future<void> _handleLogout() async {
@@ -123,11 +158,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Logout failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        context.showErrorToaster(
+          MessageService.getMessage('error'),
+          devMessage: 'Logout failed: ${e.toString()}',
         );
       }
     }
@@ -144,15 +177,136 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _toggleLike(String postId) {
-    setState(() {
-      final post = _posts.firstWhere((p) => p.id == postId);
-      post.isLiked = !post.isLiked;
-      post.likes += post.isLiked ? 1 : -1;
-    });
-
+  Future<void> _toggleLike(String postId) async {
     // Haptic feedback
     HapticFeedback.lightImpact();
+
+    try {
+      print('🏠 HomeScreen: Toggling like for post $postId');
+
+      // Call backend to toggle like
+      final result = await PostService.toggleLike(postId);
+
+      if (result.success) {
+        // Database-first approach: refresh posts from backend to get accurate state
+        await _loadPosts();
+        print(
+          '🏠 HomeScreen: Like toggled successfully - refreshed from database',
+        );
+      } else {
+        // Show error to user
+        ToasterService.showError(
+          context,
+          'Failed to update like. Please try again.',
+        );
+        print('🏠 HomeScreen: Like toggle failed - ${result.message}');
+      }
+    } catch (e) {
+      // Show error to user
+      ToasterService.showError(
+        context,
+        'Failed to update like. Please check your connection.',
+      );
+      print('🏠 HomeScreen: Like toggle error: $e');
+    }
+  }
+
+  Future<void> _loadPosts() async {
+    if (_isLoadingPosts) return;
+
+    setState(() {
+      _isLoadingPosts = true;
+    });
+
+    try {
+      print('🏠 HomeScreen: Loading posts from backend...');
+      final result = await PostService.getFeed();
+
+      if (mounted) {
+        setState(() {
+          _posts.clear();
+          _posts.addAll(result.posts);
+          _isLoadingPosts = false;
+        });
+        print('🏠 HomeScreen: Loaded ${result.posts.length} posts');
+
+        // Debug: Log like states for first few posts
+        for (int i = 0; i < result.posts.length && i < 3; i++) {
+          final post = result.posts[i];
+          print(
+            '🏠 Post ${i + 1}: id=${post.id}, likes=${post.likes}, isLiked=${post.isLiked}',
+          );
+        }
+      }
+    } catch (e) {
+      print('🏠 HomeScreen: Error loading posts: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingPosts = false;
+        });
+
+        // Show error message to user
+        ToasterService.showError(
+          context,
+          'Failed to load posts. Please try again.',
+        );
+      }
+    }
+  }
+
+  Future<void> _refreshPosts() async {
+    print('🏠 HomeScreen: Refreshing posts...');
+    await _loadPosts();
+  }
+
+  // Method to refresh after post creation
+  Future<void> _refreshAfterPostCreation() async {
+    print('🔄 Refreshing home screen after post creation...');
+    await _refreshPosts();
+
+    // Scroll to top to show the new post
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  Future<void> _sharePost(String postId) async {
+    // Haptic feedback
+    HapticFeedback.lightImpact();
+
+    try {
+      print('🏠 HomeScreen: Sharing post $postId');
+
+      // Call backend to share post
+      final result = await PostService.sharePost(postId);
+
+      if (result.success) {
+        // Database-first approach: refresh posts from backend to get accurate state
+        await _loadPosts();
+        ToasterService.showSuccess(context, 'Post shared successfully!');
+        print(
+          '🏠 HomeScreen: Post shared successfully - refreshed from database',
+        );
+      } else {
+        // Show error to user
+        ToasterService.showError(
+          context,
+          'Failed to share post. Please try again.',
+        );
+        print('🏠 HomeScreen: Share failed - ${result.message}');
+      }
+    } catch (e) {
+      // Show error to user
+      ToasterService.showError(
+        context,
+        'Failed to share post. Please check your connection.',
+      );
+      print('🏠 HomeScreen: Share error: $e');
+    }
   }
 
   @override
@@ -185,26 +339,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _buildProfileTab(),
         ],
       ),
-      floatingActionButton:
-          _currentIndex == 2
-              ? null
-              : ScaleTransition(
-                scale: _fabAnimation,
-                child: FloatingActionButton(
-                  onPressed: () {
-                    setState(() {
-                      _currentIndex = 2;
-                    });
-                    _pageController.animateToPage(
-                      2,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  },
-                  backgroundColor: const Color(0xFF4ECDC4),
-                  child: const Icon(Icons.add, color: Colors.white, size: 28),
-                ),
-              ),
+      floatingActionButton: ScaleTransition(
+        scale: _fabAnimation,
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: const BoxDecoration(
+            color: Color(0xFF4ECDC4),
+            shape: BoxShape.circle,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: () {
+                setState(() {
+                  _currentIndex = 2;
+                });
+                _pageController.animateToPage(
+                  2,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+              child: const Icon(Icons.add, color: Colors.white, size: 28),
+            ),
+          ),
+        ),
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
@@ -214,20 +376,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       height: 80,
       decoration: const BoxDecoration(
-        color: Color(0xFF2A2A2A),
+        color: Color(0xFF1E1E1E),
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
+          topLeft: Radius.circular(25),
+          topRight: Radius.circular(25),
         ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildNavItem(Icons.home_filled, 0),
-          _buildNavItem(Icons.chat_bubble, 1),
-          const SizedBox(width: 40), // Space for FAB
+          _buildNavItem(Icons.home, 0),
+          _buildNavItem(Icons.chat_bubble_outline, 1),
+          const SizedBox(width: 56), // Space for FAB
           _buildNavItem(Icons.play_arrow, 3),
-          _buildNavItem(Icons.person, 4),
+          _buildNavItem(Icons.person_outline, 4),
         ],
       ),
     );
@@ -241,16 +403,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         padding: const EdgeInsets.all(12),
         child: Icon(
           icon,
-          color: isSelected ? const Color(0xFF4ECDC4) : Colors.grey,
-          size: 28,
+          color: isSelected ? const Color(0xFF4ECDC4) : const Color(0xFF8E8E93),
+          size: 24,
         ),
       ),
     );
   }
 
   Widget _buildHomeTab() {
-    return CustomScrollView(
-      slivers: [_buildAppBar(), _buildStoriesSection(), _buildPostsList()],
+    return RefreshIndicator(
+      onRefresh: _refreshPosts,
+      color: const Color(0xFF4ECDC4),
+      backgroundColor: const Color(0xFF2A2A2A),
+      child: CustomScrollView(
+        slivers: [_buildAppBar(), _buildStoriesSection(), _buildPostsList()],
+      ),
     );
   }
 
@@ -260,25 +427,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       elevation: 0,
       floating: true,
       pinned: false,
+      leading: null,
       title: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF4ECDC4),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
+          Image.asset('assets/images/logo.png', width: 32, height: 32),
+
+          RichText(
+            text: TextSpan(
               children: [
-                Icon(Icons.home, color: Colors.white, size: 16),
-                SizedBox(width: 4),
-                Text(
-                  'AncientFlip',
+                TextSpan(
+                  text: 'ANCIENT',
                   style: TextStyle(
-                    color: Colors.white,
                     fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: 4.0,
+                    color: Colors.white,
+                  ),
+                ),
+                TextSpan(
+                  text: 'FLIP',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: 4.0,
+                    color: Colors.green,
                   ),
                 ),
               ],
@@ -314,66 +486,101 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           itemCount: _storyUsers.length,
           itemBuilder: (context, index) {
             final user = _storyUsers[index];
-            return Container(
-              margin: const EdgeInsets.only(right: 16),
-              child: Column(
-                children: [
-                  Stack(
-                    children: [
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color:
-                                user.hasStory
-                                    ? const Color(0xFF4ECDC4)
-                                    : Colors.grey,
-                            width: user.hasStory ? 3 : 1,
-                          ),
-                        ),
-                        child: ClipOval(
-                          child: Container(
-                            color: Colors.grey[800],
-                            child: const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 30,
+            return GestureDetector(
+              onTap: () {
+                if (user.isCurrentUser) {
+                  _showCreateOptions(context);
+                } else {
+                  // Handle viewing other user's story
+                  ToasterService.showInfo(
+                    context,
+                    'Viewing ${user.name}\'s story',
+                  );
+                }
+              },
+              child: Container(
+                margin: const EdgeInsets.only(right: 16),
+                child: Column(
+                  children: [
+                    Stack(
+                      children: [
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color:
+                                  user.hasStory
+                                      ? const Color(0xFF4ECDC4)
+                                      : Colors.grey,
+                              width: user.hasStory ? 3 : 1,
                             ),
                           ),
-                        ),
-                      ),
-                      if (user.isCurrentUser)
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            width: 20,
-                            height: 20,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF4ECDC4),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              color: Colors.white,
-                              size: 12,
-                            ),
+                          child: ClipOval(
+                            child:
+                                user.avatar.isNotEmpty
+                                    ? Image.network(
+                                      user.avatar,
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (
+                                        context,
+                                        error,
+                                        stackTrace,
+                                      ) {
+                                        return Container(
+                                          color: Colors.grey[800],
+                                          child: const Icon(
+                                            Icons.person,
+                                            color: Colors.white,
+                                            size: 30,
+                                          ),
+                                        );
+                                      },
+                                    )
+                                    : Container(
+                                      color: Colors.grey[800],
+                                      child: const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 30,
+                                      ),
+                                    ),
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    user.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                        if (user.isCurrentUser)
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 20,
+                              height: 20,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF4ECDC4),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.add,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Text(
+                      user.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -383,6 +590,86 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildPostsList() {
+    if (_isLoadingPosts && _posts.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4ECDC4)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading posts...',
+                style: TextStyle(color: Colors.grey[400], fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_posts.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            children: [
+              Icon(Icons.post_add, size: 64, color: Colors.grey[600]),
+              const SizedBox(height: 16),
+              Text(
+                'No posts yet',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Start creating posts to see them here',
+                style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () async {
+                  final result = await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const CreatePostTypeScreen(),
+                    ),
+                  );
+
+                  // If a new post was created, refresh from database
+                  if (result is PostModel) {
+                    await _loadPosts(); // Database-first: reload all posts
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4ECDC4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                ),
+                child: const Text(
+                  'Create Your First Post',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SliverList(
       delegate: SliverChildBuilderDelegate((context, index) {
         final post = _posts[index];
@@ -391,7 +678,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildPostCard(Post post) {
+  Widget _buildPostCard(PostModel post) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -402,189 +689,319 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Post header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+          _buildPostHeader(post),
+
+          // Post content based on type
+          _buildPostContent(post),
+
+          // Post actions
+          _buildPostActions(post),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostHeader(PostModel post) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.grey[800],
+            ),
+            child:
+                post.userAvatar != null
+                    ? ClipOval(
+                      child: Image.network(
+                        post.userAvatar!,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 20,
+                          );
+                        },
+                      ),
+                    )
+                    : const Icon(Icons.person, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.grey[800],
-                  ),
-                  child: const Icon(
-                    Icons.person,
+                Text(
+                  post.username,
+                  style: const TextStyle(
                     color: Colors.white,
-                    size: 20,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        post.username,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                Row(
+                  children: [
+                    Text(
+                      post.timeAgo,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    if (post.location != null) ...[
+                      const Text(
+                        ' • ',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
                       ),
+                      Icon(Icons.location_on, color: Colors.grey, size: 12),
                       Text(
-                        post.timeAgo,
+                        post.location!,
                         style: const TextStyle(
                           color: Colors.grey,
                           fontSize: 12,
                         ),
                       ),
                     ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () {
-                    // More options
-                  },
-                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  ],
                 ),
               ],
             ),
           ),
+          PostMenuWidget(
+            post: post,
+            onPostUpdated: () {
+              // Refresh the post data
+              _refreshPosts();
+            },
+            onPostHidden: () {
+              // Database-first: refresh posts from backend
+              _loadPosts();
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
-          // Post content
-          if (post.type == PostType.art)
-            Container(
-              height: 300,
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF4ECDC4),
-                    Color(0xFF44A08D),
-                    Color(0xFF093637),
-                  ],
-                ),
+  Widget _buildPostContent(PostModel post) {
+    switch (post.type) {
+      case PostType.text:
+        return _buildTextPost(post);
+      case PostType.image:
+        return _buildImagePost(post);
+      case PostType.video:
+        return _buildVideoPost(post);
+    }
+  }
+
+  Widget _buildTextPost(PostModel post) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: post.backgroundColor ?? const Color(0xFF4ECDC4),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (post.content != null)
+            Text(
+              post.content!,
+              style: TextStyle(
+                color: post.textColor ?? Colors.white,
+                fontSize: post.fontSize ?? 16,
+                fontWeight: post.fontWeight ?? FontWeight.w500,
+                fontFamily: post.fontFamily,
+                height: 1.4,
               ),
-              child: Stack(
-                children: [
-                  // 3D Art representation
-                  Center(
-                    child: Transform(
-                      alignment: Alignment.center,
-                      transform:
-                          Matrix4.identity()
-                            ..setEntry(3, 2, 0.001)
-                            ..rotateX(0.3)
-                            ..rotateY(0.3),
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 20,
-                              offset: const Offset(10, 10),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Floating elements
-                  Positioned(
-                    top: 50,
-                    left: 50,
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: const BoxDecoration(
-                        color: Colors.yellow,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 80,
-                    right: 60,
-                    child: Container(
-                      width: 25,
-                      height: 25,
-                      decoration: const BoxDecoration(
-                        color: Colors.yellow,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                post.content,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  height: 1.4,
-                ),
+              textAlign: post.textAlign ?? TextAlign.left,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImagePost(PostModel post) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (post.content != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              post.content!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                height: 1.4,
               ),
             ),
+          ),
+        const SizedBox(height: 12),
+        if (post.imageUrls != null && post.imageUrls!.isNotEmpty)
+          _ImageSliderWidget(imageUrls: post.imageUrls!),
+      ],
+    );
+  }
 
-          // Post actions
+  Widget _buildVideoPost(PostModel post) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (post.content != null)
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              post.content!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                height: 1.4,
+              ),
+            ),
+          ),
+        const SizedBox(height: 12),
+        if (post.videoThumbnail != null)
+          Container(
+            height: 300,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            child: Stack(
               children: [
-                GestureDetector(
-                  onTap: () => _toggleLike(post.id),
-                  child: Row(
-                    children: [
-                      Icon(
-                        post.isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: post.isLiked ? Colors.red : Colors.white,
-                        size: 24,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    post.videoThumbnail!,
+                    width: double.infinity,
+                    height: 300,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: double.infinity,
+                        height: 300,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.video_library,
+                          color: Colors.white,
+                          size: 50,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                // Play button overlay
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.play_circle_fill,
+                        color: Colors.white,
+                        size: 60,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${post.likes}',
+                    ),
+                  ),
+                ),
+                // Duration badge
+                if (post.videoDuration != null)
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        post.formattedDuration,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPostActions(PostModel post) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => _toggleLike(post.id),
+            child: Row(
+              children: [
+                Icon(
+                  post.isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: post.isLiked ? Colors.red : Colors.white,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${post.likes}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(width: 24),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.chat_bubble_outline,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${post.comments}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 24),
+          Row(
+            children: [
+              const Icon(
+                Icons.chat_bubble_outline,
+                color: Colors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${post.comments}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
-                const Spacer(),
+              ),
+            ],
+          ),
+          const SizedBox(width: 24),
+          GestureDetector(
+            onTap: () => _sharePost(post.id),
+            child: Row(
+              children: [
                 const Icon(Icons.share, color: Colors.white, size: 24),
+                const SizedBox(width: 8),
+                Text(
+                  '${post.shares}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -630,7 +1047,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 16),
           Text(
-            _userData?.fullName ?? 'User',
+            _currentUser?.fullName ?? 'User',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -639,7 +1056,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 8),
           Text(
-            _userData?.email ?? '',
+            _currentUser?.email ?? '',
             style: const TextStyle(color: Colors.grey, fontSize: 16),
           ),
           const SizedBox(height: 32),
@@ -659,35 +1076,148 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
+  void _showCreateOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(25),
+                topRight: Radius.circular(25),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle bar
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Title
+                const Text(
+                  'Create',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 30),
+
+                // Options
+                _buildCreateOption(
+                  context,
+                  icon: Icons.post_add,
+                  title: 'Create Post',
+                  subtitle: 'Share photos, videos, or thoughts',
+                  onTap: () async {
+                    Navigator.of(context).pop();
+                    final result = await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const CreatePostTypeScreen(),
+                      ),
+                    );
+
+                    // If a new post was created, refresh from database
+                    if (result is PostModel) {
+                      await _loadPosts(); // Database-first: reload all posts
+                    }
+                  },
+                ),
+                const SizedBox(height: 15),
+                _buildCreateOption(
+                  context,
+                  icon: Icons.auto_stories,
+                  title: 'Create Story',
+                  subtitle: 'Share a moment that disappears in 24h',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    ToasterService.showInfo(
+                      context,
+                      'Story creation coming soon!',
+                    );
+                  },
+                ),
+                const SizedBox(height: 30),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildCreateOption(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[800]!, width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: const Color(0xFF4ECDC4).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: const Color(0xFF4ECDC4), size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: Colors.grey[500], size: 16),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // Data models
-class Post {
-  final String id;
-  final String username;
-  final String timeAgo;
-  final String content;
-  final String? imageUrl;
-  int likes;
-  final int comments;
-  bool isLiked;
-  final String userAvatar;
-  final PostType type;
-
-  Post({
-    required this.id,
-    required this.username,
-    required this.timeAgo,
-    required this.content,
-    this.imageUrl,
-    required this.likes,
-    required this.comments,
-    required this.isLiked,
-    required this.userAvatar,
-    required this.type,
-  });
-}
-
 class StoryUser {
   final String name;
   final String avatar;
@@ -702,4 +1232,146 @@ class StoryUser {
   });
 }
 
-enum PostType { text, art, image, video }
+// Stateful widget for image slider with dots
+class _ImageSliderWidget extends StatefulWidget {
+  final List<String> imageUrls;
+
+  const _ImageSliderWidget({required this.imageUrls});
+
+  @override
+  State<_ImageSliderWidget> createState() => _ImageSliderWidgetState();
+}
+
+class _ImageSliderWidgetState extends State<_ImageSliderWidget> {
+  int _currentIndex = 0;
+  final PageController _pageController = PageController();
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 300,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child:
+          widget.imageUrls.length == 1
+              ? ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  widget.imageUrls.first,
+                  width: double.infinity,
+                  height: 300,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: double.infinity,
+                      height: 300,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.image,
+                        color: Colors.white,
+                        size: 50,
+                      ),
+                    );
+                  },
+                ),
+              )
+              : Stack(
+                children: [
+                  // Image PageView
+                  PageView.builder(
+                    controller: _pageController,
+                    itemCount: widget.imageUrls.length,
+                    onPageChanged: (index) {
+                      setState(() {
+                        _currentIndex = index;
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          widget.imageUrls[index],
+                          width: double.infinity,
+                          height: 300,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: double.infinity,
+                              height: 300,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[800],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.image,
+                                color: Colors.white,
+                                size: 50,
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Image counter badge
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_currentIndex + 1}/${widget.imageUrls.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Dots indicator
+                  Positioned(
+                    bottom: 12,
+                    left: 0,
+                    right: 0,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        widget.imageUrls.length,
+                        (index) => Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                index == _currentIndex
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.4),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+    );
+  }
+}

@@ -1,16 +1,20 @@
+import 'package:flip/services/firebase_auth_service.dart';
 import 'package:flutter/material.dart';
-import 'services/firebase_auth_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'providers/auth_provider.dart';
 import 'services/biometric_auth_service.dart';
+import 'services/message_service.dart';
+import 'widgets/custom_toaster.dart';
 import 'services/storage_service.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -18,7 +22,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool _isPasswordVisible = false;
   bool _isLoading = false;
-  bool _saveMe = false;
+  bool _rememberMe = false;
   bool _biometricAvailable = false;
 
   late AnimationController _animationController;
@@ -53,6 +57,18 @@ class _LoginScreenState extends State<LoginScreen>
 
     _animationController.forward();
     _checkBiometricAvailability();
+
+    // Check for success message from password reset
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null && args['message'] != null) {
+        context.showSuccessToaster(
+          args['message'],
+          devMessage: 'Login screen message: ${args['message']}',
+        );
+      }
+    });
   }
 
   Future<void> _checkBiometricAvailability() async {
@@ -89,11 +105,9 @@ class _LoginScreenState extends State<LoginScreen>
         });
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please sign in again for security'),
-              backgroundColor: Colors.orange,
-            ),
+          context.showWarningToaster(
+            MessageService.getMessage('session_expired'),
+            devMessage: 'Biometric authentication expired, requiring re-login',
           );
         }
       }
@@ -104,11 +118,9 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (result.errorType != BiometricErrorType.userCancel) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-            ),
+          context.showErrorToaster(
+            MessageService.getMessage('biometric_setup_failed'),
+            devMessage: 'Biometric authentication failed: ${result.message}',
           );
         }
       }
@@ -147,44 +159,54 @@ class _LoginScreenState extends State<LoginScreen>
       });
 
       try {
-        // Call Firebase auth login
-        final result = await FirebaseAuthService.signInWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: _passwordController.text,
+        print(
+          '🔐 LoginScreen: Attempting email login for: ${_emailController.text.trim()}',
         );
 
-        if (result.success && result.user != null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Welcome back, ${result.user!.displayName ?? 'User'}!',
-                ),
-                backgroundColor: const Color(0xFF4ECDC4),
-                duration: const Duration(seconds: 3),
-              ),
+        final success = await ref
+            .read(authProvider.notifier)
+            .signInWithEmailAndPassword(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+              rememberMe: _rememberMe,
             );
-            Navigator.of(context).pushReplacementNamed('/home');
+
+        if (success && mounted) {
+          final user = ref.read(currentUserProvider);
+
+          // Log successful login
+          print('🔐 LoginScreen: Email login successful!');
+          if (user != null) {
+            print('   - UID: ${user.uid}');
+            print('   - Email: ${user.email}');
+            print('   - Display Name: ${user.displayName}');
+            print('   - Username: ${user.username}');
+            print('   - Remember Me: $_rememberMe');
+          } else {
+            print('   - Warning: Login successful but user data is null');
           }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result.message),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
+
+          context.showSuccessToaster(
+            'Welcome back, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+            devMessage: 'Email login successful with remember me: $_rememberMe',
+          );
+        } else if (mounted) {
+          final authData = ref.read(authProvider);
+          print(
+            '🔐 LoginScreen: Email login failed - ${authData.errorMessage}',
+          );
+          context.showErrorToaster(
+            MessageService.getFirebaseErrorMessage(
+              authData.errorMessage.toString(),
+            ),
+            devMessage: 'Email login failed: ${authData.errorMessage}',
+          );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Login failed: ${e.toString()}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+          context.showErrorToaster(
+            MessageService.getMessage('network_error'),
+            devMessage: 'Login exception: ${e.toString()}',
           );
         }
       } finally {
@@ -203,38 +225,39 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     try {
+      print('🔐 LoginScreen: Attempting Google login...');
       final result = await FirebaseAuthService.signInWithGoogle();
 
       if (result.success && result.user != null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Welcome, ${result.user!.displayName ?? 'User'}!'),
-              backgroundColor: const Color(0xFF4ECDC4),
-              duration: const Duration(seconds: 3),
-            ),
+          // Log successful Google login
+          print('🔐 LoginScreen: Google login successful!');
+          print('   - UID: ${result.user!.uid}');
+          print('   - Email: ${result.user!.email}');
+          print('   - Display Name: ${result.user!.displayName}');
+          print('   - Username: ${result.user!.displayName}');
+          print('   - Profile Image: ${result.user!.photoURL ?? "No image"}');
+
+          context.showSuccessToaster(
+            'Welcome, ${result.user!.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+            devMessage: 'Google login successful: ${result.message}',
           );
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+          print('🔐 LoginScreen: Google login failed - ${result.message}');
+          context.showErrorToaster(
+            MessageService.getFirebaseErrorMessage(result.message),
+            devMessage: 'Google login failed: ${result.message}',
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Google sign in failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
+        context.showErrorToaster(
+          MessageService.getMessage('network_error'),
+          devMessage: 'Google sign in exception: ${e.toString()}',
         );
       }
     } finally {
@@ -252,38 +275,38 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     try {
+      print('🔐 LoginScreen: Attempting Apple login...');
       final result = await FirebaseAuthService.signInWithApple();
 
       if (result.success && result.user != null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Welcome, ${result.user!.displayName ?? 'User'}!'),
-              backgroundColor: const Color(0xFF4ECDC4),
-              duration: const Duration(seconds: 3),
-            ),
+          // Log successful Apple login
+          print('🔐 LoginScreen: Apple login successful!');
+          print('   - UID: ${result.user!.uid}');
+          print('   - Email: ${result.user!.email}');
+          print('   - Display Name: ${result.user!.displayName}');
+          print('   - Profile Image: ${result.user!.photoURL ?? "No image"}');
+
+          context.showSuccessToaster(
+            'Welcome, ${result.user!.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+            devMessage: 'Apple login successful: ${result.message}',
           );
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+          print('🔐 LoginScreen: Apple login failed - ${result.message}');
+          context.showErrorToaster(
+            MessageService.getFirebaseErrorMessage(result.message),
+            devMessage: 'Apple login failed: ${result.message}',
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Apple sign in failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-          ),
+        context.showErrorToaster(
+          MessageService.getMessage('network_error'),
+          devMessage: 'Apple sign in exception: ${e.toString()}',
         );
       }
     } finally {
@@ -433,10 +456,10 @@ class _LoginScreenState extends State<LoginScreen>
                                 Transform.scale(
                                   scale: 0.8,
                                   child: Switch(
-                                    value: _saveMe,
+                                    value: _rememberMe,
                                     onChanged: (value) {
                                       setState(() {
-                                        _saveMe = value;
+                                        _rememberMe = value;
                                       });
                                     },
                                     activeColor: const Color(0xFF4ECDC4),
@@ -449,12 +472,12 @@ class _LoginScreenState extends State<LoginScreen>
                                         .withOpacity(0.2),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+
                                 const Text(
-                                  'Save Me',
+                                  'Remember Me',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 14,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),

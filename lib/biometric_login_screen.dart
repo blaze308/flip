@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
 import 'services/biometric_auth_service.dart';
+import 'services/message_service.dart';
+import 'widgets/custom_toaster.dart';
 import 'services/storage_service.dart';
 
 class BiometricLoginScreen extends StatefulWidget {
@@ -92,11 +94,10 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen>
         // Need to re-authenticate with Firebase
         // For now, redirect to login screen
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please sign in again for security'),
-              backgroundColor: Colors.orange,
-            ),
+          context.showWarningToaster(
+            MessageService.getMessage('session_expired'),
+            devMessage:
+                'Biometric authentication expired, redirecting to login',
           );
           Navigator.of(context).pushReplacementNamed('/login');
         }
@@ -114,24 +115,19 @@ class _BiometricLoginScreenState extends State<BiometricLoginScreen>
           result.errorType == BiometricErrorType.permanentlyLockedOut) {
         // Biometric is locked, redirect to regular login
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+          context.showErrorToaster(
+            MessageService.getMessage('biometric_not_available'),
+            devMessage:
+                'Biometric locked, redirecting to login: ${result.message}',
           );
           Navigator.of(context).pushReplacementNamed('/login');
         }
       } else {
         // Other errors, show message and allow retry
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
+          context.showErrorToaster(
+            MessageService.getMessage('biometric_setup_failed'),
+            devMessage: 'Biometric login failed: ${result.message}',
           );
         }
       }

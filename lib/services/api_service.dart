@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = 'http://172.20.10.4:3000/api';
+  static const String baseUrl = 'https://flip-backend-mnpg.onrender.com/api';
   static const Duration timeoutDuration = Duration(seconds: 30);
 
   // Headers for API requests

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'services/message_service.dart';
+import 'widgets/custom_toaster.dart';
 
 class NewPasswordScreen extends StatefulWidget {
   const NewPasswordScreen({super.key});
@@ -16,6 +18,11 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
+
+  // Reset verification data
+  String _resetMethod = 'email';
+  String _contactInfo = '';
+  bool _isVerified = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -48,6 +55,29 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
     );
 
     _animationController.forward();
+
+    // Get reset verification data from arguments
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final routeName = ModalRoute.of(context)?.settings.name;
+
+      if (routeName == '/email-reset') {
+        // Direct from email link - no verification needed
+        setState(() {
+          _resetMethod = 'email';
+          _contactInfo = 'your email';
+          _isVerified = true; // Email link click is verification
+        });
+      } else if (args != null) {
+        // From phone verification screen
+        setState(() {
+          _resetMethod = args['method'] ?? 'phone';
+          _contactInfo = args['contactInfo'] ?? '';
+          _isVerified = args['verified'] ?? false;
+        });
+      }
+    });
   }
 
   @override
@@ -82,35 +112,48 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
   }
 
   Future<void> _handlePasswordReset() async {
+    if (!_isVerified) {
+      context.showWarningToaster(
+        'Please verify your email/phone first',
+        devMessage: 'User tried to reset password without verification',
+      );
+      Navigator.of(context).pushReplacementNamed('/forget-password');
+      return;
+    }
+
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
       });
 
       try {
-        // Simulate API call for password reset
+        // In a real app, you would:
+        // 1. Send the new password to your backend
+        // 2. Backend would update the password in Firebase Auth
+        // 3. For now, we'll simulate this process
+
         await Future.delayed(const Duration(seconds: 2));
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Password reset successfully!'),
-              backgroundColor: Color(0xFF4ECDC4),
-              duration: Duration(seconds: 3),
-            ),
+          context.showSuccessToaster(
+            MessageService.getMessage('password_reset_success'),
+            devMessage: 'Password reset completed for: $_contactInfo',
           );
-          Navigator.of(
-            context,
-          ).pushNamedAndRemoveUntil('/login', (route) => false);
+
+          // Navigate back to login screen
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/login',
+            (route) => false,
+            arguments: {
+              'message': MessageService.getMessage('password_reset_success'),
+            },
+          );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to reset password: ${e.toString()}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+          context.showErrorToaster(
+            MessageService.getMessage('error'),
+            devMessage: 'Password reset failed: ${e.toString()}',
           );
         }
       } finally {
@@ -127,6 +170,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF2C3E50),
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: AnimatedBuilder(
           animation: _animationController,
@@ -135,176 +179,188 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
               opacity: _fadeAnimation,
               child: SlideTransition(
                 position: _slideAnimation,
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 20),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight:
+                          MediaQuery.of(context).size.height -
+                          MediaQuery.of(context).padding.top -
+                          MediaQuery.of(context).padding.bottom,
+                    ),
+                    child: IntrinsicHeight(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 20),
 
-                        // Back button
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: IconButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
-                            },
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 40),
-
-                        // Title
-                        const Text(
-                          'Reset Your\nPassword',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            height: 1.2,
-                          ),
-                        ),
-
-                        const SizedBox(height: 60),
-
-                        // New Password Field
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF34495E),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: TextFormField(
-                            controller: _passwordController,
-                            validator: _validatePassword,
-                            obscureText: !_isPasswordVisible,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              hintText: 'Password',
-                              hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                              ),
-                              prefixIcon: Icon(
-                                Icons.lock_outline,
-                                color: Colors.white.withOpacity(0.7),
-                              ),
-                              suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isPasswordVisible = !_isPasswordVisible;
-                                  });
-                                },
-                                icon: Icon(
-                                  _isPasswordVisible
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  color: Colors.white.withOpacity(0.7),
-                                ),
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Confirm Password Field
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF34495E),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: TextFormField(
-                            controller: _confirmPasswordController,
-                            validator: _validateConfirmPassword,
-                            obscureText: !_isConfirmPasswordVisible,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              hintText: 'Password',
-                              hintStyle: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                              ),
-                              prefixIcon: Icon(
-                                Icons.lock_outline,
-                                color: Colors.white.withOpacity(0.7),
-                              ),
-                              suffixIcon: IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _isConfirmPasswordVisible =
-                                        !_isConfirmPasswordVisible;
-                                  });
-                                },
-                                icon: Icon(
-                                  _isConfirmPasswordVisible
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  color: Colors.white.withOpacity(0.7),
-                                ),
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const Spacer(),
-
-                        // Reset Button
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handlePasswordReset,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4ECDC4),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
+                            // Back button
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
+                              child: IconButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                },
+                                icon: const Icon(
+                                  Icons.arrow_back_ios_new,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
                             ),
-                            child:
-                                _isLoading
-                                    ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Colors.white,
-                                            ),
-                                      ),
-                                    )
-                                    : const Text(
-                                      'Reset',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                          ),
-                        ),
 
-                        const SizedBox(height: 32),
-                      ],
+                            const SizedBox(height: 40),
+
+                            // Title
+                            const Text(
+                              'Reset Your\nPassword',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                height: 1.2,
+                              ),
+                            ),
+
+                            const SizedBox(height: 60),
+
+                            // New Password Field
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF34495E),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: TextFormField(
+                                controller: _passwordController,
+                                validator: _validatePassword,
+                                obscureText: !_isPasswordVisible,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: InputDecoration(
+                                  hintText: 'Password',
+                                  hintStyle: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.lock_outline,
+                                    color: Colors.white.withOpacity(0.7),
+                                  ),
+                                  suffixIcon: IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isPasswordVisible =
+                                            !_isPasswordVisible;
+                                      });
+                                    },
+                                    icon: Icon(
+                                      _isPasswordVisible
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: Colors.white.withOpacity(0.7),
+                                    ),
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Confirm Password Field
+                            Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF34495E),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: TextFormField(
+                                controller: _confirmPasswordController,
+                                validator: _validateConfirmPassword,
+                                obscureText: !_isConfirmPasswordVisible,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: InputDecoration(
+                                  hintText: 'Password',
+                                  hintStyle: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.lock_outline,
+                                    color: Colors.white.withOpacity(0.7),
+                                  ),
+                                  suffixIcon: IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isConfirmPasswordVisible =
+                                            !_isConfirmPasswordVisible;
+                                      });
+                                    },
+                                    icon: Icon(
+                                      _isConfirmPasswordVisible
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: Colors.white.withOpacity(0.7),
+                                    ),
+                                  ),
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const Spacer(),
+
+                            // Reset Button
+                            SizedBox(
+                              width: double.infinity,
+                              height: 56,
+                              child: ElevatedButton(
+                                onPressed:
+                                    _isLoading ? null : _handlePasswordReset,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4ECDC4),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child:
+                                    _isLoading
+                                        ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                          ),
+                                        )
+                                        : const Text(
+                                          'Reset',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 32),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),

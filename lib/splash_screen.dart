@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'dart:async';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -39,17 +38,10 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     _startAnimation();
-    _navigateToHome();
   }
 
   void _startAnimation() {
     _animationController.forward();
-  }
-
-  void _navigateToHome() {
-    Timer(const Duration(seconds: 3), () {
-      Navigator.of(context).pushReplacementNamed('/onboarding');
-    });
   }
 
   @override

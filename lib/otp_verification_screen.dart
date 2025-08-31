@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'services/firebase_auth_service.dart';
+import 'services/message_service.dart';
+import 'widgets/custom_toaster.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key});
@@ -13,10 +15,10 @@ class OtpVerificationScreen extends StatefulWidget {
 class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     with SingleTickerProviderStateMixin {
   final List<TextEditingController> _otpControllers = List.generate(
-    4,
+    6,
     (index) => TextEditingController(),
   );
-  final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
+  final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
 
   bool _isLoading = false;
   bool _isResendEnabled = false;
@@ -58,8 +60,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     _animationController.forward();
     _startResendTimer();
 
-    // Get phone number and verification ID from arguments
+    // Auto-focus first field and get arguments
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNodes[0].requestFocus();
+
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
@@ -102,15 +106,51 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   }
 
   void _onOtpChanged(String value, int index) {
-    if (value.isNotEmpty && index < 3) {
-      _focusNodes[index + 1].requestFocus();
+    // Handle paste functionality - if user pastes a 6-digit code
+    if (value.length > 1) {
+      final pastedCode = value.replaceAll(
+        RegExp(r'[^0-9]'),
+        '',
+      ); // Keep only digits
+      if (pastedCode.length <= 6) {
+        // Fill the fields with pasted code
+        for (int i = 0; i < 6; i++) {
+          if (i < pastedCode.length) {
+            _otpControllers[i].text = pastedCode[i];
+          } else {
+            _otpControllers[i].clear();
+          }
+        }
+        // Focus the next empty field or unfocus if complete
+        if (pastedCode.length < 6) {
+          _focusNodes[pastedCode.length].requestFocus();
+        } else {
+          _focusNodes[5].unfocus();
+        }
+      }
+      return;
+    }
+
+    if (value.isNotEmpty) {
+      // Move to next field if not the last one
+      if (index < 5) {
+        _focusNodes[index + 1].requestFocus();
+      } else {
+        // Last field filled, remove focus to show keyboard done
+        _focusNodes[index].unfocus();
+      }
     } else if (value.isEmpty && index > 0) {
+      // Move to previous field when deleting
       _focusNodes[index - 1].requestFocus();
     }
 
     // Auto-verify when all fields are filled
-    if (index == 3 && value.isNotEmpty) {
-      _verifyOtp();
+    if (_getOtpCode().length == 6) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && _getOtpCode().length == 6) {
+          _verifyOtp();
+        }
+      });
     }
   }
 
@@ -121,22 +161,18 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   Future<void> _verifyOtp() async {
     final otpCode = _getOtpCode();
 
-    if (otpCode.length != 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter complete OTP code'),
-          backgroundColor: Colors.red,
-        ),
+    if (otpCode.length != 6) {
+      context.showWarningToaster(
+        'Please enter complete OTP code',
+        devMessage: 'User tried to verify with incomplete OTP: $otpCode',
       );
       return;
     }
 
     if (_verificationId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Verification ID not found. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
+      context.showErrorToaster(
+        'Verification ID not found. Please try again.',
+        devMessage: 'Missing verification ID for OTP verification',
       );
       return;
     }
@@ -154,31 +190,25 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
 
       if (result.success && result.user != null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Phone number verified successfully!'),
-              backgroundColor: Color(0xFF4ECDC4),
-            ),
+          context.showSuccessToaster(
+            MessageService.getMessage('verification_success'),
+            devMessage: 'Phone OTP verification successful',
           );
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-            ),
+          context.showErrorToaster(
+            MessageService.getFirebaseErrorMessage(result.message),
+            devMessage: 'OTP verification failed: ${result.message}',
           );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Verification failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        context.showErrorToaster(
+          MessageService.getMessage('verification_failed'),
+          devMessage: 'OTP verification exception: ${e.toString()}',
         );
       }
     } finally {
@@ -198,21 +228,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
       await Future.delayed(const Duration(seconds: 1));
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('OTP code sent successfully!'),
-            backgroundColor: Color(0xFF4ECDC4),
-          ),
+        context.showSuccessToaster(
+          MessageService.getMessage('sending_code'),
+          devMessage: 'OTP resent successfully',
         );
         _startResendTimer();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to resend OTP: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
+        context.showErrorToaster(
+          MessageService.getMessage('error'),
+          devMessage: 'Failed to resend OTP: ${e.toString()}',
         );
       }
     }
@@ -296,48 +322,70 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
 
                       // OTP Input Fields
                       Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(4, (index) {
-                            return Container(
-                              width: 60,
-                              height: 60,
-                              margin: const EdgeInsets.symmetric(horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color:
-                                      _focusNodes[index].hasFocus
-                                          ? const Color(0xFF4ECDC4)
-                                          : Colors.white.withOpacity(0.3),
-                                  width: 2,
-                                ),
-                              ),
-                              child: TextFormField(
-                                controller: _otpControllers[index],
-                                focusNode: _focusNodes[index],
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.center,
-                                maxLength: 1,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                decoration: const InputDecoration(
-                                  border: InputBorder.none,
-                                  counterText: '',
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                onChanged:
-                                    (value) => _onOtpChanged(value, index),
-                              ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            // Calculate responsive dimensions
+                            final screenWidth = constraints.maxWidth;
+                            final fieldWidth =
+                                (screenWidth - 80) /
+                                6; // Leave 80px for margins
+                            final fieldSize = fieldWidth.clamp(40.0, 60.0);
+                            final horizontalMargin =
+                                (screenWidth - (fieldSize * 6)) /
+                                14; // Distribute remaining space
+
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(6, (index) {
+                                return Container(
+                                  width: fieldSize,
+                                  height: fieldSize,
+                                  margin: EdgeInsets.symmetric(
+                                    horizontal: horizontalMargin.clamp(
+                                      2.0,
+                                      8.0,
+                                    ),
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color:
+                                          _focusNodes[index].hasFocus
+                                              ? const Color(0xFF4ECDC4)
+                                              : Colors.white.withOpacity(0.3),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: TextFormField(
+                                    controller: _otpControllers[index],
+                                    focusNode: _focusNodes[index],
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    maxLength: 1,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: (fieldSize * 0.4).clamp(
+                                        16.0,
+                                        24.0,
+                                      ),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                    ],
+                                    decoration: const InputDecoration(
+                                      border: InputBorder.none,
+                                      counterText: '',
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    onChanged:
+                                        (value) => _onOtpChanged(value, index),
+                                  ),
+                                );
+                              }),
                             );
-                          }),
+                          },
                         ),
                       ),
 

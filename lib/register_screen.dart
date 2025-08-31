@@ -1,15 +1,21 @@
+import 'package:flip/services/firebase_auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'services/firebase_auth_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'providers/auth_provider.dart';
+import 'services/backend_service.dart';
+import 'services/message_service.dart';
+import 'widgets/custom_toaster.dart';
 
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen>
+class _RegisterScreenState extends ConsumerState<RegisterScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
@@ -104,6 +110,10 @@ class _RegisterScreenState extends State<RegisterScreen>
       });
 
       try {
+        print('📝 RegisterScreen: Attempting registration...');
+        print('   - Full Name: ${_fullNameController.text.trim()}');
+        print('   - Email: ${_emailController.text.trim()}');
+
         // Call Firebase auth registration
         final result = await FirebaseAuthService.registerWithEmailAndPassword(
           fullName: _fullNameController.text.trim(),
@@ -112,43 +122,57 @@ class _RegisterScreenState extends State<RegisterScreen>
         );
 
         if (result.success && result.user != null) {
+          // Full success - Firebase + Backend sync worked
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Welcome ${result.user!.displayName ?? 'User'}! Registration successful!',
-                ),
-                backgroundColor: const Color(0xFF4ECDC4),
-                duration: const Duration(seconds: 3),
-              ),
+            // Log successful registration
+            print('📝 RegisterScreen: Registration successful!');
+            print('   - UID: ${result.user!.uid}');
+            print('   - Email: ${result.user!.email}');
+            print('   - Display Name: ${result.user!.displayName}');
+            print('   - Username: ${result.user!.displayName}');
+            print('   - Profile Image: ${result.user!.photoURL ?? "No image"}');
+            print('   - Backend Sync: Success');
+
+            context.showSuccessToaster(
+              'Welcome ${result.user!.displayName ?? 'User'}! ${MessageService.getMessage('registration_success')}',
+              devMessage: 'User registration successful: ${result.message}',
             );
 
-            // Navigate to biometric setup if it should be shown, otherwise go to home
-            if (result.shouldShowBiometricSetup) {
-              Navigator.of(context).pushReplacementNamed('/biometric-setup');
-            } else {
-              Navigator.of(context).pushReplacementNamed('/home');
-            }
+            // Navigate to biometric setup
+            Navigator.of(context).pushReplacementNamed('/biometric-setup');
+          }
+        } else if (result.user != null && result.backendSyncFailed) {
+          // Partial success - Firebase worked but backend sync failed
+          if (mounted) {
+            print(
+              '📝 RegisterScreen: Registration partial success - Firebase OK, Backend sync failed',
+            );
+            print('   - UID: ${result.user!.uid}');
+            print('   - Email: ${result.user!.email}');
+            print('   - Display Name: ${result.user!.displayName}');
+            print('   - Username: ${result.user!.displayName}');
+            print('   - Backend Sync: Failed - ${result.message}');
+
+            _showBackendSyncFailureDialog(result);
           }
         } else {
+          // Complete failure - Firebase registration failed
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result.message),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 4),
-              ),
+            print('📝 RegisterScreen: Registration failed completely');
+            print('   - Error: ${result.message}');
+
+            context.showErrorToaster(
+              MessageService.getFirebaseErrorMessage(result.message),
+              devMessage: 'Firebase registration failed: ${result.message}',
             );
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Registration failed: ${e.toString()}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+          print('📝 RegisterScreen: Registration exception: $e');
+          context.showErrorToaster(
+            MessageService.getMessage('network_error'),
+            devMessage: 'Registration exception: ${e.toString()}',
           );
         }
       } finally {
@@ -157,6 +181,258 @@ class _RegisterScreenState extends State<RegisterScreen>
             _isLoading = false;
           });
         }
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignUp() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await FirebaseAuthService.signInWithGoogle();
+
+      if (result.success && result.user != null) {
+        if (mounted) {
+          context.showSuccessToaster(
+            'Welcome ${result.user!.displayName ?? 'User'}! ${MessageService.getMessage('registration_success')}',
+            devMessage: 'Google registration successful: ${result.message}',
+          );
+
+          // Navigate based on backend sync success
+          if (result.shouldShowBiometricSetup) {
+            Navigator.of(context).pushReplacementNamed('/biometric-setup');
+          } else {
+            Navigator.of(context).pushReplacementNamed('/home');
+          }
+        }
+      } else if (result.user != null && result.backendSyncFailed) {
+        // Handle backend sync failure for Google OAuth
+        if (mounted) {
+          _showBackendSyncFailureDialog(result);
+        }
+      } else {
+        if (mounted) {
+          context.showErrorToaster(
+            MessageService.getFirebaseErrorMessage(result.message),
+            devMessage: 'OAuth registration failed: ${result.message}',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showErrorToaster(
+          MessageService.getMessage('network_error'),
+          devMessage: 'Google sign up exception: ${e.toString()}',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleAppleSignUp() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await FirebaseAuthService.signInWithApple();
+
+      if (result.success && result.user != null) {
+        if (mounted) {
+          context.showSuccessToaster(
+            'Welcome ${result.user!.displayName ?? 'User'}! ${MessageService.getMessage('registration_success')}',
+            devMessage: 'Google registration successful: ${result.message}',
+          );
+
+          // Navigate based on backend sync success
+          if (result.shouldShowBiometricSetup) {
+            Navigator.of(context).pushReplacementNamed('/biometric-setup');
+          } else {
+            Navigator.of(context).pushReplacementNamed('/home');
+          }
+        }
+      } else if (result.user != null && result.backendSyncFailed) {
+        // Handle backend sync failure for Apple OAuth
+        if (mounted) {
+          _showBackendSyncFailureDialog(result);
+        }
+      } else {
+        if (mounted) {
+          context.showErrorToaster(
+            MessageService.getFirebaseErrorMessage(result.message),
+            devMessage: 'OAuth registration failed: ${result.message}',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showErrorToaster(
+          MessageService.getMessage('network_error'),
+          devMessage: 'Apple sign up exception: ${e.toString()}',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _showBackendSyncFailureDialog(AuthResult result) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF34495E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              SizedBox(width: 12),
+              Text(
+                'Registration Incomplete',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Your account was created in Firebase, but we couldn\'t sync it with our servers.',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'This means you won\'t be able to use all app features until the sync is complete.',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'What would you like to do?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pushReplacementNamed('/home');
+              },
+              child: const Text(
+                'Skip for Now',
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _retryBackendSync(result.user!);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4ECDC4),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Try Again',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _retryBackendSync(User user) async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await BackendService.syncUser();
+
+      if (mounted) {
+        context.showSuccessToaster(
+          MessageService.getMessage('sync_success'),
+          devMessage: 'Backend sync retry successful',
+        );
+        Navigator.of(context).pushReplacementNamed('/biometric-setup');
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showErrorToaster(
+          MessageService.getMessage('sync_failed'),
+          devMessage: 'Backend sync retry failed: ${e.toString()}',
+        );
+
+        // Show options again
+        showDialog(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                backgroundColor: const Color(0xFF34495E),
+                title: const Text(
+                  'Sync Failed Again',
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: const Text(
+                  'We\'re still having trouble connecting to our servers. You can continue using the app with limited features or contact support.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).pushReplacementNamed('/home');
+                    },
+                    child: const Text(
+                      'Continue Anyway',
+                      style: TextStyle(color: Color(0xFF4ECDC4)),
+                    ),
+                  ),
+                ],
+              ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -434,9 +710,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: TextButton(
-                                  onPressed: () {
-                                    // TODO: Implement Google sign in
-                                  },
+                                  onPressed:
+                                      _isLoading ? null : _handleGoogleSignUp,
                                   child: const Text(
                                     'G',
                                     style: TextStyle(
@@ -479,9 +754,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: TextButton(
-                                  onPressed: () {
-                                    // TODO: Implement Apple sign in
-                                  },
+                                  onPressed:
+                                      _isLoading ? null : _handleAppleSignUp,
                                   child: const Icon(
                                     Icons.apple,
                                     color: Colors.white,

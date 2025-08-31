@@ -22,8 +22,12 @@ class StorageService {
 
   // Keys for regular storage
   static const String _userKey = 'user_data';
+  static const String _userModelKey = 'user_model_data';
   static const String _isLoggedInKey = 'is_logged_in';
   static const String _biometricEnabledKey = 'biometric_enabled';
+  static const String _rememberMeKey = 'remember_me';
+  static const String _onboardingCompletedKey = 'onboarding_completed';
+  static const String _onboardingViewCountKey = 'onboarding_view_count';
 
   // Save authentication data
   static Future<void> saveAuthData({
@@ -156,5 +160,70 @@ class StorageService {
   static Future<bool> isBiometricEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_biometricEnabledKey) ?? false;
+  }
+
+  // Save user model data
+  static Future<void> saveUserModelData(
+    Map<String, dynamic> userModelData,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userModelKey, json.encode(userModelData));
+  }
+
+  // Get user model data
+  static Future<Map<String, dynamic>?> getUserModelData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userModelJson = prefs.getString(_userModelKey);
+    if (userModelJson != null) {
+      return json.decode(userModelJson) as Map<String, dynamic>;
+    }
+    return null;
+  }
+
+  // Clear user model data
+  static Future<void> clearUserModelData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_userModelKey);
+  }
+
+  // Remember Me functionality
+  static Future<void> setRememberMe(bool rememberMe) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_rememberMeKey, rememberMe);
+  }
+
+  static Future<bool> getRememberMe() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_rememberMeKey) ?? false;
+  }
+
+  // Onboarding functionality
+  static Future<void> setOnboardingCompleted(bool completed) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onboardingCompletedKey, completed);
+  }
+
+  static Future<bool> hasCompletedOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_onboardingCompletedKey) ?? false;
+  }
+
+  static Future<int> getOnboardingViewCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_onboardingViewCountKey) ?? 0;
+  }
+
+  static Future<void> incrementOnboardingViewCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentCount = await getOnboardingViewCount();
+    await prefs.setInt(_onboardingViewCountKey, currentCount + 1);
+  }
+
+  static Future<void> resetOnboardingData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await Future.wait([
+      prefs.remove(_onboardingCompletedKey),
+      prefs.remove(_onboardingViewCountKey),
+    ]);
   }
 }

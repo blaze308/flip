@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:country_picker/country_picker.dart';
 import 'services/firebase_auth_service.dart';
+import 'services/message_service.dart';
+import 'widgets/custom_toaster.dart';
 
 class PhoneRegistrationScreen extends StatefulWidget {
   const PhoneRegistrationScreen({super.key});
@@ -16,25 +19,11 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
   final _phoneController = TextEditingController();
 
   bool _isLoading = false;
-  String _selectedCountryCode = '+1';
+  Country _selectedCountry = Country.parse('US'); // Default to US
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-
-  // Common country codes
-  final List<Map<String, String>> _countryCodes = [
-    {'code': '+1', 'country': 'US', 'flag': '🇺🇸'},
-    {'code': '+44', 'country': 'UK', 'flag': '🇬🇧'},
-    {'code': '+91', 'country': 'IN', 'flag': '🇮🇳'},
-    {'code': '+86', 'country': 'CN', 'flag': '🇨🇳'},
-    {'code': '+49', 'country': 'DE', 'flag': '🇩🇪'},
-    {'code': '+33', 'country': 'FR', 'flag': '🇫🇷'},
-    {'code': '+81', 'country': 'JP', 'flag': '🇯🇵'},
-    {'code': '+61', 'country': 'AU', 'flag': '🇦🇺'},
-    {'code': '+55', 'country': 'BR', 'flag': '🇧🇷'},
-    {'code': '+7', 'country': 'RU', 'flag': '🇷🇺'},
-  ];
 
   @override
   void initState() {
@@ -80,8 +69,8 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
     // Remove any non-digit characters for validation
     final digitsOnly = value.replaceAll(RegExp(r'[^\d]'), '');
 
-    if (digitsOnly.length < 10) {
-      return 'Phone number must be at least 10 digits';
+    if (digitsOnly.length < 9) {
+      return 'Phone number must be at least 9 digits';
     }
 
     if (digitsOnly.length > 15) {
@@ -115,7 +104,7 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
 
       try {
         final phoneNumber =
-            '$_selectedCountryCode${_phoneController.text.replaceAll(RegExp(r'[^\d]'), '')}';
+            '+${_selectedCountry.phoneCode}${_phoneController.text.replaceAll(RegExp(r'[^\d]'), '')}';
 
         // Send verification code using Firebase
         final result = await FirebaseAuthService.sendPhoneVerificationCode(
@@ -134,12 +123,9 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
           },
           onVerificationFailed: (String error) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(error),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 4),
-                ),
+              context.showErrorToaster(
+                MessageService.getFirebaseErrorMessage(error),
+                devMessage: 'Phone verification failed: $error',
               );
             }
           },
@@ -147,23 +133,17 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
 
         if (!result.success) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result.message),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 4),
-              ),
+            context.showErrorToaster(
+              MessageService.getFirebaseErrorMessage(result.message),
+              devMessage: 'Phone registration failed: ${result.message}',
             );
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Verification failed: ${e.toString()}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 4),
-            ),
+          context.showErrorToaster(
+            MessageService.getMessage('network_error'),
+            devMessage: 'Phone verification exception: ${e.toString()}',
           );
         }
       } finally {
@@ -177,64 +157,39 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
   }
 
   void _showCountryPicker() {
-    showModalBottomSheet(
+    showCountryPicker(
       context: context,
-      backgroundColor: const Color(0xFF34495E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Select Country Code',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _countryCodes.length,
-                  itemBuilder: (context, index) {
-                    final country = _countryCodes[index];
-                    return ListTile(
-                      leading: Text(
-                        country['flag']!,
-                        style: const TextStyle(fontSize: 24),
-                      ),
-                      title: Text(
-                        '${country['country']} ${country['code']}',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      onTap: () {
-                        setState(() {
-                          _selectedCountryCode = country['code']!;
-                        });
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+      showPhoneCode: true,
+      countryListTheme: CountryListThemeData(
+        backgroundColor: const Color(0xFF34495E),
+        textStyle: const TextStyle(color: Colors.white),
+        searchTextStyle: const TextStyle(color: Colors.white),
+        inputDecoration: InputDecoration(
+          labelText: 'Search',
+          labelStyle: const TextStyle(color: Colors.white70),
+          hintText: 'Start typing to search',
+          hintStyle: const TextStyle(color: Colors.white54),
+          prefixIcon: const Icon(Icons.search, color: Colors.white70),
+          border: OutlineInputBorder(
+            borderSide: const BorderSide(color: Colors.white30),
+            borderRadius: BorderRadius.circular(8),
           ),
-        );
+          enabledBorder: OutlineInputBorder(
+            borderSide: const BorderSide(color: Colors.white30),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: const BorderSide(color: Color(0xFF4ECDC4)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        bottomSheetHeight: 500,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      onSelect: (Country country) {
+        setState(() {
+          _selectedCountry = country;
+        });
       },
     );
   }
@@ -321,7 +276,12 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        _selectedCountryCode,
+                                        _selectedCountry.flagEmoji,
+                                        style: const TextStyle(fontSize: 20),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '+${_selectedCountry.phoneCode}',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 16,
@@ -427,7 +387,7 @@ class _PhoneRegistrationScreenState extends State<PhoneRegistrationScreen>
                                       ),
                                     )
                                     : const Text(
-                                      'Verification',
+                                      'Verify',
                                       style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w600,

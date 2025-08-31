@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'splash_screen.dart';
@@ -15,11 +16,12 @@ import 'otp_verification_screen.dart';
 import 'home_screen.dart';
 import 'biometric_setup_screen.dart';
 import 'biometric_login_screen.dart';
+import 'app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const AncientFlipApp());
+  runApp(const ProviderScope(child: AncientFlipApp()));
 }
 
 class AncientFlipApp extends StatelessWidget {
@@ -40,7 +42,7 @@ class AncientFlipApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const SplashScreen(),
+        '/': (context) => const AppRouter(),
         '/onboarding': (context) => const OnboardingScreen(),
         '/onboarding2': (context) => const OnboardingScreenTwo(),
         '/onboarding3': (context) => const OnboardingScreenThree(),
