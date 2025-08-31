@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'services/firebase_auth_service.dart';
 import 'services/message_service.dart';
-import 'widgets/custom_toaster.dart';
+import 'services/optimistic_ui_service.dart';
+import 'widgets/loading_button.dart';
+import 'widgets/modern_otp_input.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   const OtpVerificationScreen({super.key});
@@ -14,18 +16,18 @@ class OtpVerificationScreen extends StatefulWidget {
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     with SingleTickerProviderStateMixin {
-  final List<TextEditingController> _otpControllers = List.generate(
-    6,
-    (index) => TextEditingController(),
-  );
-  final List<FocusNode> _focusNodes = List.generate(6, (index) => FocusNode());
+  final GlobalKey _otpKey = GlobalKey();
 
-  bool _isLoading = false;
   bool _isResendEnabled = false;
   int _resendCountdown = 30;
   Timer? _timer;
   String _phoneNumber = '';
   String _verificationId = '';
+  String _currentOtp = '';
+
+  // Button states for loading UI
+  ButtonState _verifyButtonState = const ButtonState();
+  ButtonState _resendButtonState = const ButtonState();
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -60,10 +62,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     _animationController.forward();
     _startResendTimer();
 
-    // Auto-focus first field and get arguments
+    // Get arguments
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focusNodes[0].requestFocus();
-
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
@@ -79,12 +79,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   void dispose() {
     _animationController.dispose();
     _timer?.cancel();
-    for (var controller in _otpControllers) {
-      controller.dispose();
-    }
-    for (var node in _focusNodes) {
-      node.dispose();
-    }
     super.dispose();
   }
 
@@ -105,80 +99,77 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     });
   }
 
-  void _onOtpChanged(String value, int index) {
-    // Handle paste functionality - if user pastes a 6-digit code
-    if (value.length > 1) {
-      final pastedCode = value.replaceAll(
-        RegExp(r'[^0-9]'),
-        '',
-      ); // Keep only digits
-      if (pastedCode.length <= 6) {
-        // Fill the fields with pasted code
-        for (int i = 0; i < 6; i++) {
-          if (i < pastedCode.length) {
-            _otpControllers[i].text = pastedCode[i];
-          } else {
-            _otpControllers[i].clear();
-          }
-        }
-        // Focus the next empty field or unfocus if complete
-        if (pastedCode.length < 6) {
-          _focusNodes[pastedCode.length].requestFocus();
-        } else {
-          _focusNodes[5].unfocus();
-        }
-      }
-      return;
-    }
+  void _onOtpChanged(String value) {
+    setState(() {
+      _currentOtp = value;
+    });
 
-    if (value.isNotEmpty) {
-      // Move to next field if not the last one
-      if (index < 5) {
-        _focusNodes[index + 1].requestFocus();
-      } else {
-        // Last field filled, remove focus to show keyboard done
-        _focusNodes[index].unfocus();
-      }
-    } else if (value.isEmpty && index > 0) {
-      // Move to previous field when deleting
-      _focusNodes[index - 1].requestFocus();
+    // Clear any error state when user starts typing
+    if (_verifyButtonState.isError && value.isNotEmpty) {
+      setState(() {
+        _verifyButtonState = const ButtonState();
+      });
     }
+  }
+
+  void _onOtpCompleted(String value) {
+    setState(() {
+      _currentOtp = value;
+    });
 
     // Auto-verify when all fields are filled
-    if (_getOtpCode().length == 6) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && _getOtpCode().length == 6) {
+    if (value.length == 6) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted && _currentOtp.length == 6) {
           _verifyOtp();
         }
       });
     }
   }
 
-  String _getOtpCode() {
-    return _otpControllers.map((controller) => controller.text).join();
-  }
-
   Future<void> _verifyOtp() async {
-    final otpCode = _getOtpCode();
+    final otpCode = _currentOtp;
 
     if (otpCode.length != 6) {
-      context.showWarningToaster(
-        'Please enter complete OTP code',
-        devMessage: 'User tried to verify with incomplete OTP: $otpCode',
-      );
+      setState(() {
+        _verifyButtonState = ButtonStateExtension.error(
+          message: 'Please enter complete OTP code',
+        );
+      });
+
+      // Clear error after 3 seconds
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _verifyButtonState = const ButtonState();
+          });
+        }
+      });
       return;
     }
 
     if (_verificationId.isEmpty) {
-      context.showErrorToaster(
-        'Verification ID not found. Please try again.',
-        devMessage: 'Missing verification ID for OTP verification',
-      );
+      setState(() {
+        _verifyButtonState = ButtonStateExtension.error(
+          message: 'Verification ID not found. Please try again.',
+        );
+      });
+
+      // Clear error after 3 seconds
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _verifyButtonState = const ButtonState();
+          });
+        }
+      });
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _verifyButtonState = ButtonStateExtension.loading(
+        message: 'Verifying OTP...',
+      );
     });
 
     try {
@@ -190,56 +181,106 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
 
       if (result.success && result.user != null) {
         if (mounted) {
-          context.showSuccessToaster(
-            MessageService.getMessage('verification_success'),
-            devMessage: 'Phone OTP verification successful',
-          );
-          Navigator.of(context).pushReplacementNamed('/home');
+          setState(() {
+            _verifyButtonState = ButtonStateExtension.success(
+              message: 'Verification successful!',
+            );
+          });
+
+          // Navigate after showing success
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              Navigator.of(context).pushReplacementNamed('/home');
+            }
+          });
         }
       } else {
         if (mounted) {
-          context.showErrorToaster(
-            MessageService.getFirebaseErrorMessage(result.message),
-            devMessage: 'OTP verification failed: ${result.message}',
-          );
+          setState(() {
+            _verifyButtonState = ButtonStateExtension.error(
+              message: MessageService.getFirebaseErrorMessage(result.message),
+            );
+          });
+
+          // Clear error after 3 seconds
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) {
+              setState(() {
+                _verifyButtonState = const ButtonState();
+              });
+            }
+          });
         }
       }
     } catch (e) {
       if (mounted) {
-        context.showErrorToaster(
-          MessageService.getMessage('verification_failed'),
-          devMessage: 'OTP verification exception: ${e.toString()}',
-        );
-      }
-    } finally {
-      if (mounted) {
         setState(() {
-          _isLoading = false;
+          _verifyButtonState = ButtonStateExtension.error(
+            message: 'Verification failed. Please try again.',
+          );
+        });
+
+        // Clear error after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _verifyButtonState = const ButtonState();
+            });
+          }
         });
       }
+    } finally {
+      // Button state is managed by the individual success/error handlers
     }
   }
 
   Future<void> _resendOtp() async {
     if (!_isResendEnabled) return;
 
+    setState(() {
+      _resendButtonState = ButtonStateExtension.loading(
+        message: 'Sending OTP...',
+      );
+    });
+
     try {
       // Simulate resend OTP
       await Future.delayed(const Duration(seconds: 1));
 
       if (mounted) {
-        context.showSuccessToaster(
-          MessageService.getMessage('sending_code'),
-          devMessage: 'OTP resent successfully',
-        );
+        setState(() {
+          _resendButtonState = ButtonStateExtension.success(
+            message: 'OTP sent successfully!',
+          );
+        });
+
         _startResendTimer();
+
+        // Clear success message after 2 seconds
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _resendButtonState = const ButtonState();
+            });
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
-        context.showErrorToaster(
-          MessageService.getMessage('error'),
-          devMessage: 'Failed to resend OTP: ${e.toString()}',
-        );
+        setState(() {
+          _resendButtonState = ButtonStateExtension.error(
+            message: 'Failed to send OTP. Please try again.',
+          );
+        });
+
+        // Clear error after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _resendButtonState = const ButtonState();
+            });
+          }
+        });
       }
     }
   }
@@ -320,72 +361,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
 
                       const Spacer(flex: 2),
 
-                      // OTP Input Fields
-                      Center(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            // Calculate responsive dimensions
-                            final screenWidth = constraints.maxWidth;
-                            final fieldWidth =
-                                (screenWidth - 80) /
-                                6; // Leave 80px for margins
-                            final fieldSize = fieldWidth.clamp(40.0, 60.0);
-                            final horizontalMargin =
-                                (screenWidth - (fieldSize * 6)) /
-                                14; // Distribute remaining space
-
-                            return Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(6, (index) {
-                                return Container(
-                                  width: fieldSize,
-                                  height: fieldSize,
-                                  margin: EdgeInsets.symmetric(
-                                    horizontal: horizontalMargin.clamp(
-                                      2.0,
-                                      8.0,
-                                    ),
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color:
-                                          _focusNodes[index].hasFocus
-                                              ? const Color(0xFF4ECDC4)
-                                              : Colors.white.withOpacity(0.3),
-                                      width: 2,
-                                    ),
-                                  ),
-                                  child: TextFormField(
-                                    controller: _otpControllers[index],
-                                    focusNode: _focusNodes[index],
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    maxLength: 1,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: (fieldSize * 0.4).clamp(
-                                        16.0,
-                                        24.0,
-                                      ),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                    ],
-                                    decoration: const InputDecoration(
-                                      border: InputBorder.none,
-                                      counterText: '',
-                                      contentPadding: EdgeInsets.zero,
-                                    ),
-                                    onChanged:
-                                        (value) => _onOtpChanged(value, index),
-                                  ),
-                                );
-                              }),
-                            );
-                          },
+                      // Modern OTP Input
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: EnhancedOtpInput(
+                          key: _otpKey,
+                          length: 6,
+                          onChanged: _onOtpChanged,
+                          onCompleted: _onOtpCompleted,
+                          autoFocus: true,
+                          enabled: !_verifyButtonState.isLoading,
+                          errorText:
+                              _verifyButtonState.isError
+                                  ? _verifyButtonState.message
+                                  : null,
+                          helperText:
+                              'Enter the 6-digit code sent to $_phoneNumber',
+                          autoSubmitDelay: const Duration(milliseconds: 500),
                         ),
                       ),
 
@@ -394,72 +386,26 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                       const Spacer(flex: 1),
 
                       // Verify Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _verifyOtp,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4ECDC4),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child:
-                              _isLoading
-                                  ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  )
-                                  : const Text(
-                                    'Verify',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                        ),
+                      AuthButton(
+                        text: 'Verify',
+                        onPressed: _verifyOtp,
+                        buttonState: _verifyButtonState,
+                        isPrimary: true,
                       ),
 
                       const SizedBox(height: 16),
 
                       // Send Again Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: TextButton(
-                          onPressed: _isResendEnabled ? _resendOtp : null,
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.1),
-                            foregroundColor:
-                                _isResendEnabled
-                                    ? Colors.white
-                                    : Colors.white.withOpacity(0.5),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(
-                                color: Colors.white.withOpacity(0.3),
-                              ),
-                            ),
-                          ),
-                          child: Text(
+                      AuthButton(
+                        text:
                             _isResendEnabled
                                 ? 'Send Again'
                                 : 'Send Again (${_resendCountdown}s)',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                        onPressed: _isResendEnabled ? _resendOtp : null,
+                        buttonState: _resendButtonState.copyWith(
+                          isDisabled: !_isResendEnabled,
                         ),
+                        isPrimary: false,
                       ),
 
                       const Spacer(flex: 2),

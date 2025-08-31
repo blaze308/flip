@@ -7,12 +7,14 @@ class PostMenuWidget extends StatelessWidget {
   final PostModel post;
   final VoidCallback? onPostUpdated;
   final VoidCallback? onPostHidden;
+  final Function(String userId, bool isFollowing)? onFollowStatusChanged;
 
   const PostMenuWidget({
     Key? key,
     required this.post,
     this.onPostUpdated,
     this.onPostHidden,
+    this.onFollowStatusChanged,
   }) : super(key: key);
 
   @override
@@ -285,6 +287,12 @@ class PostMenuWidget extends StatelessWidget {
 
       if (context.mounted) {
         ToasterService.showSuccess(context, result.message);
+
+        // Update follow status immediately for better UX
+        final newFollowStatus = !post.isFollowingUser;
+        onFollowStatusChanged?.call(post.userId, newFollowStatus);
+
+        // Also call the general update callback
         onPostUpdated?.call();
       }
     } catch (e) {

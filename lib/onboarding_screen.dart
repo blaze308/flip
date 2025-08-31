@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'services/storage_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -49,6 +50,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.dispose();
   }
 
+  Future<void> _handleOnboardingCompletion() async {
+    try {
+      // Increment view count to mark that onboarding was shown
+      await StorageService.incrementOnboardingViewCount();
+
+      // Mark onboarding as completed so it won't show again
+      await StorageService.setOnboardingCompleted(true);
+
+      print('🎯 Onboarding completed and marked as done');
+    } catch (e) {
+      print('❌ Error completing onboarding: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -71,10 +86,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         child: Padding(
                           padding: const EdgeInsets.only(top: 16.0),
                           child: TextButton(
-                            onPressed: () {
-                              Navigator.of(
-                                context,
-                              ).pushReplacementNamed('/home');
+                            onPressed: () async {
+                              // Mark onboarding as viewed and completed
+                              await _handleOnboardingCompletion();
+                              if (mounted) {
+                                Navigator.of(
+                                  context,
+                                ).pushReplacementNamed('/login');
+                              }
                             },
                             child: const Text(
                               'Skip',
@@ -181,11 +200,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton(
-                          onPressed: () {
-                            // Navigate to next onboarding screen
-                            Navigator.of(
-                              context,
-                            ).pushReplacementNamed('/onboarding2');
+                          onPressed: () async {
+                            // Mark onboarding as viewed and completed
+                            await _handleOnboardingCompletion();
+                            if (mounted) {
+                              // Navigate to login instead of next onboarding screen
+                              Navigator.of(
+                                context,
+                              ).pushReplacementNamed('/login');
+                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF4ECDC4),

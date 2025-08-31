@@ -6,11 +6,15 @@ import 'services/message_service.dart';
 import 'services/user_service.dart';
 import 'services/post_service.dart';
 import 'services/event_bus.dart';
+import 'services/optimistic_ui_service.dart';
 import 'widgets/custom_toaster.dart';
 import 'widgets/post_menu_widget.dart';
+import 'widgets/loading_button.dart';
 import 'models/user_model.dart';
 import 'models/post_model.dart';
 import 'create_post_type_screen.dart';
+import 'immersive_viewer_screen.dart';
+import 'widgets/comments_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +23,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with TickerProviderStateMixin, OptimisticUIMixin {
   UserModel? _currentUser;
   bool _isLoading = true;
   int _currentIndex = 0;
@@ -35,6 +40,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // Story users - will be populated dynamically
   List<StoryUser> _storyUsers = [];
+
+  // Double tap to exit
+  DateTime? _lastBackPressed;
 
   @override
   void initState() {
@@ -115,36 +123,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     // Debug logging for story avatar
     print('🏠 HomeScreen: Populating story users...');
     print('   - Current user profile image: ${_currentUser?.profileImageUrl}');
-    print(
-      '   - Using avatar URL: ${_currentUser?.profileImageUrl ?? 'https://i.pravatar.cc/150?img=0'}',
-    );
+    print('   - Using neutral placeholder for missing avatars');
 
     _storyUsers = [
       StoryUser(
         name: 'You',
         avatar:
-            _currentUser?.profileImageUrl ?? 'https://i.pravatar.cc/150?img=0',
+            _currentUser?.profileImageUrl ??
+            '', // Empty string for neutral placeholder
         hasStory: false,
         isCurrentUser: true,
       ),
       StoryUser(
         name: 'Jacob',
-        avatar: 'https://i.pravatar.cc/150?img=3',
+        avatar: '', // Use neutral placeholder
         hasStory: true,
       ),
       StoryUser(
         name: 'Luna',
-        avatar: 'https://i.pravatar.cc/150?img=4',
+        avatar: '', // Use neutral placeholder
         hasStory: true,
       ),
       StoryUser(
         name: 'John',
-        avatar: 'https://i.pravatar.cc/150?img=5',
+        avatar: '', // Use neutral placeholder
         hasStory: true,
       ),
       StoryUser(
         name: 'Natali',
-        avatar: 'https://i.pravatar.cc/150?img=6',
+        avatar: '', // Use neutral placeholder
         hasStory: true,
       ),
     ];
@@ -181,34 +188,148 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     // Haptic feedback
     HapticFeedback.lightImpact();
 
-    try {
-      print('🏠 HomeScreen: Toggling like for post $postId');
+    // Find the post in our local list
+    final postIndex = _posts.indexWhere((post) => post.id == postId);
+    if (postIndex == -1) {
+      print('🏠 HomeScreen: Post $postId not found in local list');
+      return;
+    }
 
-      // Call backend to toggle like
-      final result = await PostService.toggleLike(postId);
+    final post = _posts[postIndex];
+    final originalIsLiked = post.isLiked;
+    final originalLikes = post.likes;
 
-      if (result.success) {
-        // Database-first approach: refresh posts from backend to get accurate state
-        await _loadPosts();
+    print('🏠 HomeScreen: Optimistically toggling like for post $postId');
+
+    await performOptimisticAction(
+      buttonId: 'like_$postId',
+      optimisticUpdate: () {
+        // Immediately update the UI
+        setState(() {
+          _posts[postIndex] = post.copyWith(
+            isLiked: !originalIsLiked,
+            likes: originalIsLiked ? originalLikes - 1 : originalLikes + 1,
+          );
+        });
         print(
-          '🏠 HomeScreen: Like toggled successfully - refreshed from database',
+          '🏠 HomeScreen: Optimistic update applied - isLiked: ${!originalIsLiked}, likes: ${originalIsLiked ? originalLikes - 1 : originalLikes + 1}',
         );
-      } else {
-        // Show error to user
+      },
+      apiCall: () async {
+        try {
+          final result = await PostService.toggleLike(postId);
+          return result.success;
+        } catch (e) {
+          print('🏠 HomeScreen: API call failed: $e');
+          return false;
+        }
+      },
+      rollback: () {
+        // Revert the UI change if API fails
+        setState(() {
+          _posts[postIndex] = post.copyWith(
+            isLiked: originalIsLiked,
+            likes: originalLikes,
+          );
+        });
+        print('🏠 HomeScreen: Rolled back like state for post $postId');
+      },
+      onSuccess: () {
+        print('🏠 HomeScreen: Like toggle confirmed by server');
+        // Optionally refresh from server to ensure consistency
+        // _loadPosts();
+      },
+      onError: (error) {
         ToasterService.showError(
           context,
           'Failed to update like. Please try again.',
         );
-        print('🏠 HomeScreen: Like toggle failed - ${result.message}');
+        print('🏠 HomeScreen: Like toggle error: $error');
+      },
+    );
+  }
+
+  void _updateFollowStatusForUser(String userId, bool isFollowing) {
+    setState(() {
+      for (int i = 0; i < _posts.length; i++) {
+        if (_posts[i].userId == userId) {
+          _posts[i] = _posts[i].copyWith(isFollowingUser: isFollowing);
+        }
       }
-    } catch (e) {
-      // Show error to user
-      ToasterService.showError(
-        context,
-        'Failed to update like. Please check your connection.',
-      );
-      print('🏠 HomeScreen: Like toggle error: $e');
-    }
+    });
+  }
+
+  void _showCommentsModal(PostModel post) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => CommentsBottomSheet(
+            post: post,
+            onCommentAdded: () {
+              // Update comment count in the post
+              final postIndex = _posts.indexWhere((p) => p.id == post.id);
+              if (postIndex != -1) {
+                setState(() {
+                  _posts[postIndex] = _posts[postIndex].copyWith(
+                    comments: _posts[postIndex].comments + 1,
+                  );
+                });
+              }
+            },
+          ),
+    );
+  }
+
+  void _openImmersiveViewer(int postIndex) {
+    // Filter posts to only include image and video posts for immersive viewing
+    final immersivePosts =
+        _posts
+            .where(
+              (post) =>
+                  post.type == PostType.image || post.type == PostType.video,
+            )
+            .toList();
+
+    if (immersivePosts.isEmpty) return;
+
+    // Find the index of the tapped post in the filtered list
+    final tappedPost = _posts[postIndex];
+    final immersiveIndex = immersivePosts.indexWhere(
+      (post) => post.id == tappedPost.id,
+    );
+
+    if (immersiveIndex == -1) return;
+
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder:
+            (context, animation, secondaryAnimation) => ImmersiveViewerScreen(
+              posts: immersivePosts,
+              initialIndex: immersiveIndex,
+              onLikeToggle: (postId) {
+                // Update the like status in the main posts list
+                final mainPostIndex = _posts.indexWhere(
+                  (post) => post.id == postId,
+                );
+                if (mainPostIndex != -1) {
+                  // The like status is already updated by the immersive viewer
+                  // We just need to trigger a rebuild if needed
+                  setState(() {});
+                }
+              },
+              onPostUpdated: () {
+                // Refresh posts when something changes
+                _refreshPosts();
+              },
+            ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   Future<void> _loadPosts() async {
@@ -309,6 +430,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
   }
 
+  Future<bool> _onWillPop() async {
+    final now = DateTime.now();
+    const exitTimeGap = Duration(seconds: 2);
+
+    if (_lastBackPressed == null ||
+        now.difference(_lastBackPressed!) > exitTimeGap) {
+      _lastBackPressed = now;
+
+      // Show toast message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Press back again to exit',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF2A2A2A),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+
+      return false; // Don't exit
+    }
+
+    return true; // Exit the app
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -322,75 +472,72 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        children: [
-          _buildHomeTab(),
-          _buildChatTab(),
-          _buildCreateTab(),
-          _buildLiveTab(),
-          _buildProfileTab(),
-        ],
-      ),
-      floatingActionButton: ScaleTransition(
-        scale: _fabAnimation,
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: const BoxDecoration(
-            color: Color(0xFF4ECDC4),
-            shape: BoxShape.circle,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(28),
-              onTap: () {
-                setState(() {
-                  _currentIndex = 2;
-                });
-                _pageController.animateToPage(
-                  2,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                );
-              },
-              child: const Icon(Icons.add, color: Colors.white, size: 28),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF1A1A1A),
+        body: Stack(
+          children: [
+            // Main content with bottom padding to avoid overlap
+            Positioned.fill(
+              bottom: 80, // Height of bottom navigation
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentIndex = index;
+                  });
+                },
+                children: [
+                  _buildHomeTab(),
+                  _buildChatTab(),
+                  _buildCreateTab(),
+                  _buildLiveTab(),
+                  _buildProfileTab(),
+                ],
+              ),
             ),
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: _buildBottomNavigationBar(),
-    );
-  }
 
-  Widget _buildBottomNavigationBar() {
-    return Container(
-      height: 80,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(25),
-          topRight: Radius.circular(25),
+            // Bottom navigation positioned on top
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E1E),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(25),
+                    topRight: Radius.circular(25),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Container(
+                    height: 80,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildNavItem(Icons.home, 0),
+                        _buildNavItem(Icons.chat_bubble_outline, 1),
+                        _buildCenterNavItem(), // Center create button
+                        _buildNavItem(Icons.play_arrow, 3),
+                        _buildNavItem(Icons.person_outline, 4),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildNavItem(Icons.home, 0),
-          _buildNavItem(Icons.chat_bubble_outline, 1),
-          const SizedBox(width: 56), // Space for FAB
-          _buildNavItem(Icons.play_arrow, 3),
-          _buildNavItem(Icons.person_outline, 4),
-        ],
       ),
     );
   }
@@ -405,6 +552,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           icon,
           color: isSelected ? const Color(0xFF4ECDC4) : const Color(0xFF8E8E93),
           size: 24,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCenterNavItem() {
+    final isSelected = _currentIndex == 2;
+    return ScaleTransition(
+      scale: _fabAnimation,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _currentIndex = 2;
+          });
+          _pageController.animateToPage(
+            2,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
+        child: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color:
+                isSelected ? const Color(0xFF4ECDC4) : const Color(0xFF4ECDC4),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.add, color: Colors.white, size: 28),
         ),
       ),
     );
@@ -673,7 +856,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return SliverList(
       delegate: SliverChildBuilderDelegate((context, index) {
         final post = _posts[index];
-        return _buildPostCard(post);
+        final isLastPost = index == _posts.length - 1;
+
+        return Column(
+          children: [
+            _buildPostCard(post),
+            // Add extra bottom padding for the last post to ensure actions are visible
+            if (isLastPost) const SizedBox(height: 100),
+          ],
+        );
       }, childCount: _posts.length),
     );
   }
@@ -737,13 +928,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  post.username,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      post.username,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (post.isFollowingUser) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4ECDC4),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.check,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 Row(
                   children: [
@@ -779,6 +989,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             onPostHidden: () {
               // Database-first: refresh posts from backend
               _loadPosts();
+            },
+            onFollowStatusChanged: (String userId, bool isFollowing) {
+              // Update follow status for all posts from this user
+              _updateFollowStatusForUser(userId, isFollowing);
             },
           ),
         ],
@@ -826,6 +1040,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildImagePost(PostModel post) {
+    final postIndex = _posts.indexWhere((p) => p.id == post.id);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -843,12 +1059,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         const SizedBox(height: 12),
         if (post.imageUrls != null && post.imageUrls!.isNotEmpty)
-          _ImageSliderWidget(imageUrls: post.imageUrls!),
+          _ImageSliderWidget(
+            imageUrls: post.imageUrls!,
+            onTap: () => _openImmersiveViewer(postIndex),
+          ),
       ],
     );
   }
 
   Widget _buildVideoPost(PostModel post) {
+    final postIndex = _posts.indexWhere((p) => p.id == post.id);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -866,76 +1087,79 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         const SizedBox(height: 12),
         if (post.videoThumbnail != null)
-          Container(
-            height: 300,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    post.videoThumbnail!,
-                    width: double.infinity,
-                    height: 300,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        width: double.infinity,
-                        height: 300,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[800],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.video_library,
-                          color: Colors.white,
-                          size: 50,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                // Play button overlay
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.play_circle_fill,
-                        color: Colors.white,
-                        size: 60,
-                      ),
+          GestureDetector(
+            onTap: () => _openImmersiveViewer(postIndex),
+            child: Container(
+              height: 300,
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      post.videoThumbnail!,
+                      width: double.infinity,
+                      height: 300,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: double.infinity,
+                          height: 300,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[800],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.video_library,
+                            color: Colors.white,
+                            size: 50,
+                          ),
+                        );
+                      },
                     ),
                   ),
-                ),
-                // Duration badge
-                if (post.videoDuration != null)
-                  Positioned(
-                    bottom: 8,
-                    right: 8,
+                  // Play button overlay
+                  Positioned.fill(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(4),
+                        color: Colors.black.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        post.formattedDuration,
-                        style: const TextStyle(
+                      child: const Center(
+                        child: Icon(
+                          Icons.play_circle_fill,
                           color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                          size: 60,
                         ),
                       ),
                     ),
                   ),
-              ],
+                  // Duration badge
+                  if (post.videoDuration != null)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          post.formattedDuration,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
       ],
@@ -947,20 +1171,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: () => _toggleLike(post.id),
+          OptimisticButton(
+            onPressed: () => _toggleLike(post.id),
+            isActive: post.isLiked,
+            activeColor: Colors.red,
+            inactiveColor: Colors.white,
+            isDisabled: isButtonDisabled('like_${post.id}'),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   post.isLiked ? Icons.favorite : Icons.favorite_border,
-                  color: post.isLiked ? Colors.red : Colors.white,
                   size: 24,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   '${post.likes}',
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
@@ -969,23 +1196,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(width: 24),
-          Row(
-            children: [
-              const Icon(
-                Icons.chat_bubble_outline,
-                color: Colors.white,
-                size: 24,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${post.comments}',
-                style: const TextStyle(
+          GestureDetector(
+            onTap: () => _showCommentsModal(post),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.chat_bubble_outline,
                   color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                  size: 24,
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Text(
+                  '${post.comments}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: 24),
           GestureDetector(
@@ -1235,8 +1465,9 @@ class StoryUser {
 // Stateful widget for image slider with dots
 class _ImageSliderWidget extends StatefulWidget {
   final List<String> imageUrls;
+  final VoidCallback? onTap;
 
-  const _ImageSliderWidget({required this.imageUrls});
+  const _ImageSliderWidget({required this.imageUrls, this.onTap});
 
   @override
   State<_ImageSliderWidget> createState() => _ImageSliderWidgetState();
@@ -1295,28 +1526,31 @@ class _ImageSliderWidgetState extends State<_ImageSliderWidget> {
                       });
                     },
                     itemBuilder: (context, index) {
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          widget.imageUrls[index],
-                          width: double.infinity,
-                          height: 300,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: double.infinity,
-                              height: 300,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[800],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.image,
-                                color: Colors.white,
-                                size: 50,
-                              ),
-                            );
-                          },
+                      return GestureDetector(
+                        onTap: widget.onTap,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            widget.imageUrls[index],
+                            width: double.infinity,
+                            height: 300,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                width: double.infinity,
+                                height: 300,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[800],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.image,
+                                  color: Colors.white,
+                                  size: 50,
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       );
                     },

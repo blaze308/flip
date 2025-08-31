@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/post_model.dart';
+import 'optimistic_ui_service.dart';
 
 class PostService {
   // Update this URL to match your backend server
@@ -795,6 +796,131 @@ class PostService {
       print('Backend connection test failed: $e');
       return false;
     }
+  }
+
+  // OPTIMISTIC UI METHODS
+
+  /// Optimistically toggle like with immediate UI update and background API call
+  static Future<void> toggleLikeOptimistic({
+    required String postId,
+    required PostModel post,
+    required VoidCallback onOptimisticUpdate,
+    required VoidCallback onRollback,
+    VoidCallback? onSuccess,
+    void Function(String error)? onError,
+  }) async {
+    await OptimisticUIService.performOptimisticUpdate(
+      operationId: 'like_$postId',
+      optimisticUpdate: onOptimisticUpdate,
+      apiCall: () async {
+        try {
+          final result = await toggleLike(postId);
+          return result.success;
+        } catch (e) {
+          return false;
+        }
+      },
+      rollback: onRollback,
+      onSuccess: onSuccess,
+      onError: onError,
+    );
+  }
+
+  /// Optimistically toggle bookmark with immediate UI update and background API call
+  static Future<void> toggleBookmarkOptimistic({
+    required String postId,
+    required PostModel post,
+    required VoidCallback onOptimisticUpdate,
+    required VoidCallback onRollback,
+    VoidCallback? onSuccess,
+    void Function(String error)? onError,
+  }) async {
+    await OptimisticUIService.performOptimisticUpdate(
+      operationId: 'bookmark_$postId',
+      optimisticUpdate: onOptimisticUpdate,
+      apiCall: () async {
+        try {
+          final result = await toggleBookmark(postId);
+          return result.success;
+        } catch (e) {
+          return false;
+        }
+      },
+      rollback: onRollback,
+      onSuccess: onSuccess,
+      onError: onError,
+    );
+  }
+
+  /// Optimistically share post with immediate UI update and background API call
+  static Future<void> sharePostOptimistic({
+    required String postId,
+    required PostModel post,
+    required VoidCallback onOptimisticUpdate,
+    required VoidCallback onRollback,
+    VoidCallback? onSuccess,
+    void Function(String error)? onError,
+  }) async {
+    await OptimisticUIService.performOptimisticUpdate(
+      operationId: 'share_$postId',
+      optimisticUpdate: onOptimisticUpdate,
+      apiCall: () async {
+        try {
+          final result = await sharePost(postId);
+          return result.success;
+        } catch (e) {
+          return false;
+        }
+      },
+      rollback: onRollback,
+      onSuccess: onSuccess,
+      onError: onError,
+    );
+  }
+
+  /// Check if a post operation is currently pending
+  static bool isPostOperationPending(String postId, String operation) {
+    return OptimisticUIService.isOperationPending('${operation}_$postId');
+  }
+
+  /// Cancel a pending post operation
+  static void cancelPostOperation(String postId, String operation) {
+    OptimisticUIService.cancelOperation('${operation}_$postId');
+  }
+
+  /// Optimistically toggle follow with immediate UI update and background API call
+  static Future<void> toggleFollowOptimistic({
+    required String userId,
+    required VoidCallback onOptimisticUpdate,
+    required VoidCallback onRollback,
+    VoidCallback? onSuccess,
+    void Function(String error)? onError,
+  }) async {
+    await OptimisticUIService.performOptimisticUpdate(
+      operationId: 'follow_$userId',
+      optimisticUpdate: onOptimisticUpdate,
+      apiCall: () async {
+        try {
+          final result = await toggleFollow(userId);
+          return result.success;
+        } catch (e) {
+          return false;
+        }
+      },
+      rollback: onRollback,
+      onSuccess: onSuccess,
+      onError: onError,
+    );
+  }
+
+  /// Check if a user operation is currently pending
+  static bool isUserOperationPending(String userId, String operation) {
+    return OptimisticUIService.isOperationPending('${operation}_$userId');
+  }
+
+  /// Cancel a pending user operation
+  static void cancelUserOperation(String userId, String operation) {
+    OptimisticUIService.cancelOperation('${operation}_$userId');
   }
 }
 

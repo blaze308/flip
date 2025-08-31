@@ -358,16 +358,17 @@ class AuthNotifier extends StateNotifier<AuthData> {
   // Private helper methods
   Future<bool> _shouldShowOnboarding() async {
     try {
-      final onboardingCount = await StorageService.getOnboardingViewCount();
       final hasCompletedOnboarding =
           await StorageService.hasCompletedOnboarding();
 
       // If user has completed onboarding, don't show it
       if (hasCompletedOnboarding) return false;
 
-      // Show onboarding for first 3-5 times (random)
-      const maxOnboardingViews = 5;
-      return onboardingCount < maxOnboardingViews;
+      // Check if this is the first time opening the app
+      final onboardingCount = await StorageService.getOnboardingViewCount();
+
+      // Show onboarding only once - on first app launch
+      return onboardingCount == 0;
     } catch (e) {
       developer.log(
         'Error checking onboarding status: $e',

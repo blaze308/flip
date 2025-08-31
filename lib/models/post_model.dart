@@ -395,7 +395,7 @@ class PostSampleData {
         id: '1',
         userId: 'user1',
         username: 'Alex Johnson',
-        userAvatar: 'https://i.pravatar.cc/150?img=1',
+        userAvatar: null, // Use neutral placeholder
         createdAt: DateTime.now().subtract(const Duration(hours: 2)),
         type: PostType.text,
         content:
@@ -417,16 +417,12 @@ class PostSampleData {
         id: '2',
         userId: 'user2',
         username: 'Sarah Chen',
-        userAvatar: 'https://i.pravatar.cc/150?img=2',
+        userAvatar: null, // Use neutral placeholder
         createdAt: DateTime.now().subtract(const Duration(hours: 5)),
         type: PostType.image,
         content:
             'Beautiful sunset from my weekend hike! Nature never fails to amaze me 🌅',
-        imageUrls: [
-          'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800',
-          'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800',
-          'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800',
-        ],
+        imageUrls: null, // Remove sample images
         likes: 89,
         comments: 15,
         shares: 12,
@@ -440,14 +436,12 @@ class PostSampleData {
         id: '3',
         userId: 'user3',
         username: 'Mike Rodriguez',
-        userAvatar: 'https://i.pravatar.cc/150?img=3',
+        userAvatar: null, // Use neutral placeholder
         createdAt: DateTime.now().subtract(const Duration(hours: 8)),
         type: PostType.video,
         content: 'Quick cooking tutorial: Perfect pasta in 15 minutes! 🍝',
-        videoUrl:
-            'https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4',
-        videoThumbnail:
-            'https://images.unsplash.com/photo-1551782450-17144efb9c50?w=800',
+        videoUrl: null, // Remove sample video
+        videoThumbnail: null, // Remove sample thumbnail
         videoDuration: const Duration(minutes: 2, seconds: 30),
         likes: 256,
         comments: 42,
@@ -461,7 +455,7 @@ class PostSampleData {
         id: '4',
         userId: 'user4',
         username: 'Emma Wilson',
-        userAvatar: 'https://i.pravatar.cc/150?img=4',
+        userAvatar: null, // Use neutral placeholder
         createdAt: DateTime.now().subtract(const Duration(hours: 12)),
         type: PostType.text,
         content:
@@ -483,14 +477,12 @@ class PostSampleData {
         id: '5',
         userId: 'user5',
         username: 'David Kim',
-        userAvatar: 'https://i.pravatar.cc/150?img=5',
+        userAvatar: null, // Use neutral placeholder
         createdAt: DateTime.now().subtract(const Duration(days: 1)),
         type: PostType.image,
         content:
             'New coffee shop discovery! ☕ The latte art here is incredible',
-        imageUrls: [
-          'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800',
-        ],
+        imageUrls: null, // Remove sample images
         likes: 67,
         comments: 8,
         shares: 3,
