@@ -16,6 +16,11 @@ import 'home_screen.dart';
 import 'biometric_setup_screen.dart';
 import 'biometric_login_screen.dart';
 import 'token_app_router.dart';
+import 'create_story_type_screen.dart';
+import 'create_text_story_screen.dart';
+import 'create_image_story_screen.dart';
+import 'create_video_story_screen.dart';
+import 'create_audio_story_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +60,11 @@ class AncientFlipApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/biometric-setup': (context) => const BiometricSetupScreen(),
         '/biometric-login': (context) => const BiometricLoginScreen(),
+        '/create-story': (context) => const CreateStoryTypeScreen(),
+        '/create-text-story': (context) => const CreateTextStoryScreen(),
+        '/create-image-story': (context) => const CreateImageStoryScreen(),
+        '/create-video-story': (context) => const CreateVideoStoryScreen(),
+        '/create-audio-story': (context) => const CreateAudioStoryScreen(),
       },
     );
   }

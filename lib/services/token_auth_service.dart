@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:io' show Platform;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -93,26 +94,55 @@ class TokenAuthService {
   /// Initialize authentication service
   static Future<void> initialize() async {
     try {
+      print('🔐 TokenAuthService: Starting initialization...');
       _updateState(AuthState.loading);
 
       // Check if we have stored tokens
       _accessToken = await _secureStorage.read(key: _accessTokenKey);
       _refreshToken = await _secureStorage.read(key: _refreshTokenKey);
 
+      print(
+        '🔐 TokenAuthService: Tokens from storage - Access: ${_accessToken != null ? 'Present' : 'Missing'}, Refresh: ${_refreshToken != null ? 'Present' : 'Missing'}',
+      );
+
       if (_accessToken != null && _refreshToken != null) {
         // Try to validate the token and get user data
         final isValid = await _validateToken();
+        print('🔐 TokenAuthService: Token validation result: $isValid');
+
         if (isValid) {
           // Load user data from storage
           final userData = await _getUserDataFromStorage();
+          print(
+            '🔐 TokenAuthService: User data from storage: ${userData != null ? 'Found' : 'Missing'}',
+          );
+
           if (userData != null) {
             _currentUser = userData;
             _updateState(AuthState.authenticated, user: userData);
-            developer.log(
-              'User authenticated from stored token',
-              name: 'TokenAuthService',
+            print(
+              '🔐 TokenAuthService: User authenticated from stored token - ${userData.displayName}',
             );
             return;
+          } else {
+            print('🔐 TokenAuthService: Token valid but no user data found');
+          }
+        } else {
+          print(
+            '🔐 TokenAuthService: Token validation failed, trying refresh...',
+          );
+          // Try to refresh the token
+          final refreshed = await _refreshAccessToken();
+          if (refreshed) {
+            final userData = await _getUserDataFromStorage();
+            if (userData != null) {
+              _currentUser = userData;
+              _updateState(AuthState.authenticated, user: userData);
+              print(
+                '🔐 TokenAuthService: User authenticated after token refresh - ${userData.displayName}',
+              );
+              return;
+            }
           }
         }
       }
@@ -132,12 +162,16 @@ class TokenAuthService {
 
   /// Validate current access token
   static Future<bool> _validateToken() async {
-    if (_accessToken == null) return false;
+    if (_accessToken == null) {
+      print('🔐 TokenAuthService: No access token to validate');
+      return false;
+    }
 
     try {
+      print('🔐 TokenAuthService: Validating access token...');
       final response = await http
           .get(
-            Uri.parse('$_baseUrl/auth/verify'),
+            Uri.parse('$_baseUrl/api/token/verify'),
             headers: {
               'Authorization': 'Bearer $_accessToken',
               'Content-Type': 'application/json',
@@ -145,6 +179,12 @@ class TokenAuthService {
           )
           .timeout(_timeoutDuration);
 
+      print(
+        '🔐 TokenAuthService: Token validation response: ${response.statusCode}',
+      );
+      if (response.statusCode != 200) {
+        print('🔐 TokenAuthService: Token validation failed: ${response.body}');
+      }
       return response.statusCode == 200;
     } catch (e) {
       developer.log('Token validation failed: $e', name: 'TokenAuthService');
@@ -159,7 +199,7 @@ class TokenAuthService {
     try {
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/token/refresh'),
+            Uri.parse('$_baseUrl/api/token/refresh'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'refreshToken': _refreshToken}),
           )
@@ -184,29 +224,42 @@ class TokenAuthService {
   }) async {
     try {
       final firebaseToken = await firebaseUser.getIdToken();
+      final deviceInfo = await _getDeviceInfo();
+
+      print('🔐 TokenAuthService: Exchanging Firebase token...');
+      print('🔐 TokenAuthService: Device info: $deviceInfo');
+      print('🔐 TokenAuthService: Remember me: $rememberMe');
 
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/token/exchange'),
+            Uri.parse('$_baseUrl/api/token/exchange'),
             headers: {
               'Authorization': 'Bearer $firebaseToken',
               'Content-Type': 'application/json',
             },
             body: jsonEncode({
-              'deviceInfo': await _getDeviceInfo(),
+              'deviceInfo': deviceInfo,
               'rememberMe': rememberMe,
             }),
           )
           .timeout(_timeoutDuration);
 
+      print('🔐 TokenAuthService: Response status: ${response.statusCode}');
+      print('🔐 TokenAuthService: Response body: ${response.body}');
+
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final tokenData = data['data'];
-        _accessToken = tokenData['accessToken'];
-        _refreshToken = tokenData['refreshToken'];
+        final tokens = tokenData['tokens'];
+        _accessToken = tokens['accessToken'];
+        _refreshToken = tokens['refreshToken'];
 
         // Store tokens securely
+        print('🔐 TokenAuthService: Saving tokens to secure storage...');
+        print('   - Access Token Length: ${_accessToken?.length ?? 0}');
+        print('   - Refresh Token Length: ${_refreshToken?.length ?? 0}');
+
         await Future.wait([
           _secureStorage.write(key: _accessTokenKey, value: _accessToken),
           _secureStorage.write(key: _refreshTokenKey, value: _refreshToken),
@@ -216,9 +269,29 @@ class TokenAuthService {
           ),
         ]);
 
+        print('🔐 TokenAuthService: Tokens saved successfully!');
+
+        // Verify tokens were actually saved
+        final savedAccessToken = await _secureStorage.read(
+          key: _accessTokenKey,
+        );
+        final savedRefreshToken = await _secureStorage.read(
+          key: _refreshTokenKey,
+        );
+        print(
+          '🔐 TokenAuthService: Verification - Access: ${savedAccessToken != null ? 'Found' : 'Missing'}, Refresh: ${savedRefreshToken != null ? 'Found' : 'Missing'}',
+        );
+
         // Create user object
         final user = TokenUser.fromBackendData(tokenData['user']);
         await _saveUserDataToStorage(user);
+
+        // Update authentication state
+        _currentUser = user;
+        _updateState(AuthState.authenticated, user: user);
+        print(
+          '🔐 TokenAuthService: Authentication state updated to authenticated',
+        );
 
         return TokenExchangeResult(
           success: true,
@@ -618,9 +691,15 @@ class TokenAuthService {
   /// Save user data to storage
   static Future<void> _saveUserDataToStorage(TokenUser user) async {
     try {
+      print('🔐 TokenAuthService: Saving user data to storage...');
+      print('   - User: ${user.displayName} (${user.email})');
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_userDataKey, jsonEncode(user.toJson()));
+
+      print('🔐 TokenAuthService: User data saved successfully!');
     } catch (e) {
+      print('🔐 TokenAuthService: Failed to save user data: $e');
       developer.log('Failed to save user data: $e', name: 'TokenAuthService');
     }
   }
@@ -651,9 +730,26 @@ class TokenAuthService {
 
   /// Get device info for token exchange
   static Future<Map<String, dynamic>> _getDeviceInfo() async {
-    // This would typically use device_info_plus package
+    // Detect platform dynamically
+    String deviceType = 'android'; // Default to android
+
+    // You can use Platform.isIOS, Platform.isAndroid from 'dart:io'
+    // or kIsWeb from 'package:flutter/foundation.dart' for web detection
+    try {
+      if (Platform.isIOS) {
+        deviceType = 'ios';
+      } else if (Platform.isAndroid) {
+        deviceType = 'android';
+      } else {
+        deviceType = 'web'; // Fallback for other platforms
+      }
+    } catch (e) {
+      // If Platform is not available (web), default to web
+      deviceType = 'web';
+    }
+
     return {
-      'deviceType': 'mobile',
+      'deviceType': deviceType,
       'platform': 'flutter',
       'appVersion': '1.0.0',
     };

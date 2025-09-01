@@ -13,6 +13,7 @@ import 'widgets/post_menu_widget.dart';
 import 'widgets/loading_button.dart';
 import 'models/post_model.dart';
 import 'models/story_model.dart';
+import 'create_story_type_screen.dart';
 import 'create_post_type_screen.dart';
 import 'immersive_viewer_screen.dart';
 import 'widgets/comments_bottom_sheet.dart';
@@ -72,6 +73,9 @@ class _HomeScreenState extends State<HomeScreen>
       );
       _refreshAfterPostCreation();
     });
+
+    // Listen to authentication state changes
+    TokenAuthService.addListener(_onAuthStateChanged);
   }
 
   @override
@@ -80,7 +84,28 @@ class _HomeScreenState extends State<HomeScreen>
     _scrollController.dispose();
     _fabAnimationController.dispose();
     _postCreatedSubscription?.cancel();
+    TokenAuthService.removeListener(_onAuthStateChanged);
     super.dispose();
+  }
+
+  /// Handle authentication state changes
+  void _onAuthStateChanged(AuthState state, TokenUser? user) {
+    print('🏠 HomeScreen: Auth state changed to $state');
+    if (mounted) {
+      // Use addPostFrameCallback to avoid setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _currentUser = user;
+          });
+
+          // Reload data when auth state changes
+          _loadUserData();
+          _loadPosts();
+          _loadStories();
+        }
+      });
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -1607,6 +1632,14 @@ class _HomeScreenState extends State<HomeScreen>
     );
     if (!canCreateStory) return;
 
+    // Navigate to story creation screen
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const CreateStoryTypeScreen()),
+    );
+  }
+
+  void _showCreateOptionsOld(BuildContext context) async {
+    // Old modal implementation - keeping for reference
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

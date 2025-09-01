@@ -25,8 +25,22 @@ class _TokenAppRouterState extends State<TokenAppRouter> {
   }
 
   Future<void> _checkOnboardingStatus() async {
-    // Only check if we should show onboarding, no auth validation
+    print('🚀 TokenAppRouter: Initializing authentication service...');
+
+    // Initialize authentication service first
+    await TokenAuthService.initialize();
+
+    print(
+      '🚀 TokenAppRouter: Auth initialized. Checking authentication state...',
+    );
+    print('   - Is Authenticated: ${TokenAuthService.isAuthenticated}');
+    print(
+      '   - Current User: ${TokenAuthService.currentUser?.displayName ?? 'None'}',
+    );
+
+    // Then check if we should show onboarding
     final shouldShowOnboarding = await TokenAuthService.shouldShowOnboarding();
+    print('🚀 TokenAppRouter: Should show onboarding: $shouldShowOnboarding');
 
     if (mounted) {
       setState(() {

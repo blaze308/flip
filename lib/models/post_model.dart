@@ -340,15 +340,6 @@ class PostModel {
       userId = json['firebaseUid'] ?? '';
     }
 
-    // Debug: Log parsing for posts with likes
-    if ((json['likes'] ?? 0) > 0) {
-      print('🔧 PostModel.fromBackendJson: Parsing post with likes');
-      print('   - id: ${json['_id'] ?? json['id']}');
-      print('   - likes: ${json['likes']}');
-      print('   - isLiked from json: ${json['isLiked']}');
-      print('   - isLiked type: ${json['isLiked'].runtimeType}');
-    }
-
     return PostModel(
       id: json['_id'] ?? json['id'],
       userId: userId,

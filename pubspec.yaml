@@ -56,6 +56,7 @@ dependencies:
 
   # Media picker and video handling
   image_picker: ^1.0.7
+  file_picker: ^8.0.0+1
   video_player: ^2.8.2
   video_thumbnail: ^0.5.3
 

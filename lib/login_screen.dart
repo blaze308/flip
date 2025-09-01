@@ -186,6 +186,10 @@ class _LoginScreenState extends State<LoginScreen>
           // Debug: Show session info
           final sessionInfo = await TokenAuthService.getSessionInfo();
           print('🔐 Session Info: $sessionInfo');
+
+          // Manual navigation to home screen
+          print('🔐 LoginScreen: Navigating to home screen...');
+          Navigator.of(context).pushReplacementNamed('/');
         } else if (mounted) {
           print('🔐 LoginScreen: Email login failed - ${result.message}');
           context.showErrorToaster(
@@ -235,6 +239,10 @@ class _LoginScreenState extends State<LoginScreen>
             'Welcome, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
             devMessage: 'Google login successful: ${result.message}',
           );
+
+          // Manual navigation to home screen
+          print('🔐 LoginScreen: Navigating to home screen...');
+          Navigator.of(context).pushReplacementNamed('/');
         }
       } else {
         if (mounted) {

@@ -174,7 +174,7 @@ class StoryService {
   }
 
   /// Create a text story
-  static Future<StoryModel> createTextStory({
+  static Future<StoryResult> createTextStory({
     required String textContent,
     StoryTextStyle? textStyle,
     String? caption,
@@ -225,22 +225,22 @@ class StoryService {
         final story = StoryModel.fromJson(data['data']);
 
         print('📖 StoryService: Successfully created text story');
-        return story;
+        return StoryResult.success('Story created successfully', story: story);
       } else {
         final errorData = jsonDecode(response.body);
-        print(
-          '📖 StoryService: Failed to create text story: ${errorData['message']}',
-        );
-        throw Exception(errorData['message'] ?? 'Failed to create text story');
+        final errorMessage =
+            errorData['message'] ?? 'Failed to create text story';
+        print('📖 StoryService: Failed to create text story: $errorMessage');
+        return StoryResult.error(errorMessage);
       }
     } catch (e) {
       print('📖 StoryService: Error creating text story: $e');
-      throw Exception('Failed to create text story: $e');
+      return StoryResult.error('Failed to create text story: $e');
     }
   }
 
   /// Create a media story (image, video, audio)
-  static Future<StoryModel> createMediaStory({
+  static Future<StoryResult> createMediaStory({
     required File mediaFile,
     required StoryMediaType mediaType,
     String? caption,
@@ -305,17 +305,17 @@ class StoryService {
         final story = StoryModel.fromJson(data['data']);
 
         print('📖 StoryService: Successfully created ${mediaType.name} story');
-        return story;
+        return StoryResult.success('Story created successfully', story: story);
       } else {
         final errorData = jsonDecode(responseBody);
-        print(
-          '📖 StoryService: Failed to create media story: ${errorData['message']}',
-        );
-        throw Exception(errorData['message'] ?? 'Failed to create media story');
+        final errorMessage =
+            errorData['message'] ?? 'Failed to create media story';
+        print('📖 StoryService: Failed to create media story: $errorMessage');
+        return StoryResult.error(errorMessage);
       }
     } catch (e) {
       print('📖 StoryService: Error creating media story: $e');
-      throw Exception('Failed to create media story: $e');
+      return StoryResult.error('Failed to create media story: $e');
     }
   }
 
