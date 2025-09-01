@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'token_auth_service.dart';
 
 class BackendService {
   // Update this URL to your backend server
@@ -13,19 +13,13 @@ class BackendService {
   // Timeout duration for HTTP requests
   static const Duration timeoutDuration = Duration(seconds: 30);
 
-  /// Get authentication headers with Firebase ID token
+  /// Get authentication headers with JWT token
   static Future<Map<String, String>> _getHeaders() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+    final headers = await TokenAuthService.getAuthHeaders();
+    if (headers == null) {
       throw Exception('User not authenticated');
     }
-
-    final token = await user.getIdToken();
-
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
+    return headers;
   }
 
   /// Get device information for tracking and security
@@ -142,19 +136,17 @@ class BackendService {
     }
   }
 
-  /// Sync user data with backend after Firebase authentication
-  /// This should be called after every successful Firebase auth
+  /// Get user profile from backend using JWT token
   static Future<BackendSyncResult> syncUser({bool forceUpdate = false}) async {
     try {
-      final deviceInfo = await _getDeviceInfo();
+      final response = await _makeRequest('GET', '/users/profile');
 
-      final response = await _makeRequest(
-        'POST',
-        '/auth/sync-user',
-        body: {'deviceInfo': deviceInfo, 'forceUpdate': forceUpdate},
+      return BackendSyncResult(
+        success: true,
+        message: 'User synced successfully',
+        user: BackendUser.fromJson(response['data']['user']),
+        isNewUser: false,
       );
-
-      return BackendSyncResult.fromJson(response);
     } catch (e) {
       throw BackendException(
         message: 'Failed to sync user: ${e.toString()}',

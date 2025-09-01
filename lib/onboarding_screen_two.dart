@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'services/token_auth_service.dart';
 
 class OnboardingScreenTwo extends StatefulWidget {
   const OnboardingScreenTwo({super.key});
@@ -97,10 +98,14 @@ class _OnboardingScreenTwoState extends State<OnboardingScreenTwo>
                             child: Padding(
                               padding: const EdgeInsets.only(top: 16.0),
                               child: TextButton(
-                                onPressed: () {
-                                  Navigator.of(
-                                    context,
-                                  ).pushReplacementNamed('/home');
+                                onPressed: () async {
+                                  await TokenAuthService.markOnboardingCompleted();
+                                  // Navigate directly to home screen
+                                  if (context.mounted) {
+                                    Navigator.of(
+                                      context,
+                                    ).pushReplacementNamed('/');
+                                  }
                                 },
                                 child: const Text(
                                   'Skip',

@@ -1,20 +1,17 @@
-import 'package:flip/services/firebase_auth_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'providers/auth_provider.dart';
+import 'services/token_auth_service.dart';
 import 'services/biometric_auth_service.dart';
 import 'services/message_service.dart';
 import 'widgets/custom_toaster.dart';
-import 'services/storage_service.dart';
 
-class LoginScreen extends ConsumerStatefulWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen>
+class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -89,17 +86,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final result = await BiometricAuthService.quickLogin();
 
     if (result.success) {
-      // Check if user is still logged in with Firebase
-      final isLoggedIn = await StorageService.isLoggedIn();
-      final hasValidToken = await StorageService.hasValidToken();
-
-      if (isLoggedIn && hasValidToken) {
-        // User is authenticated, navigate to home
+      // Check if user is authenticated with token service
+      if (TokenAuthService.isAuthenticated) {
+        // User is authenticated, they should already be on home screen
+        // This shouldn't happen in normal flow
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
-        // Need to re-authenticate with Firebase
+        // Need to re-authenticate
         setState(() {
           _isLoading = false;
         });
@@ -163,24 +158,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           '🔐 LoginScreen: Attempting email login for: ${_emailController.text.trim()}',
         );
 
-        final success = await ref
-            .read(authProvider.notifier)
-            .signInWithEmailAndPassword(
-              email: _emailController.text.trim(),
-              password: _passwordController.text,
-              rememberMe: _rememberMe,
-            );
+        final result = await TokenAuthService.signInWithEmailAndPassword(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
 
-        if (success && mounted) {
-          final user = ref.read(currentUserProvider);
+        if (result.success && mounted) {
+          final user = TokenAuthService.currentUser;
 
           // Log successful login
           print('🔐 LoginScreen: Email login successful!');
           if (user != null) {
-            print('   - UID: ${user.uid}');
+            print('   - ID: ${user.id}');
             print('   - Email: ${user.email}');
             print('   - Display Name: ${user.displayName}');
-            print('   - Username: ${user.username}');
             print('   - Remember Me: $_rememberMe');
           } else {
             print('   - Warning: Login successful but user data is null');
@@ -191,15 +182,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             devMessage: 'Email login successful with remember me: $_rememberMe',
           );
         } else if (mounted) {
-          final authData = ref.read(authProvider);
-          print(
-            '🔐 LoginScreen: Email login failed - ${authData.errorMessage}',
-          );
+          print('🔐 LoginScreen: Email login failed - ${result.message}');
           context.showErrorToaster(
-            MessageService.getFirebaseErrorMessage(
-              authData.errorMessage.toString(),
-            ),
-            devMessage: 'Email login failed: ${authData.errorMessage}',
+            result.message,
+            devMessage: 'Email login failed: ${result.message}',
           );
         }
       } catch (e) {
@@ -226,23 +212,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     try {
       print('🔐 LoginScreen: Attempting Google login...');
-      final result = await FirebaseAuthService.signInWithGoogle();
+      final result = await TokenAuthService.signInWithGoogle();
 
-      if (result.success && result.user != null) {
+      if (result.success) {
         if (mounted) {
+          final user = TokenAuthService.currentUser;
           // Log successful Google login
           print('🔐 LoginScreen: Google login successful!');
-          print('   - UID: ${result.user!.uid}');
-          print('   - Email: ${result.user!.email}');
-          print('   - Display Name: ${result.user!.displayName}');
-          print('   - Username: ${result.user!.displayName}');
-          print('   - Profile Image: ${result.user!.photoURL ?? "No image"}');
+          if (user != null) {
+            print('   - ID: ${user.id}');
+            print('   - Email: ${user.email}');
+            print('   - Display Name: ${user.displayName}');
+            print('   - Profile Image: ${user.photoURL ?? "No image"}');
+          }
 
           context.showSuccessToaster(
-            'Welcome, ${result.user!.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+            'Welcome, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
             devMessage: 'Google login successful: ${result.message}',
           );
-          Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
         if (mounted) {
@@ -276,28 +263,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     try {
       print('🔐 LoginScreen: Attempting Apple login...');
-      final result = await FirebaseAuthService.signInWithApple();
+      final result = await TokenAuthService.signInWithApple();
 
-      if (result.success && result.user != null) {
+      if (result.success) {
         if (mounted) {
+          final user = TokenAuthService.currentUser;
           // Log successful Apple login
           print('🔐 LoginScreen: Apple login successful!');
-          print('   - UID: ${result.user!.uid}');
-          print('   - Email: ${result.user!.email}');
-          print('   - Display Name: ${result.user!.displayName}');
-          print('   - Profile Image: ${result.user!.photoURL ?? "No image"}');
+          if (user != null) {
+            print('   - ID: ${user.id}');
+            print('   - Email: ${user.email}');
+            print('   - Display Name: ${user.displayName}');
+            print('   - Profile Image: ${user.photoURL ?? "No image"}');
+          }
 
           context.showSuccessToaster(
-            'Welcome, ${result.user!.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+            'Welcome, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
             devMessage: 'Apple login successful: ${result.message}',
           );
-          Navigator.of(context).pushReplacementNamed('/home');
         }
       } else {
         if (mounted) {
           print('🔐 LoginScreen: Apple login failed - ${result.message}');
           context.showErrorToaster(
-            MessageService.getFirebaseErrorMessage(result.message),
+            result.message,
             devMessage: 'Apple login failed: ${result.message}',
           );
         }
@@ -339,20 +328,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       children: [
                         const SizedBox(height: 20),
 
-                        // Back button
+                        // Skip button
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: IconButton(
-                            onPressed: () {
-                              Navigator.of(context).pop();
+                          child: TextButton.icon(
+                            onPressed: () async {
+                              await TokenAuthService.skipToHome();
                             },
                             icon: const Icon(
-                              Icons.arrow_back_ios_new,
+                              Icons.skip_next,
                               color: Colors.white,
                               size: 20,
+                            ),
+                            label: const Text(
+                              'Skip',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
                             ),
                           ),
                         ),

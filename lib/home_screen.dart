@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
-import 'services/firebase_auth_service.dart';
+import 'services/token_auth_service.dart';
 import 'services/message_service.dart';
-import 'services/user_service.dart';
 import 'services/post_service.dart';
 import 'services/event_bus.dart';
 import 'services/optimistic_ui_service.dart';
+import 'services/contextual_auth_service.dart';
 import 'widgets/custom_toaster.dart';
 import 'widgets/post_menu_widget.dart';
 import 'widgets/loading_button.dart';
-import 'models/user_model.dart';
 import 'models/post_model.dart';
 import 'create_post_type_screen.dart';
 import 'immersive_viewer_screen.dart';
@@ -25,7 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with TickerProviderStateMixin, OptimisticUIMixin {
-  UserModel? _currentUser;
+  TokenUser? _currentUser;
   bool _isLoading = true;
   int _currentIndex = 0;
   late PageController _pageController;
@@ -83,23 +82,17 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _loadUserData() async {
     try {
       print('🏠 HomeScreen: Loading user data...');
-      await UserService.initializeUser();
-      final currentUser = UserService.currentUser;
 
-      // Log user data
+      // In contextual auth flow, we don't block on user data
+      // Just check if user is authenticated and load accordingly
+      final currentUser = TokenAuthService.currentUser;
+
       if (currentUser != null) {
-        print('🏠 HomeScreen: User loaded successfully');
-        print('   - UID: ${currentUser.uid}');
-        print('   - Email: ${currentUser.email}');
+        print('🏠 HomeScreen: Authenticated user found');
+        print('   - ID: ${currentUser.id}');
         print('   - Display Name: ${currentUser.displayName}');
-        print(
-          '   - Profile Image: ${currentUser.profileImageUrl ?? "No image"}',
-        );
-        print('   - Username: ${currentUser.username}');
-        print('   - Is Active: ${currentUser.isActive}');
-        print('   - Account Type: ${currentUser.accountType}');
       } else {
-        print('🏠 HomeScreen: No user data available');
+        print('🏠 HomeScreen: Guest user - showing public content');
       }
 
       if (mounted) {
@@ -111,8 +104,11 @@ class _HomeScreenState extends State<HomeScreen>
       }
     } catch (e) {
       print('🏠 HomeScreen: Error loading user data: $e');
+      // Don't block the UI - show content anyway
       if (mounted) {
         setState(() {
+          _currentUser = null; // Guest mode
+          _populateStoryUsers();
           _isLoading = false;
         });
       }
@@ -122,14 +118,14 @@ class _HomeScreenState extends State<HomeScreen>
   void _populateStoryUsers() {
     // Debug logging for story avatar
     print('🏠 HomeScreen: Populating story users...');
-    print('   - Current user profile image: ${_currentUser?.profileImageUrl}');
+    print('   - Current user profile image: ${_currentUser?.photoURL}');
     print('   - Using neutral placeholder for missing avatars');
 
     _storyUsers = [
       StoryUser(
         name: 'You',
         avatar:
-            _currentUser?.profileImageUrl ??
+            _currentUser?.photoURL ??
             '', // Empty string for neutral placeholder
         hasStory: false,
         isCurrentUser: true,
@@ -159,8 +155,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _handleLogout() async {
     try {
-      final result = await FirebaseAuthService.signOut();
-      if (result.success && mounted) {
+      await TokenAuthService.signOut();
+      if (mounted) {
         Navigator.of(context).pushReplacementNamed('/login');
       }
     } catch (e) {
@@ -185,6 +181,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _toggleLike(String postId) async {
+    // Check authentication first
+    final canLike = await ContextualAuthService.canLike(context);
+    if (!canLike) return; // User cancelled login or not authenticated
+
     // Haptic feedback
     HapticFeedback.lightImpact();
 
@@ -259,7 +259,11 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  void _showCommentsModal(PostModel post) {
+  void _showCommentsModal(PostModel post) async {
+    // Check authentication first for commenting
+    final canComment = await ContextualAuthService.canComment(context);
+    if (!canComment) return; // User cancelled login or not authenticated
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1277,7 +1281,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            _currentUser?.fullName ?? 'User',
+            _currentUser?.displayName ?? 'User',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 24,

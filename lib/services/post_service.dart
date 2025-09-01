@@ -6,6 +6,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/post_model.dart';
 import 'optimistic_ui_service.dart';
+import 'token_auth_service.dart';
 
 class PostService {
   // Update this URL to match your backend server
@@ -15,23 +16,48 @@ class PostService {
   // Development mode flag - set to true for local testing
   static const bool isDevelopmentMode = false;
 
-  /// Get authentication headers with Firebase ID token
-  static Future<Map<String, String>> _getHeaders() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw PostException(message: 'User not authenticated', statusCode: 401);
+  /// Get authentication headers (returns null for guest users)
+  static Future<Map<String, String>?> _getHeaders() async {
+    // Check if user is authenticated
+    if (TokenAuthService.isAuthenticated) {
+      final headers = await TokenAuthService.getAuthHeaders();
+      if (headers != null) {
+        print('Using JWT token for authenticated user'); // Debug log
+        return headers;
+      }
     }
 
-    final token = await user.getIdToken();
-    print('Firebase user: ${user.email}, UID: ${user.uid}'); // Debug log
-    print(
-      'Token length: ${token?.length}',
-    ); // Debug log (don't print full token for security)
+    // For guest users, try Firebase auth as fallback
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final token = await user.getIdToken();
+      print('Firebase user: ${user.email}, UID: ${user.uid}'); // Debug log
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
+    }
 
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
+    // Guest user - no authentication headers
+    print('Guest user - no authentication headers'); // Debug log
+    return null;
+  }
+
+  /// Get basic headers for public requests
+  static Map<String, String> _getPublicHeaders() {
+    return {'Content-Type': 'application/json'};
+  }
+
+  /// Get authentication headers for upload operations (throws if not authenticated)
+  static Future<Map<String, String>> _getUploadHeaders() async {
+    final headers = await _getHeaders();
+    if (headers == null) {
+      throw PostException(
+        message: 'Authentication required for upload operations',
+        statusCode: 401,
+      );
+    }
+    return headers;
   }
 
   /// Make HTTP request with error handling
@@ -39,6 +65,7 @@ class PostService {
     String method,
     String endpoint, {
     Map<String, dynamic>? body,
+    bool requireAuth = true,
   }) async {
     try {
       final uri = Uri.parse('$baseUrl$endpoint');
@@ -46,7 +73,20 @@ class PostService {
       if (body != null) {
         print('Request body: ${json.encode(body)}'); // Debug log
       }
-      final headers = await _getHeaders();
+
+      Map<String, String> headers;
+      if (requireAuth) {
+        final authHeaders = await _getHeaders();
+        if (authHeaders == null) {
+          throw PostException(
+            message: 'Authentication required for this operation',
+            statusCode: 401,
+          );
+        }
+        headers = authHeaders;
+      } else {
+        headers = _getPublicHeaders();
+      }
 
       http.Response response;
 
@@ -177,12 +217,31 @@ class PostService {
     PostType? type,
   }) async {
     try {
-      String endpoint = '/posts/feed?page=$page&limit=$limit';
+      String endpoint;
+      bool requireAuth;
+
+      // Use different endpoints based on authentication status
+      if (TokenAuthService.isAuthenticated) {
+        // Authenticated users get personalized feed
+        endpoint = '/api/posts/feed?page=$page&limit=$limit';
+        requireAuth = true;
+        print('🔐 PostService: Getting authenticated feed');
+      } else {
+        // Guest users get public posts
+        endpoint = '/api/posts/public?page=$page&limit=$limit';
+        requireAuth = false;
+        print('👤 PostService: Getting public posts for guest user');
+      }
+
       if (type != null) {
         endpoint += '&type=${type.toString().split('.').last}';
       }
 
-      final response = await _makeRequest('GET', endpoint);
+      final response = await _makeRequest(
+        'GET',
+        endpoint,
+        requireAuth: requireAuth,
+      );
 
       // Debug: Log raw backend response for first post
       if (response['data']['posts'] != null &&
@@ -191,7 +250,7 @@ class PostService {
         print('🔧 PostService: Raw backend data for first post:');
         print('   - id: ${firstPost['_id']}');
         print('   - likes: ${firstPost['likes']}');
-        print('   - isLiked: ${firstPost['isLiked']}');
+        print('   - isLiked: ${firstPost['isLiked'] ?? false}');
         print('   - likedBy length: ${firstPost['likedBy']?.length ?? 0}');
       }
 
@@ -227,7 +286,24 @@ class PostService {
   /// Get a specific post by ID
   static Future<PostModel> getPost(String postId) async {
     try {
-      final response = await _makeRequest('GET', '/posts/$postId');
+      String endpoint;
+      bool requireAuth;
+
+      if (TokenAuthService.isAuthenticated) {
+        // Authenticated users can access all posts they have permission to see
+        endpoint = '/api/posts/$postId';
+        requireAuth = true;
+      } else {
+        // Guest users can only access public posts
+        endpoint = '/api/posts/public/$postId';
+        requireAuth = false;
+      }
+
+      final response = await _makeRequest(
+        'GET',
+        endpoint,
+        requireAuth: requireAuth,
+      );
       return PostModel.fromBackendJson(response['data']['post']);
     } catch (e) {
       throw PostException(
@@ -529,7 +605,7 @@ class PostService {
       final request = http.MultipartRequest('POST', uri);
 
       // Add headers
-      final headers = await _getHeaders();
+      final headers = await _getUploadHeaders();
       request.headers.addAll(headers);
 
       // Add image file
@@ -608,7 +684,7 @@ class PostService {
       final request = http.MultipartRequest('POST', uri);
 
       // Add headers
-      final headers = await _getHeaders();
+      final headers = await _getUploadHeaders();
       request.headers.addAll(headers);
 
       // Add image files
@@ -697,7 +773,7 @@ class PostService {
       final request = http.MultipartRequest('POST', uri);
 
       // Add headers
-      final headers = await _getHeaders();
+      final headers = await _getUploadHeaders();
       request.headers.addAll(headers);
 
       // Add video file

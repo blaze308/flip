@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'services/token_auth_service.dart';
 
 class OnboardingScreenThree extends StatefulWidget {
   const OnboardingScreenThree({super.key});
@@ -79,10 +80,12 @@ class _OnboardingScreenThreeState extends State<OnboardingScreenThree>
                         child: Padding(
                           padding: const EdgeInsets.only(top: 16.0),
                           child: TextButton(
-                            onPressed: () {
-                              Navigator.of(
-                                context,
-                              ).pushReplacementNamed('/home');
+                            onPressed: () async {
+                              await TokenAuthService.markOnboardingCompleted();
+                              // Navigate directly to home screen
+                              if (context.mounted) {
+                                Navigator.of(context).pushReplacementNamed('/');
+                              }
                             },
                             child: const Text(
                               'Skip',
@@ -192,10 +195,12 @@ class _OnboardingScreenThreeState extends State<OnboardingScreenThree>
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(
-                              context,
-                            ).pushReplacementNamed('/register');
+                          onPressed: () async {
+                            await TokenAuthService.markOnboardingCompleted();
+                            // Navigate directly to home screen
+                            if (context.mounted) {
+                              Navigator.of(context).pushReplacementNamed('/');
+                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF4ECDC4),
@@ -206,7 +211,7 @@ class _OnboardingScreenThreeState extends State<OnboardingScreenThree>
                             ),
                           ),
                           child: const Text(
-                            'Register',
+                            'Get Started',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,

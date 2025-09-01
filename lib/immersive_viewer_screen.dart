@@ -8,6 +8,7 @@ import 'widgets/post_menu_widget.dart';
 import 'widgets/loading_button.dart';
 import 'services/optimistic_ui_service.dart';
 import 'services/post_service.dart';
+import 'services/contextual_auth_service.dart';
 import 'widgets/custom_toaster.dart';
 import 'widgets/comments_bottom_sheet.dart';
 
@@ -191,6 +192,10 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
   }
 
   Future<void> _toggleLike(String postId) async {
+    // Check authentication first
+    final canLike = await ContextualAuthService.canLike(context);
+    if (!canLike) return; // User cancelled login or not authenticated
+
     HapticFeedback.lightImpact();
 
     // Find the post in our local list
@@ -239,7 +244,11 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
     );
   }
 
-  void _showCommentsModal(PostModel post) {
+  void _showCommentsModal(PostModel post) async {
+    // Check authentication first for commenting
+    final canComment = await ContextualAuthService.canComment(context);
+    if (!canComment) return; // User cancelled login or not authenticated
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,

@@ -3,7 +3,7 @@
     "short_name": "flip",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#00000000",
+    "background_color": "#FFFFFF",
     "theme_color": "#4ECDC4",
     "description": "A new Flutter project.",
     "orientation": "portrait-primary",

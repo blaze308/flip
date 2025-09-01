@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/post_model.dart';
 import '../services/post_service.dart';
+import '../services/contextual_auth_service.dart';
 import 'custom_toaster.dart';
 
 class PostMenuWidget extends StatelessWidget {
@@ -220,6 +221,10 @@ class PostMenuWidget extends StatelessWidget {
   }
 
   Future<void> _toggleBookmark(BuildContext context) async {
+    // Check authentication first
+    final canBookmark = await ContextualAuthService.canBookmarkPosts(context);
+    if (!canBookmark) return; // User cancelled login or not authenticated
+
     try {
       final result = await PostService.toggleBookmark(post.id);
 
@@ -267,6 +272,10 @@ class PostMenuWidget extends StatelessWidget {
   }
 
   Future<void> _hidePost(BuildContext context) async {
+    // Check authentication first
+    final canHide = await ContextualAuthService.canHidePosts(context);
+    if (!canHide) return; // User cancelled login or not authenticated
+
     try {
       final result = await PostService.toggleHide(post.id);
 
@@ -282,6 +291,10 @@ class PostMenuWidget extends StatelessWidget {
   }
 
   Future<void> _toggleFollow(BuildContext context) async {
+    // Check authentication first
+    final canFollow = await ContextualAuthService.canFollow(context);
+    if (!canFollow) return; // User cancelled login or not authenticated
+
     try {
       final result = await PostService.toggleFollow(post.userId);
 

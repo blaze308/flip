@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/post_model.dart';
 import '../services/comment_service.dart';
+import '../services/contextual_auth_service.dart';
 
 class CommentsBottomSheet extends StatefulWidget {
   final PostModel post;
@@ -114,6 +115,10 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet>
   Future<void> _submitComment() async {
     if (_commentController.text.trim().isEmpty || _isSubmitting) return;
 
+    // Check authentication first
+    final canComment = await ContextualAuthService.canComment(context);
+    if (!canComment) return; // User cancelled login or not authenticated
+
     setState(() {
       _isSubmitting = true;
     });
@@ -172,6 +177,10 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet>
   }
 
   Future<void> _toggleCommentLike(String commentId) async {
+    // Check authentication first
+    final canLike = await ContextualAuthService.canLike(context);
+    if (!canLike) return; // User cancelled login or not authenticated
+
     // Find comment and optimistically update UI
     final commentIndex = _comments.indexWhere((c) => c.id == commentId);
     if (commentIndex == -1) return;
