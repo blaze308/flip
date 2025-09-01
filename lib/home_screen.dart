@@ -4,6 +4,7 @@ import 'dart:async';
 import 'services/token_auth_service.dart';
 import 'services/message_service.dart';
 import 'services/post_service.dart';
+import 'services/story_service.dart';
 import 'services/event_bus.dart';
 import 'services/optimistic_ui_service.dart';
 import 'services/contextual_auth_service.dart';
@@ -11,6 +12,7 @@ import 'widgets/custom_toaster.dart';
 import 'widgets/post_menu_widget.dart';
 import 'widgets/loading_button.dart';
 import 'models/post_model.dart';
+import 'models/story_model.dart';
 import 'create_post_type_screen.dart';
 import 'immersive_viewer_screen.dart';
 import 'widgets/comments_bottom_sheet.dart';
@@ -37,8 +39,9 @@ class _HomeScreenState extends State<HomeScreen>
   bool _isLoadingPosts = false;
   StreamSubscription<PostCreatedEvent>? _postCreatedSubscription;
 
-  // Story users - will be populated dynamically
-  List<StoryUser> _storyUsers = [];
+  // Stories data - will be loaded from API
+  List<StoryFeedItem> _storyFeed = [];
+  bool _isLoadingStories = false;
 
   // Double tap to exit
   DateTime? _lastBackPressed;
@@ -58,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen>
     _fabAnimationController.forward();
     _loadUserData();
     _loadPosts();
+    _loadStories();
 
     // Listen for post creation events
     _postCreatedSubscription = EventBus().on<PostCreatedEvent>().listen((
@@ -98,7 +102,6 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) {
         setState(() {
           _currentUser = currentUser;
-          _populateStoryUsers();
           _isLoading = false;
         });
       }
@@ -108,49 +111,42 @@ class _HomeScreenState extends State<HomeScreen>
       if (mounted) {
         setState(() {
           _currentUser = null; // Guest mode
-          _populateStoryUsers();
           _isLoading = false;
         });
       }
     }
   }
 
-  void _populateStoryUsers() {
-    // Debug logging for story avatar
-    print('🏠 HomeScreen: Populating story users...');
-    print('   - Current user profile image: ${_currentUser?.photoURL}');
-    print('   - Using neutral placeholder for missing avatars');
+  Future<void> _loadStories() async {
+    if (_isLoadingStories) return;
 
-    _storyUsers = [
-      StoryUser(
-        name: 'You',
-        avatar:
-            _currentUser?.photoURL ??
-            '', // Empty string for neutral placeholder
-        hasStory: false,
-        isCurrentUser: true,
-      ),
-      StoryUser(
-        name: 'Jacob',
-        avatar: '', // Use neutral placeholder
-        hasStory: true,
-      ),
-      StoryUser(
-        name: 'Luna',
-        avatar: '', // Use neutral placeholder
-        hasStory: true,
-      ),
-      StoryUser(
-        name: 'John',
-        avatar: '', // Use neutral placeholder
-        hasStory: true,
-      ),
-      StoryUser(
-        name: 'Natali',
-        avatar: '', // Use neutral placeholder
-        hasStory: true,
-      ),
-    ];
+    setState(() {
+      _isLoadingStories = true;
+    });
+
+    try {
+      print('📖 HomeScreen: Loading stories feed...');
+
+      final stories = await StoryService.getStoriesFeed();
+
+      if (mounted) {
+        setState(() {
+          _storyFeed = stories;
+          _isLoadingStories = false;
+        });
+        print(
+          '📖 HomeScreen: Successfully loaded ${stories.length} story feed items',
+        );
+      }
+    } catch (e) {
+      print('📖 HomeScreen: Error loading stories: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingStories = false;
+        });
+      }
+      // Don't show error to user for stories - just fail silently
+    }
   }
 
   Future<void> _handleLogout() async {
@@ -380,8 +376,8 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _refreshPosts() async {
-    print('🏠 HomeScreen: Refreshing posts...');
-    await _loadPosts();
+    print('🏠 HomeScreen: Refreshing posts and stories...');
+    await Future.wait([_loadPosts(), _loadStories()]);
   }
 
   // Method to refresh after post creation
@@ -663,6 +659,11 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildStoriesSection() {
+    // Always show the "Your Story" option for everyone (guests and authenticated users)
+    final totalItems = _storyFeed.length + 1; // Always add 1 for "Your Story"
+
+    // Never hide the stories section - always show at least "Your Story"
+
     return SliverToBoxAdapter(
       child: Container(
         height: 100,
@@ -670,21 +671,19 @@ class _HomeScreenState extends State<HomeScreen>
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: _storyUsers.length,
+          itemCount: totalItems,
           itemBuilder: (context, index) {
-            final user = _storyUsers[index];
+            // First item is always "Your Story" option (for everyone)
+            if (index == 0) {
+              return _buildCurrentUserStoryItem();
+            }
+
+            // Adjust index for story feed items
+            final storyIndex = index - 1;
+            final storyFeedItem = _storyFeed[storyIndex];
+
             return GestureDetector(
-              onTap: () {
-                if (user.isCurrentUser) {
-                  _showCreateOptions(context);
-                } else {
-                  // Handle viewing other user's story
-                  ToasterService.showInfo(
-                    context,
-                    'Viewing ${user.name}\'s story',
-                  );
-                }
-              },
+              onTap: () => _viewUserStories(storyFeedItem),
               child: Container(
                 margin: const EdgeInsets.only(right: 16),
                 child: Column(
@@ -696,74 +695,64 @@ class _HomeScreenState extends State<HomeScreen>
                           height: 60,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(
-                              color:
-                                  user.hasStory
-                                      ? const Color(0xFF4ECDC4)
-                                      : Colors.grey,
-                              width: user.hasStory ? 3 : 1,
-                            ),
-                          ),
-                          child: ClipOval(
-                            child:
-                                user.avatar.isNotEmpty
-                                    ? Image.network(
-                                      user.avatar,
-                                      width: 60,
-                                      height: 60,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (
-                                        context,
-                                        error,
-                                        stackTrace,
-                                      ) {
-                                        return Container(
-                                          color: Colors.grey[800],
-                                          child: const Icon(
-                                            Icons.person,
-                                            color: Colors.white,
-                                            size: 30,
-                                          ),
-                                        );
-                                      },
+                            gradient:
+                                storyFeedItem.hasUnviewedStories
+                                    ? const LinearGradient(
+                                      colors: [
+                                        Color(0xFF4ECDC4),
+                                        Color(0xFF44A08D),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                     )
-                                    : Container(
-                                      color: Colors.grey[800],
-                                      child: const Icon(
-                                        Icons.person,
-                                        color: Colors.white,
-                                        size: 30,
-                                      ),
-                                    ),
+                                    : null,
+                            border:
+                                !storyFeedItem.hasUnviewedStories
+                                    ? Border.all(color: Colors.grey, width: 2)
+                                    : null,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(2),
+                            child: CircleAvatar(
+                              radius: 28,
+                              backgroundColor: Colors.grey[800],
+                              backgroundImage:
+                                  storyFeedItem.userAvatar != null &&
+                                          storyFeedItem.userAvatar!.isNotEmpty
+                                      ? NetworkImage(storyFeedItem.userAvatar!)
+                                      : null,
+                              child:
+                                  storyFeedItem.userAvatar == null ||
+                                          storyFeedItem.userAvatar!.isEmpty
+                                      ? Text(
+                                        storyFeedItem.username.isNotEmpty
+                                            ? storyFeedItem.username[0]
+                                                .toUpperCase()
+                                            : '?',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      )
+                                      : null,
+                            ),
                           ),
                         ),
-                        if (user.isCurrentUser)
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              width: 20,
-                              height: 20,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF4ECDC4),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.add,
-                                color: Colors.white,
-                                size: 12,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      user.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                    SizedBox(
+                      width: 60,
+                      child: Text(
+                        storyFeedItem.username,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -773,6 +762,303 @@ class _HomeScreenState extends State<HomeScreen>
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildCurrentUserStoryItem() {
+    return GestureDetector(
+      onTap: () => _showCreateOptions(context),
+      child: Container(
+        margin: const EdgeInsets.only(right: 16),
+        child: Column(
+          children: [
+            Stack(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.grey, width: 2),
+                  ),
+                  child: CircleAvatar(
+                    radius: 28,
+                    backgroundColor: Colors.grey[800],
+                    backgroundImage:
+                        _currentUser?.photoURL != null &&
+                                _currentUser!.photoURL!.isNotEmpty
+                            ? NetworkImage(_currentUser!.photoURL!)
+                            : null,
+                    child:
+                        _currentUser?.photoURL == null ||
+                                _currentUser!.photoURL!.isEmpty
+                            ? Text(
+                              _currentUser?.displayName?.isNotEmpty == true
+                                  ? _currentUser!.displayName![0].toUpperCase()
+                                  : 'Y', // Show 'Y' for "Your Story" even for guests
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                            : null,
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF4ECDC4),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.add, color: Colors.white, size: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const SizedBox(
+              width: 60,
+              child: Text(
+                'Your Story',
+                style: TextStyle(color: Colors.white, fontSize: 12),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _viewUserStories(StoryFeedItem storyFeedItem) {
+    // TODO: Implement story viewer screen
+    ToasterService.showInfo(
+      context,
+      'Viewing ${storyFeedItem.username}\'s ${storyFeedItem.stories.length} stories',
+    );
+  }
+
+  void _showStoryCreationOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder:
+          (context) => Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF2A2A2A),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle bar
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Title
+                const Text(
+                  'Create Story',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 30),
+
+                // Story creation options
+                _buildStoryOption(
+                  context,
+                  icon: Icons.text_fields,
+                  title: 'Text Story',
+                  subtitle: 'Share your thoughts with custom styling',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _createTextStory();
+                  },
+                ),
+                const SizedBox(height: 15),
+                _buildStoryOption(
+                  context,
+                  icon: Icons.photo_camera,
+                  title: 'Photo Story',
+                  subtitle: 'Share a photo from camera or gallery',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    ToasterService.showInfo(
+                      context,
+                      'Photo story creation coming soon!',
+                    );
+                  },
+                ),
+                const SizedBox(height: 15),
+                _buildStoryOption(
+                  context,
+                  icon: Icons.videocam,
+                  title: 'Video Story',
+                  subtitle: 'Record or upload a video',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    ToasterService.showInfo(
+                      context,
+                      'Video story creation coming soon!',
+                    );
+                  },
+                ),
+                const SizedBox(height: 30),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildStoryOption(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3A3A3A),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF4ECDC4).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: const Color(0xFF4ECDC4), size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _createTextStory() {
+    // Simple text story creation
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: const Color(0xFF2A2A2A),
+            title: const Text(
+              'Create Text Story',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'What\'s on your mind?',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    border: OutlineInputBorder(),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Color(0xFF4ECDC4)),
+                    ),
+                  ),
+                  maxLines: 3,
+                  onChanged: (value) {
+                    // Store the text value
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.of(context).pop();
+
+                  try {
+                    // Create a simple text story
+                    await StoryService.createTextStory(
+                      textContent: 'Hello World! This is my first story.',
+                      privacy: StoryPrivacyType.public,
+                    );
+
+                    ToasterService.showSuccess(
+                      context,
+                      'Story created successfully!',
+                    );
+
+                    // Refresh stories
+                    await _loadStories();
+                  } catch (e) {
+                    ToasterService.showError(
+                      context,
+                      'Failed to create story: $e',
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4ECDC4),
+                ),
+                child: const Text(
+                  'Share',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
     );
   }
 
@@ -1311,7 +1597,16 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  void _showCreateOptions(BuildContext context) {
+  void _showCreateOptions(BuildContext context) async {
+    // Check authentication first - show auth modal for guests
+    final canCreateStory = await ContextualAuthService.requireAuthForFeature(
+      context,
+      featureName: 'create stories',
+      customMessage:
+          'Sign in to share your moments with stories that disappear in 24 hours.',
+    );
+    if (!canCreateStory) return;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1378,10 +1673,7 @@ class _HomeScreenState extends State<HomeScreen>
                   subtitle: 'Share a moment that disappears in 24h',
                   onTap: () {
                     Navigator.of(context).pop();
-                    ToasterService.showInfo(
-                      context,
-                      'Story creation coming soon!',
-                    );
+                    _showStoryCreationOptions(context);
                   },
                 ),
                 const SizedBox(height: 30),
@@ -1452,19 +1744,6 @@ class _HomeScreenState extends State<HomeScreen>
 }
 
 // Data models
-class StoryUser {
-  final String name;
-  final String avatar;
-  final bool hasStory;
-  final bool isCurrentUser;
-
-  StoryUser({
-    required this.name,
-    required this.avatar,
-    required this.hasStory,
-    this.isCurrentUser = false,
-  });
-}
 
 // Stateful widget for image slider with dots
 class _ImageSliderWidget extends StatefulWidget {

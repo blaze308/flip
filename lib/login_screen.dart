@@ -161,6 +161,7 @@ class _LoginScreenState extends State<LoginScreen>
         final result = await TokenAuthService.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
+          rememberMe: _rememberMe,
         );
 
         if (result.success && mounted) {
@@ -181,6 +182,10 @@ class _LoginScreenState extends State<LoginScreen>
             'Welcome back, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
             devMessage: 'Email login successful with remember me: $_rememberMe',
           );
+
+          // Debug: Show session info
+          final sessionInfo = await TokenAuthService.getSessionInfo();
+          print('🔐 Session Info: $sessionInfo');
         } else if (mounted) {
           print('🔐 LoginScreen: Email login failed - ${result.message}');
           context.showErrorToaster(
@@ -337,6 +342,9 @@ class _LoginScreenState extends State<LoginScreen>
                           child: TextButton.icon(
                             onPressed: () async {
                               await TokenAuthService.skipToHome();
+                              if (mounted) {
+                                Navigator.of(context).pushReplacementNamed('/');
+                              }
                             },
                             icon: const Icon(
                               Icons.skip_next,

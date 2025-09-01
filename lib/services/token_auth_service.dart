@@ -30,6 +30,7 @@ class TokenAuthService {
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userDataKey = 'user_data';
+  static const String _rememberMeKey = 'remember_me';
   static const String _onboardingCompletedKey = 'onboarding_completed';
   static const String _firstLaunchKey = 'first_launch';
 
@@ -178,8 +179,9 @@ class TokenAuthService {
 
   /// Exchange Firebase token for JWT tokens
   static Future<TokenExchangeResult> _exchangeFirebaseToken(
-    User firebaseUser,
-  ) async {
+    User firebaseUser, {
+    bool rememberMe = false,
+  }) async {
     try {
       final firebaseToken = await firebaseUser.getIdToken();
 
@@ -190,7 +192,10 @@ class TokenAuthService {
               'Authorization': 'Bearer $firebaseToken',
               'Content-Type': 'application/json',
             },
-            body: jsonEncode({'deviceInfo': await _getDeviceInfo()}),
+            body: jsonEncode({
+              'deviceInfo': await _getDeviceInfo(),
+              'rememberMe': rememberMe,
+            }),
           )
           .timeout(_timeoutDuration);
 
@@ -205,6 +210,10 @@ class TokenAuthService {
         await Future.wait([
           _secureStorage.write(key: _accessTokenKey, value: _accessToken),
           _secureStorage.write(key: _refreshTokenKey, value: _refreshToken),
+          _secureStorage.write(
+            key: _rememberMeKey,
+            value: rememberMe.toString(),
+          ),
         ]);
 
         // Create user object
@@ -235,6 +244,7 @@ class TokenAuthService {
   static Future<AuthResult> signInWithEmailAndPassword({
     required String email,
     required String password,
+    bool rememberMe = false,
   }) async {
     try {
       _updateState(AuthState.loading);
@@ -247,7 +257,10 @@ class TokenAuthService {
 
       if (credential.user != null) {
         // Exchange Firebase token for JWT
-        final exchangeResult = await _exchangeFirebaseToken(credential.user!);
+        final exchangeResult = await _exchangeFirebaseToken(
+          credential.user!,
+          rememberMe: rememberMe,
+        );
 
         if (exchangeResult.success && exchangeResult.user != null) {
           _updateState(AuthState.authenticated, user: exchangeResult.user);
@@ -481,6 +494,7 @@ class TokenAuthService {
       await Future.wait([
         _secureStorage.delete(key: _accessTokenKey),
         _secureStorage.delete(key: _refreshTokenKey),
+        _secureStorage.delete(key: _rememberMeKey),
         _clearUserDataFromStorage(),
       ]);
 
@@ -574,6 +588,32 @@ class TokenAuthService {
   /// Check if user is in guest mode (can access home without auth)
   static bool get isGuestMode =>
       _currentState == AuthState.unauthenticated && _currentUser == null;
+
+  /// Check if Remember Me is enabled for current session
+  static Future<bool> get isRememberMeEnabled async {
+    try {
+      final rememberMeValue = await _secureStorage.read(key: _rememberMeKey);
+      return rememberMeValue == 'true';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get current session info for debugging
+  static Future<Map<String, dynamic>> getSessionInfo() async {
+    try {
+      final rememberMe = await isRememberMeEnabled;
+      return {
+        'isAuthenticated': isAuthenticated,
+        'rememberMe': rememberMe,
+        'hasAccessToken': _accessToken != null,
+        'hasRefreshToken': _refreshToken != null,
+        'currentUser': _currentUser?.toJson(),
+      };
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
 
   /// Save user data to storage
   static Future<void> _saveUserDataToStorage(TokenUser user) async {
