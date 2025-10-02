@@ -29,7 +29,10 @@ class _CreateVideoStoryScreenState extends State<CreateVideoStoryScreen> {
   @override
   void initState() {
     super.initState();
-    _showVideoSourceDialog();
+    // Show dialog after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showVideoSourceDialog();
+    });
   }
 
   @override
@@ -116,10 +119,22 @@ class _CreateVideoStoryScreenState extends State<CreateVideoStoryScreen> {
     try {
       final XFile? video = await _picker.pickVideo(
         source: source,
-        maxDuration: const Duration(minutes: 1), // 1 minute max for stories
+        maxDuration:
+            source == ImageSource.camera
+                ? const Duration(minutes: 1)
+                : null, // Only limit recording, not selection
       );
 
       if (video != null) {
+        // For gallery videos, we need to validate duration manually
+        if (source == ImageSource.gallery) {
+          // Note: Video duration validation would require additional packages like video_player
+          // For now, we'll accept all gallery videos and let the backend handle validation
+          context.showInfoToaster(
+            'Note: Please ensure your video is under 1 minute for optimal story experience',
+          );
+        }
+
         setState(() {
           _selectedVideo = File(video.path);
         });
@@ -146,6 +161,12 @@ class _CreateVideoStoryScreenState extends State<CreateVideoStoryScreen> {
     });
 
     try {
+      print('🎥 Creating video story with file: ${_selectedVideo!.path}');
+      print('🎥 File size: ${await _selectedVideo!.length()} bytes');
+      print('🎥 File exists: ${await _selectedVideo!.exists()}');
+      print('🎥 Media type: ${StoryMediaType.video.name}');
+      print('🎥 Privacy: ${_privacy.name}');
+
       final result = await StoryService.createMediaStory(
         mediaFile: _selectedVideo!,
         mediaType: StoryMediaType.video,
@@ -156,14 +177,20 @@ class _CreateVideoStoryScreenState extends State<CreateVideoStoryScreen> {
         allowScreenshot: _allowScreenshot,
       );
 
+      print('🎥 Video story creation result: ${result.success}');
+      if (!result.success) {
+        print('🎥 Error message: ${result.message}');
+      }
+
       if (result.success && mounted) {
         context.showSuccessToaster('Video story created successfully!');
         Navigator.of(context).pop();
         Navigator.of(context).pop(); // Go back to home screen
       } else if (mounted) {
-        context.showErrorToaster(result.message.toString());
+        context.showErrorToaster(result.message);
       }
     } catch (e) {
+      print('🎥 Video story creation exception: $e');
       if (mounted) {
         context.showErrorToaster('Failed to create story: $e');
       }

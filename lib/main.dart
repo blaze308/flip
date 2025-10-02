@@ -21,6 +21,7 @@ import 'create_text_story_screen.dart';
 import 'create_image_story_screen.dart';
 import 'create_video_story_screen.dart';
 import 'create_audio_story_screen.dart';
+import 'story_viewer_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

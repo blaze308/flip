@@ -30,7 +30,10 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
   @override
   void initState() {
     super.initState();
-    _showAudioSourceDialog();
+    // Show dialog after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showAudioSourceDialog();
+    });
   }
 
   @override

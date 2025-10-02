@@ -16,6 +16,7 @@ import 'models/story_model.dart';
 import 'create_story_type_screen.dart';
 import 'create_post_type_screen.dart';
 import 'immersive_viewer_screen.dart';
+import 'story_viewer_screen.dart';
 import 'widgets/comments_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -863,10 +864,18 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   void _viewUserStories(StoryFeedItem storyFeedItem) {
-    // TODO: Implement story viewer screen
-    ToasterService.showInfo(
-      context,
-      'Viewing ${storyFeedItem.username}\'s ${storyFeedItem.stories.length} stories',
+    // Find the index of this user in the story feed
+    final userIndex = _storyFeed.indexOf(storyFeedItem);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (context) => StoryViewerScreen(
+              storyFeedItems: _storyFeed,
+              initialUserIndex: userIndex,
+              initialStoryIndex: 0,
+            ),
+      ),
     );
   }
 

@@ -273,6 +273,12 @@ class StoryService {
 
       // Add file
       final mediaTypeStr = _getMediaTypeString(mediaFile.path);
+      print('📹 Media file debug:');
+      print('  - File path: ${mediaFile.path}');
+      print('  - Media type string: $mediaTypeStr');
+      print('  - File exists: ${await mediaFile.exists()}');
+      print('  - File size: ${await mediaFile.length()} bytes');
+
       request.files.add(
         await http.MultipartFile.fromPath(
           'media',
@@ -280,6 +286,8 @@ class StoryService {
           contentType: MediaType.parse(mediaTypeStr),
         ),
       );
+
+      print('📹 Added file to multipart request');
 
       // Add form fields
       request.fields['mediaType'] = mediaType.name;

@@ -29,7 +29,10 @@ class _CreateImageStoryScreenState extends State<CreateImageStoryScreen> {
   @override
   void initState() {
     super.initState();
-    _showImageSourceDialog();
+    // Show dialog after the widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showImageSourceDialog();
+    });
   }
 
   @override

@@ -106,26 +106,26 @@ class CreateStoryTypeScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: 20),
-                  _buildStoryTypeCard(
-                    context,
-                    icon: Icons.mic,
-                    title: 'Audio Story',
-                    subtitle: 'Record or upload an audio clip',
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFF39C12), Color(0xFFE67E22)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const CreateAudioStoryScreen(),
-                        ),
-                      );
-                    },
-                  ),
+                  //   const SizedBox(height: 20),
+                  //   _buildStoryTypeCard(
+                  //     context,
+                  //     icon: Icons.mic,
+                  //     title: 'Audio Story',
+                  //     subtitle: 'Record or upload an audio clip',
+                  //     gradient: const LinearGradient(
+                  //       colors: [Color(0xFFF39C12), Color(0xFFE67E22)],
+                  //       begin: Alignment.topLeft,
+                  //       end: Alignment.bottomRight,
+                  //     ),
+                  //     onTap: () {
+                  //       HapticFeedback.lightImpact();
+                  //       Navigator.of(context).push(
+                  //         MaterialPageRoute(
+                  //           builder: (context) => const CreateAudioStoryScreen(),
+                  //         ),
+                  //       );
+                  //     },
+                  //   ),
                 ],
               ),
             ),
