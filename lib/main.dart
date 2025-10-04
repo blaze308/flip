@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
@@ -21,12 +22,12 @@ import 'create_text_story_screen.dart';
 import 'create_image_story_screen.dart';
 import 'create_video_story_screen.dart';
 import 'create_audio_story_screen.dart';
-import 'story_viewer_screen.dart';
+import 'screens/message_list_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const AncientFlipApp());
+  runApp(const ProviderScope(child: AncientFlipApp()));
 }
 
 class AncientFlipApp extends StatelessWidget {
@@ -66,6 +67,7 @@ class AncientFlipApp extends StatelessWidget {
         '/create-image-story': (context) => const CreateImageStoryScreen(),
         '/create-video-story': (context) => const CreateVideoStoryScreen(),
         '/create-audio-story': (context) => const CreateAudioStoryScreen(),
+        '/messages': (context) => const MessageListScreen(),
       },
     );
   }

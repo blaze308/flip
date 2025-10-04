@@ -272,7 +272,7 @@ class PostService {
     try {
       final response = await _makeRequest(
         'GET',
-        '/posts/user/$userId?page=$page&limit=$limit',
+        '/api/posts/user/$userId?page=$page&limit=$limit',
       );
       return PostFeedResult.fromJson(response);
     } catch (e) {
@@ -418,7 +418,7 @@ class PostService {
         postData['location'] = {'name': locationName};
       }
 
-      final response = await _makeRequest('POST', '/posts', body: postData);
+      final response = await _makeRequest('POST', '/api/posts', body: postData);
       return PostModel.fromBackendJson(response['data']['post']);
     } catch (e) {
       throw PostException(
@@ -479,7 +479,7 @@ class PostService {
 
       final response = await _makeRequest(
         'PUT',
-        '/posts/$postId',
+        '/api/posts/$postId',
         body: updateData,
       );
       return PostModel.fromBackendJson(response['data']['post']);
@@ -494,7 +494,7 @@ class PostService {
   /// Delete a post
   static Future<void> deletePost(String postId) async {
     try {
-      await _makeRequest('DELETE', '/posts/$postId');
+      await _makeRequest('DELETE', '/api/posts/$postId');
     } catch (e) {
       throw PostException(
         message: 'Failed to delete post: ${e.toString()}',
@@ -506,7 +506,7 @@ class PostService {
   /// Like or unlike a post
   static Future<PostLikeResult> toggleLike(String postId) async {
     try {
-      final response = await _makeRequest('POST', '/posts/$postId/like');
+      final response = await _makeRequest('POST', '/api/posts/$postId/like');
       return PostLikeResult.fromJson(response);
     } catch (e) {
       throw PostException(
@@ -519,7 +519,7 @@ class PostService {
   /// Share a post
   static Future<PostShareResult> sharePost(String postId) async {
     try {
-      final response = await _makeRequest('POST', '/posts/$postId/share');
+      final response = await _makeRequest('POST', '/api/posts/$postId/share');
       return PostShareResult.fromJson(response);
     } catch (e) {
       throw PostException(
@@ -532,7 +532,10 @@ class PostService {
   /// Bookmark or unbookmark a post
   static Future<PostBookmarkResult> toggleBookmark(String postId) async {
     try {
-      final response = await _makeRequest('POST', '/posts/$postId/bookmark');
+      final response = await _makeRequest(
+        'POST',
+        '/api/posts/$postId/bookmark',
+      );
       return PostBookmarkResult.fromJson(response);
     } catch (e) {
       throw PostException(
@@ -545,7 +548,7 @@ class PostService {
   /// Hide or unhide a post
   static Future<PostHideResult> toggleHide(String postId) async {
     try {
-      final response = await _makeRequest('POST', '/posts/$postId/hide');
+      final response = await _makeRequest('POST', '/api/posts/$postId/hide');
       return PostHideResult.fromJson(response);
     } catch (e) {
       throw PostException(
@@ -558,7 +561,7 @@ class PostService {
   /// Follow or unfollow a user
   static Future<UserFollowResult> toggleFollow(String userId) async {
     try {
-      final response = await _makeRequest('POST', '/users/$userId/follow');
+      final response = await _makeRequest('POST', '/api/users/$userId/follow');
       return UserFollowResult.fromJson(response);
     } catch (e) {
       throw PostException(
@@ -582,7 +585,7 @@ class PostService {
 
       final response = await _makeRequest(
         'PUT',
-        '/users/notifications',
+        '/api/users/notifications',
         body: data,
       );
       return NotificationUpdateResult.fromJson(response);
@@ -601,7 +604,7 @@ class PostService {
       print('📸 PostService: Starting image upload...');
 
       // Create multipart request
-      final uri = Uri.parse('$baseUrl/upload/image');
+      final uri = Uri.parse('$baseUrl/api/upload/image');
       final request = http.MultipartRequest('POST', uri);
 
       // Add headers
@@ -680,7 +683,7 @@ class PostService {
       print('📸 PostService: Starting multiple images upload...');
 
       // Create multipart request
-      final uri = Uri.parse('$baseUrl/upload/multiple-images');
+      final uri = Uri.parse('$baseUrl/api/upload/multiple-images');
       final request = http.MultipartRequest('POST', uri);
 
       // Add headers
@@ -769,7 +772,7 @@ class PostService {
       print('🎥 PostService: Starting video upload...');
 
       // Create multipart request
-      final uri = Uri.parse('$baseUrl/upload/video');
+      final uri = Uri.parse('$baseUrl/api/upload/video');
       final request = http.MultipartRequest('POST', uri);
 
       // Add headers

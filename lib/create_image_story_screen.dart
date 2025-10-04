@@ -1,14 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'services/story_service.dart';
 import 'models/story_model.dart';
 import 'widgets/custom_toaster.dart';
-import 'widgets/loading_button.dart';
 
 class CreateImageStoryScreen extends StatefulWidget {
-  const CreateImageStoryScreen({Key? key}) : super(key: key);
+  const CreateImageStoryScreen({super.key});
 
   @override
   State<CreateImageStoryScreen> createState() => _CreateImageStoryScreenState();
@@ -21,10 +19,10 @@ class _CreateImageStoryScreenState extends State<CreateImageStoryScreen> {
   bool _isLoading = false;
 
   // Privacy settings
-  StoryPrivacyType _privacy = StoryPrivacyType.public;
-  bool _allowReplies = true;
-  bool _allowReactions = true;
-  bool _allowScreenshot = true;
+  final StoryPrivacyType _privacy = StoryPrivacyType.public;
+  final bool _allowReplies = true;
+  final bool _allowReactions = true;
+  final bool _allowScreenshot = true;
 
   @override
   void initState() {
@@ -111,7 +109,9 @@ class _CreateImageStoryScreenState extends State<CreateImageStoryScreen> {
       await _pickImage(result);
     } else {
       // User cancelled, go back
-      Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -130,7 +130,9 @@ class _CreateImageStoryScreenState extends State<CreateImageStoryScreen> {
         });
       } else {
         // User cancelled image selection
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       }
     } catch (e) {
       if (mounted) {

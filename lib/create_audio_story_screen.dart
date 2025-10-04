@@ -1,14 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'services/story_service.dart';
 import 'models/story_model.dart';
 import 'widgets/custom_toaster.dart';
-import 'widgets/loading_button.dart';
 
 class CreateAudioStoryScreen extends StatefulWidget {
-  const CreateAudioStoryScreen({Key? key}) : super(key: key);
+  const CreateAudioStoryScreen({super.key});
 
   @override
   State<CreateAudioStoryScreen> createState() => _CreateAudioStoryScreenState();
@@ -18,14 +16,13 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
   final TextEditingController _captionController = TextEditingController();
   File? _selectedAudio;
   bool _isLoading = false;
-  bool _isRecording = false;
   String? _audioFileName;
 
   // Privacy settings
-  StoryPrivacyType _privacy = StoryPrivacyType.public;
-  bool _allowReplies = true;
-  bool _allowReactions = true;
-  bool _allowScreenshot = true;
+  final StoryPrivacyType _privacy = StoryPrivacyType.public;
+  final bool _allowReplies = true;
+  final bool _allowReactions = true;
+  final bool _allowScreenshot = true;
 
   @override
   void initState() {
@@ -112,8 +109,9 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
     } else if (result == 'upload') {
       await _pickAudioFile();
     } else {
-      // User cancelled, go back
-      Navigator.of(context).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -121,7 +119,9 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
     context.showInfoToaster(
       'Audio recording will be available in a future update. Please upload an audio file for now.',
     );
-    _showAudioSourceDialog();
+    if (mounted) {
+      _showAudioSourceDialog();
+    }
   }
 
   Future<void> _pickAudioFile() async {
@@ -138,12 +138,16 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
         });
       } else {
         // User cancelled file selection
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       }
     } catch (e) {
       if (mounted) {
         context.showErrorToaster('Failed to pick audio file: $e');
-        Navigator.of(context).pop();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
       }
     }
   }
@@ -294,7 +298,7 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withAlpha(51),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -319,7 +323,7 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withAlpha(51),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -337,7 +341,7 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
                         width: 200,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withAlpha(51),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -347,7 +351,7 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
                               width: 3,
                               height: (index % 4 + 1) * 8.0,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withAlpha(204),
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             );
@@ -367,7 +371,7 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withAlpha(76),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: const Icon(
@@ -429,9 +433,9 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withAlpha(25),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  border: Border.all(color: Colors.blue.withAlpha(76)),
                 ),
                 child: Row(
                   children: [

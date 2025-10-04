@@ -3,10 +3,9 @@ import 'package:flutter/services.dart';
 import 'create_text_story_screen.dart';
 import 'create_image_story_screen.dart';
 import 'create_video_story_screen.dart';
-import 'create_audio_story_screen.dart';
 
 class CreateStoryTypeScreen extends StatelessWidget {
-  const CreateStoryTypeScreen({Key? key}) : super(key: key);
+  const CreateStoryTypeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +172,7 @@ class CreateStoryTypeScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withAlpha(76),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -185,7 +184,7 @@ class CreateStoryTypeScreen extends StatelessWidget {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withAlpha(51),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: Colors.white, size: 24),
@@ -207,7 +206,7 @@ class CreateStoryTypeScreen extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withAlpha(178),
                       fontSize: 14,
                     ),
                   ),

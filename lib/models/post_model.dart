@@ -200,9 +200,10 @@ class PostModel {
       imageUrls: json['imageUrls']?.cast<String>(),
       videoUrl: json['videoUrl'],
       videoThumbnail: json['videoThumbnail'],
-      likes: json['likes'] ?? 0,
-      comments: json['comments'] ?? 0,
-      shares: json['shares'] ?? 0,
+      likes: json['likes'] != null ? (json['likes'] as num).toInt() : 0,
+      comments:
+          json['comments'] != null ? (json['comments'] as num).toInt() : 0,
+      shares: json['shares'] != null ? (json['shares'] as num).toInt() : 0,
       isLiked: json['isLiked'] ?? false,
       isBookmarked: json['isBookmarked'] ?? false,
       isHidden: json['isHidden'] ?? false,
@@ -224,7 +225,7 @@ class PostModel {
               : null,
       videoDuration:
           json['videoDuration'] != null
-              ? Duration(seconds: json['videoDuration'])
+              ? Duration(seconds: (json['videoDuration'] as num).toInt())
               : null,
       likedBy: json['likedBy']?.cast<String>(),
       tags: json['tags']?.cast<String>(),
@@ -353,9 +354,10 @@ class PostModel {
       imageUrls: json['imageUrls']?.cast<String>(),
       videoUrl: json['videoUrl'],
       videoThumbnail: json['videoThumbnail'],
-      likes: json['likes'] ?? 0,
-      comments: json['comments'] ?? 0,
-      shares: json['shares'] ?? 0,
+      likes: json['likes'] != null ? (json['likes'] as num).toInt() : 0,
+      comments:
+          json['comments'] != null ? (json['comments'] as num).toInt() : 0,
+      shares: json['shares'] != null ? (json['shares'] as num).toInt() : 0,
       isLiked: json['isLiked'] ?? false,
       isBookmarked: json['isBookmarked'] ?? false,
       isHidden: json['isHidden'] ?? false,
@@ -368,7 +370,7 @@ class PostModel {
       textAlign: textAlign,
       videoDuration:
           json['videoDuration'] != null
-              ? Duration(seconds: json['videoDuration'])
+              ? Duration(seconds: (json['videoDuration'] as num).toInt())
               : null,
       likedBy: json['likedBy']?.cast<String>(),
       tags: json['tags']?.cast<String>(),

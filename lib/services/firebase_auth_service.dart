@@ -7,7 +7,6 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'storage_service.dart';
 import 'backend_service.dart';
 import 'user_service.dart';
-import '../models/user_model.dart';
 
 class FirebaseAuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -50,16 +49,8 @@ class FirebaseAuthService {
     required String fullName,
   }) async {
     try {
-      // Check if user already exists with this email
-      final signInMethods = await _auth.fetchSignInMethodsForEmail(email);
-      if (signInMethods.isNotEmpty) {
-        return AuthResult(
-          success: false,
-          message:
-              'An account with this email already exists. Please sign in instead.',
-          user: null,
-        );
-      }
+      // Note: fetchSignInMethodsForEmail is deprecated for security reasons
+      // We'll let Firebase handle duplicate email detection during registration
 
       final UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -205,14 +196,8 @@ class FirebaseAuthService {
         idToken: googleAuth.idToken,
       );
 
-      // Check if user exists with this email using different provider
-      final String email = googleUser.email;
-      final signInMethods = await _auth.fetchSignInMethodsForEmail(email);
-
-      if (signInMethods.isNotEmpty && !signInMethods.contains('google.com')) {
-        // User exists with different provider, link accounts
-        return await _linkAccountWithGoogle(credential, email);
-      }
+      // Note: fetchSignInMethodsForEmail is deprecated for security reasons
+      // We'll attempt sign-in and handle any conflicts via Firebase exceptions
 
       // Sign in to Firebase with the Google credential
       final UserCredential result = await _auth.signInWithCredential(
@@ -293,20 +278,8 @@ class FirebaseAuthService {
         "apple.com",
       ).credential(idToken: appleCredential.identityToken, rawNonce: rawNonce);
 
-      // Check if user exists with this email using different provider
-      if (appleCredential.email != null) {
-        final signInMethods = await _auth.fetchSignInMethodsForEmail(
-          appleCredential.email!,
-        );
-
-        if (signInMethods.isNotEmpty && !signInMethods.contains('apple.com')) {
-          // User exists with different provider, link accounts
-          return await _linkAccountWithApple(
-            oauthCredential,
-            appleCredential.email!,
-          );
-        }
-      }
+      // Note: fetchSignInMethodsForEmail is deprecated for security reasons
+      // We'll attempt sign-in and handle any conflicts via Firebase exceptions
 
       // Sign in the user with Firebase
       final UserCredential result = await _auth.signInWithCredential(
@@ -488,72 +461,8 @@ class FirebaseAuthService {
     }
   }
 
-  // Link Google account with existing account
-  static Future<AuthResult> _linkAccountWithGoogle(
-    AuthCredential credential,
-    String email,
-  ) async {
-    try {
-      // First, get the existing user to sign in
-      final signInMethods = await _auth.fetchSignInMethodsForEmail(email);
-
-      if (signInMethods.contains('password')) {
-        return AuthResult(
-          success: false,
-          message:
-              'An account with this email already exists. Please sign in with your email and password first, then link your Google account in settings.',
-          user: null,
-        );
-      }
-
-      // For other providers, we can't automatically link without user interaction
-      return AuthResult(
-        success: false,
-        message:
-            'An account with this email already exists with a different sign-in method. Please use that method to sign in.',
-        user: null,
-      );
-    } catch (e) {
-      return AuthResult(
-        success: false,
-        message: 'Account linking failed: ${e.toString()}',
-        user: null,
-      );
-    }
-  }
-
-  // Link Apple account with existing account
-  static Future<AuthResult> _linkAccountWithApple(
-    AuthCredential credential,
-    String email,
-  ) async {
-    try {
-      // Similar logic to Google linking
-      final signInMethods = await _auth.fetchSignInMethodsForEmail(email);
-
-      if (signInMethods.contains('password')) {
-        return AuthResult(
-          success: false,
-          message:
-              'An account with this email already exists. Please sign in with your email and password first, then link your Apple account in settings.',
-          user: null,
-        );
-      }
-
-      return AuthResult(
-        success: false,
-        message:
-            'An account with this email already exists with a different sign-in method. Please use that method to sign in.',
-        user: null,
-      );
-    } catch (e) {
-      return AuthResult(
-        success: false,
-        message: 'Account linking failed: ${e.toString()}',
-        user: null,
-      );
-    }
-  }
+  // Note: Account linking methods removed due to deprecated fetchSignInMethodsForEmail
+  // Firebase will handle account conflicts automatically via exceptions
 
   // Link provider to current user
   static Future<AuthResult> linkProvider(AuthCredential credential) async {

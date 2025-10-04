@@ -20,7 +20,6 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
   bool _isLoading = false;
 
   // Reset verification data
-  String _resetMethod = 'email';
   String _contactInfo = '';
   bool _isVerified = false;
 
@@ -65,14 +64,12 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
       if (routeName == '/email-reset') {
         // Direct from email link - no verification needed
         setState(() {
-          _resetMethod = 'email';
           _contactInfo = 'your email';
           _isVerified = true; // Email link click is verification
         });
       } else if (args != null) {
         // From phone verification screen
         setState(() {
-          _resetMethod = args['method'] ?? 'phone';
           _contactInfo = args['contactInfo'] ?? '';
           _isVerified = args['verified'] ?? false;
         });
@@ -199,7 +196,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen>
                             // Back button
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
+                                color: Colors.white.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: IconButton(

@@ -330,7 +330,7 @@ class StoryModel {
               : null,
       duration:
           json['duration'] != null
-              ? Duration(milliseconds: json['duration'])
+              ? Duration(milliseconds: (json['duration'] as num).toInt())
               : null,
       caption: json['caption'],
       mentions: List<String>.from(json['mentions'] ?? []),

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'services/story_service.dart';
 import 'models/story_model.dart';
 import 'widgets/custom_toaster.dart';
-import 'widgets/loading_button.dart';
 
 class CreateTextStoryScreen extends StatefulWidget {
-  const CreateTextStoryScreen({Key? key}) : super(key: key);
+  const CreateTextStoryScreen({super.key});
 
   @override
   State<CreateTextStoryScreen> createState() => _CreateTextStoryScreenState();
@@ -26,10 +24,10 @@ class _CreateTextStoryScreenState extends State<CreateTextStoryScreen> {
   TextAlign _textAlign = TextAlign.center;
 
   // Privacy settings
-  StoryPrivacyType _privacy = StoryPrivacyType.public;
-  bool _allowReplies = true;
-  bool _allowReactions = true;
-  bool _allowScreenshot = true;
+  final StoryPrivacyType _privacy = StoryPrivacyType.public;
+  final bool _allowReplies = true;
+  final bool _allowReactions = true;
+  final bool _allowScreenshot = true;
 
   final List<Color> _backgroundColors = [
     const Color(0xFF4ECDC4),
@@ -42,14 +40,6 @@ class _CreateTextStoryScreenState extends State<CreateTextStoryScreen> {
     const Color(0xFF1ABC9C),
     Colors.black,
     Colors.white,
-  ];
-
-  final List<String> _fontFamilies = [
-    'Roboto',
-    'Arial',
-    'Times New Roman',
-    'Helvetica',
-    'Georgia',
   ];
 
   @override
@@ -196,7 +186,7 @@ class _CreateTextStoryScreenState extends State<CreateTextStoryScreen> {
           Container(
             height: 200,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.8),
+              color: Colors.black.withAlpha(178),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
