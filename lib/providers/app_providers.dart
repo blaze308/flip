@@ -3,6 +3,7 @@ import '../models/post_model.dart';
 import '../models/story_model.dart';
 import '../services/post_service.dart';
 import '../services/story_service.dart';
+import '../services/comment_service.dart';
 import '../services/token_auth_service.dart';
 
 // Authentication Providers
@@ -94,8 +95,24 @@ class PostsNotifier extends StateNotifier<AsyncValue<List<PostModel>>> {
       _posts = result.posts;
       _lastFetch = DateTime.now();
       state = AsyncValue.data(_posts);
+
+      // Preload comments for each post for better UX (in background)
+      _preloadComments(_posts);
     } catch (e, stackTrace) {
       state = AsyncValue.error(e, stackTrace);
+    }
+  }
+
+  void _preloadComments(List<PostModel> posts) {
+    // Preload comments in background for instant display
+    for (final post in posts) {
+      CommentService.getComments(post.id, page: 1, limit: 10)
+          .then((_) {
+            print('📝 PostsNotifier: Preloaded comments for post ${post.id}');
+          })
+          .catchError((e) {
+            print('📝 PostsNotifier: Failed to preload comments: $e');
+          });
     }
   }
 

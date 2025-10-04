@@ -635,8 +635,8 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
       case MessageStatus.failed:
         return const Icon(Icons.error_outline, color: Colors.red, size: 16);
       case MessageStatus.sending:
-        // TODO: Handle this case.
-        throw UnimplementedError();
+        // Show single check (optimistic UI) - like WhatsApp/Instagram
+        return const Icon(Icons.access_time, color: Colors.white38, size: 14);
     }
   }
 

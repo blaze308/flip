@@ -11,6 +11,8 @@ import 'services/contextual_auth_service.dart';
 import 'widgets/custom_toaster.dart';
 import 'widgets/post_menu_widget.dart';
 import 'widgets/loading_button.dart';
+import 'widgets/shimmer_loading.dart';
+import 'widgets/comments_bottom_sheet.dart';
 import 'models/post_model.dart';
 import 'models/story_model.dart';
 import 'create_story_type_screen.dart';
@@ -192,6 +194,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
+  void _showCommentsSheet(PostModel post) {
+    HapticFeedback.lightImpact();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => CommentsBottomSheet(
+            post: post,
+            onCommentAdded: () {
+              // Refresh posts to update comment count
+              ref.read(postsProvider.notifier).refresh();
+            },
+          ),
+    );
+  }
+
   Future<bool> _onWillPop() async {
     final now = DateTime.now();
     const exitTimeGap = Duration(seconds: 2);
@@ -248,6 +268,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               bottom: 80, // Height of bottom navigation
               child: PageView(
                 controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(), // Disable swipe
                 onPageChanged: (index) {
                   ref.read(currentTabProvider.notifier).state = index;
                 },
@@ -568,10 +589,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             child: Container(
               height: 100,
               margin: const EdgeInsets.symmetric(vertical: 16),
-              child: const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4ECDC4)),
-                ),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: 5,
+                itemBuilder: (context, index) => const StoryShimmer(),
               ),
             ),
           ),
@@ -592,8 +614,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildCurrentUserStoryItem() {
+    final currentUser = ref.watch(currentUserProvider);
+    final storiesAsync = ref.watch(storiesProvider);
+
+    // Check if current user has any stories
+    StoryFeedItem? userStory;
+    storiesAsync.whenData((stories) {
+      try {
+        userStory = stories.firstWhere(
+          (story) => story.userId == currentUser?.id,
+        );
+      } catch (e) {
+        userStory = null;
+      }
+    });
+
+    final hasStories = userStory != null;
+
     return GestureDetector(
-      onTap: () => _showCreateOptions(context),
+      onTap: () {
+        // Always show modal (with View Story option if hasStories is true)
+        _showCreateOptions(context, userStory: userStory);
+      },
       child: Container(
         margin: const EdgeInsets.only(right: 16),
         child: Column(
@@ -605,7 +647,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   height: 60,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.grey, width: 2),
+                    border: Border.all(
+                      color: hasStories ? const Color(0xFF4ECDC4) : Colors.grey,
+                      width: 2,
+                    ),
                   ),
                   child: CircleAvatar(
                     radius: 28,
@@ -646,6 +691,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             : null,
                   ),
                 ),
+                // Always show plus button
                 Positioned(
                   bottom: 0,
                   right: 0,
@@ -776,23 +822,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         );
       },
       loading:
-          () => SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                children: [
-                  const CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFF4ECDC4),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading posts...',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 16),
-                  ),
-                ],
-              ),
+          () => SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => const PostShimmer(),
+              childCount: 3,
             ),
           ),
       error:
@@ -1188,7 +1221,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
           const SizedBox(width: 24),
           GestureDetector(
-            onTap: () {}, // Comments modal temporarily disabled
+            onTap: () => _showCommentsSheet(post),
             child: Row(
               children: [
                 const Icon(
@@ -1358,7 +1391,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  void _showCreateOptions(BuildContext context) async {
+  void _showCreateOptions(
+    BuildContext context, {
+    StoryFeedItem? userStory,
+  }) async {
     // Check authentication first - show auth modal for guests
     final canCreate = await ContextualAuthService.requireAuthForFeature(
       context,
@@ -1367,7 +1403,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
     if (!canCreate) return;
 
-    // Show modal with Story or Post options
+    final hasStories = userStory != null;
+
+    // Show modal with Story or Post options (+ View Story if user has stories)
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1409,6 +1447,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
 
                   const Divider(color: Color(0xFF3A3A3A), height: 1),
+
+                  // View Story option (only if user has stories)
+                  if (hasStories) ...[
+                    ListTile(
+                      leading: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.visibility_outlined,
+                          color: Color(0xFF10B981),
+                          size: 24,
+                        ),
+                      ),
+                      title: const Text(
+                        'View Your Story',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'See your active stories',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (userStory != null) {
+                          _viewUserStories(userStory);
+                        }
+                      },
+                    ),
+                    const Divider(color: Color(0xFF3A3A3A), height: 1),
+                  ],
 
                   // Story option
                   ListTile(

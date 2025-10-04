@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'create_text_story_screen.dart';
 import 'create_image_story_screen.dart';
 import 'create_video_story_screen.dart';
+import 'create_audio_story_screen.dart';
 
 class CreateStoryTypeScreen extends StatelessWidget {
   const CreateStoryTypeScreen({super.key});
@@ -28,29 +29,35 @@ class CreateStoryTypeScreen extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 40),
-            const Text(
-              'What type of story do you want to create?',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            children: [
+              const SizedBox(height: 20),
+              const Text(
+                'What type of story do you want to create?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 50),
-            Expanded(
-              child: Column(
+              const SizedBox(height: 32),
+              // 2x2 Grid Layout
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.85,
                 children: [
-                  _buildStoryTypeCard(
+                  _buildCompactStoryCard(
                     context,
                     icon: Icons.text_fields,
-                    title: 'Text Story',
-                    subtitle: 'Share your thoughts with custom styling',
+                    title: 'Text',
                     gradient: const LinearGradient(
                       colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
                       begin: Alignment.topLeft,
@@ -65,12 +72,10 @@ class CreateStoryTypeScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: 20),
-                  _buildStoryTypeCard(
+                  _buildCompactStoryCard(
                     context,
                     icon: Icons.photo_camera,
-                    title: 'Photo Story',
-                    subtitle: 'Share a photo from camera or gallery',
+                    title: 'Photo',
                     gradient: const LinearGradient(
                       colors: [Color(0xFFFF6B6B), Color(0xFFEE5A24)],
                       begin: Alignment.topLeft,
@@ -85,12 +90,10 @@ class CreateStoryTypeScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: 20),
-                  _buildStoryTypeCard(
+                  _buildCompactStoryCard(
                     context,
                     icon: Icons.videocam,
-                    title: 'Video Story',
-                    subtitle: 'Record or upload a video',
+                    title: 'Video',
                     gradient: const LinearGradient(
                       colors: [Color(0xFF9B59B6), Color(0xFF8E44AD)],
                       begin: Alignment.topLeft,
@@ -105,115 +108,95 @@ class CreateStoryTypeScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  //   const SizedBox(height: 20),
-                  //   _buildStoryTypeCard(
-                  //     context,
-                  //     icon: Icons.mic,
-                  //     title: 'Audio Story',
-                  //     subtitle: 'Record or upload an audio clip',
-                  //     gradient: const LinearGradient(
-                  //       colors: [Color(0xFFF39C12), Color(0xFFE67E22)],
-                  //       begin: Alignment.topLeft,
-                  //       end: Alignment.bottomRight,
-                  //     ),
-                  //     onTap: () {
-                  //       HapticFeedback.lightImpact();
-                  //       Navigator.of(context).push(
-                  //         MaterialPageRoute(
-                  //           builder: (context) => const CreateAudioStoryScreen(),
-                  //         ),
-                  //       );
-                  //     },
-                  //   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 40),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.grey[400], size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Stories disappear after 24 hours and can be viewed by your followers',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  _buildCompactStoryCard(
+                    context,
+                    icon: Icons.mic,
+                    title: 'Audio',
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF39C12), Color(0xFFE67E22)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const CreateAudioStoryScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[900],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.grey[400], size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Stories disappear after 24 hours',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildStoryTypeCard(
+  Widget _buildCompactStoryCard(
     BuildContext context, {
     required IconData icon,
     required String title,
-    required String subtitle,
     required Gradient gradient,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: gradient,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(76),
-              blurRadius: 10,
+              color: Colors.black.withAlpha(100),
+              blurRadius: 8,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Row(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 50,
-              height: 50,
+              width: 60,
+              height: 60,
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(51),
-                borderRadius: BorderRadius.circular(12),
+                color: Colors.white.withAlpha(40),
+                shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
+              child: Icon(icon, color: Colors.white, size: 32),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withAlpha(178),
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
           ],
         ),
       ),

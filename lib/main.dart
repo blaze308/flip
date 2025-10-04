@@ -23,10 +23,17 @@ import 'create_image_story_screen.dart';
 import 'create_video_story_screen.dart';
 import 'create_audio_story_screen.dart';
 import 'screens/message_list_screen.dart';
+import 'services/app_lifecycle_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize App Lifecycle Manager for background handling
+  await AppLifecycleManager.instance.initialize();
+
   runApp(const ProviderScope(child: AncientFlipApp()));
 }
 

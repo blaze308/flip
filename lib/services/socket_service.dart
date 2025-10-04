@@ -422,6 +422,21 @@ class SocketService {
     }
   }
 
+  /// Update online status (for app lifecycle management)
+  void updateOnlineStatus(bool isOnline) {
+    if (_socket != null && _isConnected) {
+      print(
+        '🔌 SocketService: Updating online status: ${isOnline ? "online" : "away"}',
+      );
+      _socket!.emit('update_status', {
+        'status': isOnline ? 'online' : 'away',
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+    } else {
+      print('🔌 SocketService: Cannot update status - not connected');
+    }
+  }
+
   /// Dispose resources
   void dispose() {
     disconnect();

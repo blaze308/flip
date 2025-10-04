@@ -1,13 +1,35 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'token_auth_service.dart';
 
 class CommentService {
   static const String baseUrl = 'https://flip-backend-mnpg.onrender.com';
   static const Duration timeoutDuration = Duration(seconds: 30);
 
-  /// Get authentication headers with Firebase ID token
+  // Comment cache
+  static final Map<String, List<Comment>> _commentCache = {};
+  static final Map<String, DateTime> _cacheTimestamps = {};
+  static const Duration cacheExpiry = Duration(minutes: 5);
+
+  /// Clear comment cache for a specific post
+  static void clearCommentCache(String postId) {
+    _commentCache.remove(postId);
+    _cacheTimestamps.remove(postId);
+  }
+
+  /// Get authentication headers (JWT first, Firebase fallback)
   static Future<Map<String, String>> _getHeaders() async {
+    // Check if user is authenticated with JWT
+    if (TokenAuthService.isAuthenticated) {
+      final headers = await TokenAuthService.getAuthHeaders();
+      if (headers != null) {
+        print('💬 CommentService: Using JWT token for authenticated user');
+        return headers;
+      }
+    }
+
+    // Fallback to Firebase auth
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw Exception('User not authenticated');
@@ -27,9 +49,24 @@ class CommentService {
     int limit = 20,
     String sortBy = 'createdAt',
     String sortOrder = 'desc',
+    bool useCache = true,
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl/comments/post/$postId').replace(
+      // Check cache first
+      if (useCache && page == 1) {
+        final cachedComments = _commentCache[postId];
+        final cacheTime = _cacheTimestamps[postId];
+
+        if (cachedComments != null && cacheTime != null) {
+          final isExpired = DateTime.now().difference(cacheTime) > cacheExpiry;
+          if (!isExpired) {
+            print('💬 CommentService: Using cached comments for post $postId');
+            return CommentResult(success: true, comments: cachedComments);
+          }
+        }
+      }
+
+      final uri = Uri.parse('$baseUrl/api/comments/post/$postId').replace(
         queryParameters: {
           'page': page.toString(),
           'limit': limit.toString(),
@@ -61,6 +98,12 @@ class CommentService {
             data['data']['pagination'],
           );
 
+          // Cache comments (only for first page)
+          if (page == 1) {
+            _commentCache[postId] = comments;
+            _cacheTimestamps[postId] = DateTime.now();
+          }
+
           return CommentResult(
             success: true,
             comments: comments,
@@ -86,7 +129,10 @@ class CommentService {
     String? parentCommentId,
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl/comments');
+      final uri = Uri.parse('$baseUrl/api/comments');
+
+      // Clear cache for this post
+      clearCommentCache(postId);
 
       final body = {
         'postId': postId,
@@ -129,7 +175,7 @@ class CommentService {
     String content,
   ) async {
     try {
-      final uri = Uri.parse('$baseUrl/comments/$commentId');
+      final uri = Uri.parse('$baseUrl/api/comments/$commentId');
 
       final body = {'content': content};
 
@@ -165,7 +211,7 @@ class CommentService {
   // Delete a comment
   static Future<CommentResult> deleteComment(String commentId) async {
     try {
-      final uri = Uri.parse('$baseUrl/comments/$commentId');
+      final uri = Uri.parse('$baseUrl/api/comments/$commentId');
 
       print('🔄 CommentService: Deleting comment $commentId');
 
@@ -197,7 +243,7 @@ class CommentService {
   // Toggle like on a comment
   static Future<CommentLikeResult> toggleCommentLike(String commentId) async {
     try {
-      final uri = Uri.parse('$baseUrl/comments/$commentId/like');
+      final uri = Uri.parse('$baseUrl/api/comments/$commentId/like');
 
       print('🔄 CommentService: Toggling like for comment $commentId');
 
@@ -239,7 +285,7 @@ class CommentService {
     int limit = 10,
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl/comments/$commentId/replies').replace(
+      final uri = Uri.parse('$baseUrl/api/comments/$commentId/replies').replace(
         queryParameters: {'page': page.toString(), 'limit': limit.toString()},
       );
 

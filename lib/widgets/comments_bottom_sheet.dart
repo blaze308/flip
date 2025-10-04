@@ -205,15 +205,45 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet>
       final result = await CommentService.toggleCommentLike(commentId);
 
       if (result.success) {
+        final isLiked = result.isLiked ?? !originalIsLiked;
+
         // Update with server response
         setState(() {
           _comments[commentIndex] = comment.copyWith(
-            isLiked: result.isLiked ?? !originalIsLiked,
+            isLiked: isLiked,
             likes:
                 result.likes ??
                 (originalIsLiked ? originalLikes - 1 : originalLikes + 1),
           );
         });
+
+        // Show toast notification
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(isLiked ? 'Comment liked' : 'Comment unliked'),
+                ],
+              ),
+              backgroundColor:
+                  isLiked ? const Color(0xFF4ECDC4) : Colors.grey[800],
+              duration: const Duration(seconds: 1),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
+            ),
+          );
+        }
+
         print('💬 CommentsBottomSheet: Comment like toggled successfully');
       } else {
         // Revert optimistic update
@@ -238,8 +268,20 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update like: $e'),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Failed to update like')),
+              ],
+            ),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
           ),
         );
       }
@@ -436,37 +478,36 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet>
                     height: 1.4,
                   ),
                 ),
+              ],
+            ),
+          ),
 
-                const SizedBox(height: 8),
+          const SizedBox(width: 12),
 
-                // Like button
-                GestureDetector(
-                  onTap: () => _toggleCommentLike(comment.id),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        comment.isLiked
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        size: 16,
-                        color: comment.isLiked ? Colors.red : Colors.grey[500],
-                      ),
-                      if (comment.likes > 0) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          '${comment.likes}',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ],
+          // Like button at the end of the row
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              GestureDetector(
+                onTap: () => _toggleCommentLike(comment.id),
+                child: Icon(
+                  comment.isLiked ? Icons.favorite : Icons.favorite_border,
+                  size: 20,
+                  color: comment.isLiked ? Colors.red : Colors.grey[500],
+                ),
+              ),
+              if (comment.likes > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${comment.likes}',
+                  style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
-            ),
+            ],
           ),
         ],
       ),

@@ -1,18 +1,23 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'services/story_service.dart';
+import 'services/video_utils.dart';
 import 'models/story_model.dart';
 import 'widgets/custom_toaster.dart';
+import 'providers/app_providers.dart';
 
-class CreateVideoStoryScreen extends StatefulWidget {
+class CreateVideoStoryScreen extends ConsumerStatefulWidget {
   const CreateVideoStoryScreen({Key? key}) : super(key: key);
 
   @override
-  State<CreateVideoStoryScreen> createState() => _CreateVideoStoryScreenState();
+  ConsumerState<CreateVideoStoryScreen> createState() =>
+      _CreateVideoStoryScreenState();
 }
 
-class _CreateVideoStoryScreenState extends State<CreateVideoStoryScreen> {
+class _CreateVideoStoryScreenState
+    extends ConsumerState<CreateVideoStoryScreen> {
   final TextEditingController _captionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   File? _selectedVideo;
@@ -119,30 +124,50 @@ class _CreateVideoStoryScreenState extends State<CreateVideoStoryScreen> {
         source: source,
         maxDuration:
             source == ImageSource.camera
-                ? const Duration(minutes: 1)
-                : null, // Only limit recording, not selection
+                ? const Duration(seconds: 30)
+                : null, // Recording limited to 30s, gallery unlimited
       );
 
       if (video != null) {
-        // For gallery videos, we need to validate duration manually
-        if (source == ImageSource.gallery) {
-          // Note: Video duration validation would require additional packages like video_player
-          // For now, we'll accept all gallery videos and let the backend handle validation
-          context.showInfoToaster(
-            'Note: Please ensure your video is under 1 minute for optimal story experience',
-          );
-        }
+        final videoFile = File(video.path);
 
-        setState(() {
-          _selectedVideo = File(video.path);
-        });
+        // Auto-trim video to 30 seconds if it's longer
+        context.showInfoToaster('Processing video...');
+
+        // Check duration first
+        final duration = await VideoUtils.getVideoDuration(videoFile.path);
+
+        if (duration != null && duration > 30) {
+          context.showInfoToaster('Trimming video to 30 seconds...');
+
+          // Trim the video
+          final trimmedVideo = await VideoUtils.trimVideo(
+            videoFile.path,
+            maxDurationSeconds: 30,
+          );
+
+          if (trimmedVideo != null) {
+            setState(() {
+              _selectedVideo = trimmedVideo;
+            });
+            context.showSuccessToaster('Video ready! (trimmed to 30s)');
+          } else {
+            context.showErrorToaster('Failed to trim video');
+            Navigator.of(context).pop();
+          }
+        } else {
+          // Video is already 30s or less
+          setState(() {
+            _selectedVideo = videoFile;
+          });
+        }
       } else {
         // User cancelled video selection
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        context.showErrorToaster('Failed to pick video: $e');
+        context.showErrorToaster('Failed to process video: $e');
         Navigator.of(context).pop();
       }
     }
@@ -181,6 +206,9 @@ class _CreateVideoStoryScreenState extends State<CreateVideoStoryScreen> {
       }
 
       if (result.success && mounted) {
+        // Refresh stories to show the new one
+        ref.read(storiesProvider.notifier).refresh();
+
         context.showSuccessToaster('Video story created successfully!');
         Navigator.of(context).pop();
         Navigator.of(context).pop(); // Go back to home screen

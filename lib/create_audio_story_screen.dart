@@ -1,22 +1,32 @@
 import 'dart:io';
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'services/story_service.dart';
+import 'services/audio_service.dart';
 import 'models/story_model.dart';
 import 'widgets/custom_toaster.dart';
+import 'providers/app_providers.dart';
 
-class CreateAudioStoryScreen extends StatefulWidget {
+class CreateAudioStoryScreen extends ConsumerStatefulWidget {
   const CreateAudioStoryScreen({super.key});
 
   @override
-  State<CreateAudioStoryScreen> createState() => _CreateAudioStoryScreenState();
+  ConsumerState<CreateAudioStoryScreen> createState() =>
+      _CreateAudioStoryScreenState();
 }
 
-class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
+class _CreateAudioStoryScreenState
+    extends ConsumerState<CreateAudioStoryScreen> {
   final TextEditingController _captionController = TextEditingController();
   File? _selectedAudio;
   bool _isLoading = false;
   String? _audioFileName;
+  bool _isRecording = false;
+  Duration _recordingDuration = Duration.zero;
+  Timer? _recordingTimer;
 
   // Privacy settings
   final StoryPrivacyType _privacy = StoryPrivacyType.public;
@@ -36,6 +46,7 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
   @override
   void dispose() {
     _captionController.dispose();
+    _recordingTimer?.cancel();
     super.dispose();
   }
 
@@ -105,7 +116,7 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
     );
 
     if (result == 'record') {
-      _showRecordingNotImplemented();
+      await _startRecording();
     } else if (result == 'upload') {
       await _pickAudioFile();
     } else {
@@ -115,13 +126,66 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
     }
   }
 
-  void _showRecordingNotImplemented() {
-    context.showInfoToaster(
-      'Audio recording will be available in a future update. Please upload an audio file for now.',
-    );
-    if (mounted) {
-      _showAudioSourceDialog();
+  Future<void> _startRecording() async {
+    final success = await AudioService.startRecording();
+    if (success && mounted) {
+      setState(() {
+        _isRecording = true;
+        _recordingDuration = Duration.zero;
+      });
+
+      // Start timer to update duration
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (mounted) {
+          setState(() {
+            _recordingDuration = Duration(seconds: timer.tick);
+          });
+        }
+      });
+
+      context.showSuccessToaster('Recording started');
+    } else if (mounted) {
+      context.showErrorToaster(
+        'Failed to start recording. Please check microphone permissions.',
+      );
+      Navigator.of(context).pop();
     }
+  }
+
+  Future<void> _stopRecording() async {
+    _recordingTimer?.cancel();
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final audioFile = await AudioService.stopRecording();
+
+    if (mounted) {
+      setState(() {
+        _isRecording = false;
+        _isLoading = false;
+      });
+
+      if (audioFile != null) {
+        setState(() {
+          _selectedAudio = audioFile;
+          _audioFileName =
+              'Recorded Audio (${_formatDuration(_recordingDuration)})';
+        });
+        context.showSuccessToaster('Recording saved');
+      } else {
+        context.showErrorToaster('Failed to save recording');
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
   }
 
   Future<void> _pickAudioFile() async {
@@ -174,6 +238,9 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
       );
 
       if (result.success && mounted) {
+        // Refresh stories to show the new one
+        ref.read(storiesProvider.notifier).refresh();
+
         context.showSuccessToaster('Audio story created successfully!');
         Navigator.of(context).pop();
         Navigator.of(context).pop(); // Go back to home screen
@@ -237,7 +304,82 @@ class _CreateAudioStoryScreenState extends State<CreateAudioStoryScreen> {
           ),
         ],
       ),
-      body: _selectedAudio == null ? _buildEmptyState() : _buildAudioPreview(),
+      body:
+          _isRecording
+              ? _buildRecordingView()
+              : (_selectedAudio == null
+                  ? _buildEmptyState()
+                  : _buildAudioPreview()),
+    );
+  }
+
+  Widget _buildRecordingView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Animated recording indicator
+          TweenAnimationBuilder(
+            tween: Tween<double>(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 1000),
+            builder: (context, double value, child) {
+              return Container(
+                width: 120 + (value * 20),
+                height: 120 + (value * 20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.red.withOpacity(0.3 - (value * 0.3)),
+                ),
+              );
+            },
+            onEnd: () {
+              if (mounted && _isRecording) {
+                setState(() {}); // Trigger rebuild to restart animation
+              }
+            },
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.red,
+              ),
+              child: const Icon(Icons.mic, size: 60, color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Text(
+            'Recording...',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _formatDuration(_recordingDuration),
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 48,
+              fontWeight: FontWeight.w300,
+              fontFeatures: [const FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 48),
+          ElevatedButton.icon(
+            onPressed: _isLoading ? null : _stopRecording,
+            icon: const Icon(Icons.stop),
+            label: const Text('Stop Recording'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              textStyle: const TextStyle(fontSize: 18),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -1,18 +1,22 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'services/story_service.dart';
 import 'models/story_model.dart';
 import 'widgets/custom_toaster.dart';
+import 'providers/app_providers.dart';
 
-class CreateImageStoryScreen extends StatefulWidget {
+class CreateImageStoryScreen extends ConsumerStatefulWidget {
   const CreateImageStoryScreen({super.key});
 
   @override
-  State<CreateImageStoryScreen> createState() => _CreateImageStoryScreenState();
+  ConsumerState<CreateImageStoryScreen> createState() =>
+      _CreateImageStoryScreenState();
 }
 
-class _CreateImageStoryScreenState extends State<CreateImageStoryScreen> {
+class _CreateImageStoryScreenState
+    extends ConsumerState<CreateImageStoryScreen> {
   final TextEditingController _captionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   File? _selectedImage;
@@ -164,6 +168,9 @@ class _CreateImageStoryScreenState extends State<CreateImageStoryScreen> {
       );
 
       if (result.success && mounted) {
+        // Refresh stories to show the new one
+        ref.read(storiesProvider.notifier).refresh();
+
         context.showSuccessToaster('Image story created successfully!');
         Navigator.of(context).pop();
         Navigator.of(context).pop(); // Go back to home screen

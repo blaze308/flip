@@ -104,18 +104,24 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     switch (story.mediaType) {
       case StoryMediaType.text:
         duration = _textStoryDuration;
+        _startTimer(duration);
         break;
       case StoryMediaType.image:
         duration = _imageStoryDuration;
+        // Preload image before starting timer
+        _preloadImageAndStartTimer(story, duration);
         break;
       case StoryMediaType.video:
         _initializeVideo(story);
         return; // Video will handle its own timing
       case StoryMediaType.audio:
         duration = _audioStoryDuration;
+        _startTimer(duration);
         break;
     }
+  }
 
+  void _startTimer(int duration) {
     _progressController.duration = Duration(seconds: duration);
 
     if (!_isPaused) {
@@ -124,6 +130,38 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
           _nextStory();
         }
       });
+    }
+  }
+
+  void _preloadImageAndStartTimer(StoryModel story, int duration) async {
+    if (story.mediaUrl == null) {
+      _startTimer(duration);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final imageUrl = _getFullImageUrl(story.mediaUrl);
+    final image = NetworkImage(imageUrl);
+
+    // Preload the image
+    try {
+      await precacheImage(image, context);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _startTimer(duration);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _startTimer(duration);
+      }
     }
   }
 

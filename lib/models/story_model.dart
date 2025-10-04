@@ -497,7 +497,7 @@ class StoryFeedItem {
   factory StoryFeedItem.fromJson(Map<String, dynamic> json) {
     return StoryFeedItem(
       userId: json['_id'] ?? '',
-      username: json['username'] ?? '',
+      username: json['username'] ?? 'User',
       userAvatar: json['userAvatar'],
       stories:
           (json['stories'] as List<dynamic>?)
@@ -507,7 +507,10 @@ class StoryFeedItem {
       lastStoryTime: DateTime.parse(
         json['lastStoryTime'] ?? DateTime.now().toIso8601String(),
       ),
-      hasUnviewedStories: (json['hasUnviewedStories'] ?? 0) > 0,
+      hasUnviewedStories:
+          json['hasUnviewedStories'] is bool
+              ? json['hasUnviewedStories']
+              : (json['hasUnviewedStories'] ?? 0) > 0,
     );
   }
 

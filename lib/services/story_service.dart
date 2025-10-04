@@ -80,6 +80,7 @@ class StoryService {
         final feedData = data['data'];
         final List<dynamic> storiesData = feedData['feed'] ?? [];
 
+        // Backend now populates user details, just parse them
         final stories =
             storiesData
                 .map((storyData) => StoryFeedItem.fromJson(storyData))
