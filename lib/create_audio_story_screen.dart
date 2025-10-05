@@ -115,20 +115,40 @@ class _CreateAudioStoryScreenState
           ),
     );
 
-    if (result == 'record') {
-      await _startRecording();
-    } else if (result == 'upload') {
+    if (result == 'upload') {
       await _pickAudioFile();
-    } else {
+    } else if (result == null || result == 'cancel') {
+      // User dismissed modal without selecting - go back
       if (mounted) {
         Navigator.of(context).pop();
       }
     }
+    // If result == 'record', just close modal and show the record button in UI
   }
 
   Future<void> _startRecording() async {
+    // Prevent multiple simultaneous recording attempts
+    if (_isRecording) {
+      print('🎤 Already recording, ignoring start request');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Small delay to ensure UI is stable
+    await Future.delayed(const Duration(milliseconds: 300));
+
     final success = await AudioService.startRecording();
-    if (success && mounted) {
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (success) {
       setState(() {
         _isRecording = true;
         _recordingDuration = Duration.zero;
@@ -143,17 +163,32 @@ class _CreateAudioStoryScreenState
         }
       });
 
-      context.showSuccessToaster('Recording started');
-    } else if (mounted) {
-      context.showErrorToaster(
-        'Failed to start recording. Please check microphone permissions.',
-      );
-      Navigator.of(context).pop();
+      if (mounted) {
+        context.showSuccessToaster('Recording started - speak now!');
+      }
+    } else {
+      if (mounted) {
+        context.showErrorToaster(
+          'Failed to start recording. Please check microphone permissions.',
+        );
+        Navigator.of(context).pop();
+      }
     }
   }
 
   Future<void> _stopRecording() async {
     _recordingTimer?.cancel();
+
+    // Check minimum recording duration
+    if (_recordingDuration.inSeconds < 1) {
+      context.showErrorToaster(
+        'Recording too short. Minimum 1 second required.',
+      );
+      setState(() {
+        _isRecording = false;
+      });
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -168,6 +203,19 @@ class _CreateAudioStoryScreenState
       });
 
       if (audioFile != null) {
+        // Check file size
+        final fileSize = await audioFile.length();
+        print('🎵 Audio file size: $fileSize bytes');
+
+        if (fileSize < 1000) {
+          // Less than 1KB is suspicious
+          context.showErrorToaster(
+            'Recording failed. Audio file is too small. Please try again.',
+          );
+          Navigator.of(context).pop();
+          return;
+        }
+
         setState(() {
           _selectedAudio = audioFile;
           _audioFileName =
@@ -388,26 +436,64 @@ class _CreateAudioStoryScreenState
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.mic_outlined, size: 80, color: Colors.grey[600]),
-          const SizedBox(height: 16),
+          // Big record button
+          GestureDetector(
+            onTap: _isLoading ? null : _startRecording,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient:
+                    _isLoading
+                        ? null
+                        : const LinearGradient(
+                          colors: [Color(0xFFFF3B30), Color(0xFFFF6B6B)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                color: _isLoading ? Colors.grey[700] : null,
+                boxShadow:
+                    _isLoading
+                        ? null
+                        : [
+                          BoxShadow(
+                            color: Colors.red.withOpacity(0.4),
+                            blurRadius: 20,
+                            spreadRadius: 5,
+                          ),
+                        ],
+              ),
+              child:
+                  _isLoading
+                      ? const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      )
+                      : const Icon(Icons.mic, size: 70, color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 32),
           Text(
-            'No audio selected',
-            style: TextStyle(color: Colors.grey[400], fontSize: 18),
+            _isLoading ? 'Starting...' : 'Tap to Record',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Record or select an audio file',
-            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            'Hold and speak clearly',
+            style: TextStyle(color: Colors.grey[400], fontSize: 14),
           ),
-          const SizedBox(height: 32),
-          ElevatedButton.icon(
-            onPressed: _showAudioSourceDialog,
-            icon: const Icon(Icons.audiotrack),
-            label: const Text('Select Audio'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4ECDC4),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          const SizedBox(height: 48),
+          // Secondary option to upload
+          TextButton.icon(
+            onPressed: _pickAudioFile,
+            icon: const Icon(Icons.audio_file, color: Color(0xFF4ECDC4)),
+            label: const Text(
+              'Or upload audio file',
+              style: TextStyle(color: Color(0xFF4ECDC4)),
             ),
           ),
         ],

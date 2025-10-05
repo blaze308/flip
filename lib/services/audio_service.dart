@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter_sound/flutter_sound.dart';
+import 'package:record/record.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 
 class AudioService {
-  static final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  static final AudioRecorder _recorder = AudioRecorder();
   static final AudioPlayer _player = AudioPlayer();
   static bool _isRecording = false;
   static bool _isPlaying = false;
@@ -16,6 +16,7 @@ class AudioService {
   static Future<bool> requestMicrophonePermission() async {
     try {
       final status = await Permission.microphone.request();
+      debugPrint('🎤 AudioService: Microphone permission status: $status');
       return status == PermissionStatus.granted;
     } catch (e) {
       debugPrint('🎤 AudioService: Error requesting microphone permission: $e');
@@ -28,73 +29,69 @@ class AudioService {
     try {
       debugPrint('🎤 AudioService: Starting audio recording...');
 
-      // Check permission
+      // Check if already recording
+      if (_isRecording) {
+        debugPrint('🎤 AudioService: Already recording, ignoring request');
+        return false;
+      }
+
+      // Check permission first
       final hasPermission = await requestMicrophonePermission();
       if (!hasPermission) {
         debugPrint('🎤 AudioService: Microphone permission denied');
         return false;
       }
 
-      // Check if already recording
-      if (_isRecording) {
-        debugPrint('🎤 AudioService: Already recording');
+      // Double-check with recorder's permission check
+      final canRecord = await _recorder.hasPermission();
+      if (!canRecord) {
+        debugPrint('🎤 AudioService: Recorder permission check failed');
         return false;
       }
 
-      // Initialize recorder if needed
-      if (!_recorder.isRecording) {
-        await _recorder.openRecorder();
+      // Stop any previous recording
+      final isCurrentlyRecording = await _recorder.isRecording();
+      if (isCurrentlyRecording) {
+        debugPrint('🎤 AudioService: Stopping previous recording session');
+        await _recorder.stop();
+        await Future.delayed(const Duration(milliseconds: 300));
       }
 
       // Get temporary directory for recording
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
+      _currentRecordingPath = '${tempDir.path}/audio_$timestamp.m4a';
 
-      // Try different codecs in order of preference
-      final codecs = [
-        {'codec': Codec.pcm16WAV, 'ext': 'wav'},
-        {'codec': Codec.aacMP4, 'ext': 'm4a'},
-        {'codec': Codec.defaultCodec, 'ext': 'm4a'},
-      ];
+      // Configure recording settings for v6.1.2
+      const config = RecordConfig(
+        encoder: AudioEncoder.aacLc, // AAC-LC - widely supported
+        bitRate: 128000,
+        sampleRate: 44100,
+        numChannels: 1,
+        autoGain: true, // Enable automatic gain control
+        echoCancel: true, // Enable echo cancellation
+        noiseSuppress: true, // Enable noise suppression
+      );
 
-      Exception? lastError;
-      for (final codecInfo in codecs) {
-        try {
-          _currentRecordingPath =
-              '${tempDir.path}/audio_$timestamp.${codecInfo['ext']}';
+      // Start recording with path
+      await _recorder.start(config, path: _currentRecordingPath!);
 
-          await _recorder.startRecorder(
-            toFile: _currentRecordingPath!,
-            codec: codecInfo['codec'] as Codec,
-            bitRate: 64000,
-            sampleRate: 22050,
-          );
-
-          debugPrint(
-            '🎤 AudioService: Recording started with ${codecInfo['codec']} at $_currentRecordingPath',
-          );
-          break; // Success, exit loop
-        } catch (codecError) {
-          lastError = codecError as Exception;
-          debugPrint(
-            '🎤 AudioService: ${codecInfo['codec']} failed: $codecError',
-          );
-          continue;
-        }
-      }
-
-      // If we get here and not recording, all codecs failed
-      if (!_recorder.isRecording) {
-        throw lastError ?? Exception('All audio codecs failed');
+      // Verify recording started
+      final isNowRecording = await _recorder.isRecording();
+      if (!isNowRecording) {
+        debugPrint('🎤 AudioService: Recording failed to start');
+        return false;
       }
 
       _isRecording = true;
       debugPrint(
-        '🎤 AudioService: Recording started at $_currentRecordingPath',
+        '🎤 AudioService: Recording started successfully at $_currentRecordingPath',
       );
       return true;
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('🎤 AudioService: Error starting recording: $e');
+      debugPrint('🎤 AudioService: Stack trace: $stackTrace');
+      _isRecording = false;
       return false;
     }
   }
@@ -109,18 +106,28 @@ class AudioService {
         return null;
       }
 
-      final path = await _recorder.stopRecorder();
+      final path = await _recorder.stop();
       _isRecording = false;
 
-      if (path != null && await File(path).exists()) {
-        debugPrint('🎤 AudioService: Recording stopped, file saved at $path');
-        return File(path);
+      if (path != null && path.isNotEmpty) {
+        final file = File(path);
+        if (await file.exists()) {
+          final fileSize = await file.length();
+          debugPrint(
+            '🎤 AudioService: Recording stopped, file saved at $path ($fileSize bytes)',
+          );
+          return file;
+        } else {
+          debugPrint('🎤 AudioService: Recording file does not exist at $path');
+          return null;
+        }
       } else {
-        debugPrint('🎤 AudioService: Recording failed, no file created');
+        debugPrint('🎤 AudioService: Recording failed, no path returned');
         return null;
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('🎤 AudioService: Error stopping recording: $e');
+      debugPrint('🎤 AudioService: Stack trace: $stackTrace');
       _isRecording = false;
       return null;
     }
@@ -130,14 +137,15 @@ class AudioService {
   static Future<void> cancelRecording() async {
     try {
       if (_isRecording) {
-        await _recorder.stopRecorder();
+        await _recorder.cancel();
         _isRecording = false;
 
-        // Delete the recording file
+        // Delete the recording file if it exists
         if (_currentRecordingPath != null) {
           final file = File(_currentRecordingPath!);
           if (await file.exists()) {
             await file.delete();
+            debugPrint('🎤 AudioService: Recording file deleted');
           }
         }
 
@@ -145,6 +153,31 @@ class AudioService {
       }
     } catch (e) {
       debugPrint('🎤 AudioService: Error cancelling recording: $e');
+    }
+  }
+
+  /// Pause recording (v6+ feature)
+  static Future<void> pauseRecording() async {
+    try {
+      if (_isRecording) {
+        await _recorder.pause();
+        debugPrint('🎤 AudioService: Recording paused');
+      }
+    } catch (e) {
+      debugPrint('🎤 AudioService: Error pausing recording: $e');
+    }
+  }
+
+  /// Resume recording (v6+ feature)
+  static Future<void> resumeRecording() async {
+    try {
+      final isPaused = await _recorder.isPaused();
+      if (isPaused) {
+        await _recorder.resume();
+        debugPrint('🎤 AudioService: Recording resumed');
+      }
+    } catch (e) {
+      debugPrint('🎤 AudioService: Error resuming recording: $e');
     }
   }
 
@@ -224,10 +257,24 @@ class AudioService {
   /// Get audio player instance for advanced controls
   static AudioPlayer get player => _player;
 
+  /// Get current recording amplitude (v6+ feature)
+  static Future<double?> getAmplitude() async {
+    try {
+      if (_isRecording) {
+        final amplitude = await _recorder.getAmplitude();
+        return amplitude.current;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('🎤 AudioService: Error getting amplitude: $e');
+      return null;
+    }
+  }
+
   /// Dispose resources
   static Future<void> dispose() async {
     try {
-      await _recorder.closeRecorder();
+      await _recorder.dispose();
       await _player.dispose();
       debugPrint('🎤🔊 AudioService: Resources disposed');
     } catch (e) {
@@ -238,8 +285,6 @@ class AudioService {
   /// Get audio duration from file
   static Future<Duration?> getAudioDuration(String audioPath) async {
     try {
-      // This is a simplified approach - in a real app you might want to use
-      // a more robust method to get audio duration
       final player = AudioPlayer();
       await player.setSource(UrlSource(audioPath));
       final duration = await player.getDuration();
@@ -248,6 +293,19 @@ class AudioService {
     } catch (e) {
       debugPrint('🔊 AudioService: Error getting audio duration: $e');
       return null;
+    }
+  }
+
+  /// Clean up and close the recorder
+  static Future<void> cleanup() async {
+    try {
+      if (_isRecording) {
+        await stopRecording();
+      }
+      await _recorder.dispose();
+      debugPrint('🎤 AudioService: Recorder cleaned up');
+    } catch (e) {
+      debugPrint('🎤 AudioService: Error cleaning up recorder: $e');
     }
   }
 }

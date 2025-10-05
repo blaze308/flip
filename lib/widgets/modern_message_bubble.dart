@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/message_model.dart';
@@ -172,11 +173,15 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
   }
 
   Widget _buildDefaultAvatar() {
-    return Center(
-      child: Text(
+    // Get first letter from senderName - it MUST exist
+    final firstLetter =
         widget.message.senderName.isNotEmpty
             ? widget.message.senderName[0].toUpperCase()
-            : 'U',
+            : '?';
+
+    return Center(
+      child: Text(
+        firstLetter,
         style: const TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
@@ -234,30 +239,39 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
   }
 
   Widget _buildImageMessage() {
-    if (widget.message.media?.url == null) return _buildTextMessage();
+    // For optimistic UI: show local file if available
+    final bool hasLocalFile = widget.message.localFilePath != null;
+    final bool isSending = widget.message.status == MessageStatus.sending;
+
+    if (!hasLocalFile && widget.message.media?.url == null)
+      return _buildTextMessage();
 
     final heroTag = 'image_${widget.message.id}';
 
     return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          PageRouteBuilder(
-            pageBuilder:
-                (context, animation, secondaryAnimation) => ImageViewerScreen(
-                  imageUrl: widget.message.media!.url,
-                  heroTag: heroTag,
-                ),
-            transitionsBuilder: (
-              context,
-              animation,
-              secondaryAnimation,
-              child,
-            ) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-          ),
-        );
-      },
+      onTap:
+          hasLocalFile
+              ? null
+              : () {
+                Navigator.of(context).push(
+                  PageRouteBuilder(
+                    pageBuilder:
+                        (context, animation, secondaryAnimation) =>
+                            ImageViewerScreen(
+                              imageUrl: widget.message.media!.url,
+                              heroTag: heroTag,
+                            ),
+                    transitionsBuilder: (
+                      context,
+                      animation,
+                      secondaryAnimation,
+                      child,
+                    ) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                  ),
+                );
+              },
       child: Hero(
         tag: heroTag,
         child: Container(
@@ -279,71 +293,110 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
             borderRadius: BorderRadius.circular(16),
             child: Stack(
               children: [
-                Image.network(
-                  widget.message.media!.url,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2A),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value:
-                              loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded /
-                                      loadingProgress.expectedTotalBytes!
-                                  : null,
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF4ECDC4),
+                // Show local file or network image
+                if (hasLocalFile)
+                  Image.file(
+                    File(widget.message.localFilePath!),
+                    fit: BoxFit.cover,
+                  )
+                else
+                  Image.network(
+                    widget.message.media!.url,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2A),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            value:
+                                loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFF4ECDC4),
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2A),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2A),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.broken_image,
+                                color: Colors.white54,
+                                size: 48,
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Failed to load image',
+                                style: TextStyle(color: Colors.white54),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                // Uploading overlay for optimistic UI
+                if (isSending)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black45,
                       child: const Center(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.broken_image,
-                              color: Colors.white54,
-                              size: 48,
+                            CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF4ECDC4),
+                              ),
                             ),
                             SizedBox(height: 8),
                             Text(
-                              'Failed to load image',
-                              style: TextStyle(color: Colors.white54),
+                              'Uploading...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
-                // Zoom indicator
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(Icons.zoom_in, color: Colors.white, size: 16),
                   ),
-                ),
+                // Zoom indicator (only for uploaded images)
+                if (!hasLocalFile && !isSending)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.zoom_in,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -353,30 +406,39 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
   }
 
   Widget _buildVideoMessage() {
-    if (widget.message.media?.url == null) return _buildTextMessage();
+    // For optimistic UI: show local file if available
+    final bool hasLocalFile = widget.message.localFilePath != null;
+    final bool isSending = widget.message.status == MessageStatus.sending;
+
+    if (!hasLocalFile && widget.message.media?.url == null)
+      return _buildTextMessage();
 
     final heroTag = 'video_${widget.message.id}';
 
     return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          PageRouteBuilder(
-            pageBuilder:
-                (context, animation, secondaryAnimation) => VideoPlayerScreen(
-                  videoUrl: widget.message.media!.url,
-                  heroTag: heroTag,
-                ),
-            transitionsBuilder: (
-              context,
-              animation,
-              secondaryAnimation,
-              child,
-            ) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-          ),
-        );
-      },
+      onTap:
+          hasLocalFile
+              ? null
+              : () {
+                Navigator.of(context).push(
+                  PageRouteBuilder(
+                    pageBuilder:
+                        (context, animation, secondaryAnimation) =>
+                            VideoPlayerScreen(
+                              videoUrl: widget.message.media!.url,
+                              heroTag: heroTag,
+                            ),
+                    transitionsBuilder: (
+                      context,
+                      animation,
+                      secondaryAnimation,
+                      child,
+                    ) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                  ),
+                );
+              },
       child: Hero(
         tag: heroTag,
         child: Container(
@@ -399,54 +461,92 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Video thumbnail
-                widget.message.media!.thumbnailUrl != null &&
-                        !widget.message.media!.thumbnailUrl!.contains('.mp4') &&
-                        !widget.message.media!.thumbnailUrl!.contains('.mov') &&
-                        !widget.message.media!.thumbnailUrl!.contains('.avi')
-                    ? Image.network(
-                      widget.message.media!.thumbnailUrl!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      height: double.infinity,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          height: 200,
-                          color: const Color(0xFF2A2A2A),
-                          child: const Center(
-                            child: Icon(
-                              Icons.videocam,
-                              color: Colors.white54,
-                              size: 48,
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                    : Container(
-                      height: 200,
-                      color: const Color(0xFF2A2A2A),
-                      child: const Center(
-                        child: Icon(
-                          Icons.videocam,
-                          color: Colors.white54,
-                          size: 48,
-                        ),
+                // Video thumbnail or placeholder
+                if (hasLocalFile)
+                  // Show placeholder for local video
+                  Container(
+                    height: 200,
+                    color: const Color(0xFF2A2A2A),
+                    child: const Center(
+                      child: Icon(
+                        Icons.videocam,
+                        color: Colors.white54,
+                        size: 48,
                       ),
                     ),
+                  )
+                else if (widget.message.media!.thumbnailUrl != null &&
+                    !widget.message.media!.thumbnailUrl!.contains('.mp4') &&
+                    !widget.message.media!.thumbnailUrl!.contains('.mov') &&
+                    !widget.message.media!.thumbnailUrl!.contains('.avi'))
+                  Image.network(
+                    widget.message.media!.thumbnailUrl!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        height: 200,
+                        color: const Color(0xFF2A2A2A),
+                        child: const Center(
+                          child: Icon(
+                            Icons.videocam,
+                            color: Colors.white54,
+                            size: 48,
+                          ),
+                        ),
+                      );
+                    },
+                  )
+                else
+                  Container(
+                    height: 200,
+                    color: const Color(0xFF2A2A2A),
+                    child: const Center(
+                      child: Icon(
+                        Icons.videocam,
+                        color: Colors.white54,
+                        size: 48,
+                      ),
+                    ),
+                  ),
 
-                // Play button overlay
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(30),
+                // Uploading overlay for optimistic UI
+                if (isSending)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black45,
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFF4ECDC4),
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Uploading video...',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  // Play button overlay (only for uploaded videos)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow,
+                      color: Colors.white,
+                      size: 48,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    color: Colors.white,
-                    size: 48,
-                  ),
-                ),
 
                 // Duration indicator
                 if (widget.message.media!.duration != null)

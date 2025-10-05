@@ -671,7 +671,7 @@ class FirebaseAuthService {
       case 'user-not-found':
         return 'No user found with this email address.';
       case 'wrong-password':
-        return 'Incorrect password. Please try again.';
+        return 'Incorrect credentials Please try again.';
       case 'email-already-in-use':
         return 'An account with this email already exists.';
       case 'weak-password':

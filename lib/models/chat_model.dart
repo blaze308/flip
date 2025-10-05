@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'user_model.dart';
 
 /// Enum for chat types
 enum ChatType { direct, group }
@@ -9,13 +10,11 @@ enum ChatStatus { active, archived, deleted }
 /// Enum for member roles
 enum MemberRole { admin, moderator, member }
 
-/// Chat member model
+/// Chat member model - SIMPLIFIED to only store reference and chat-specific data
+/// User details come from UserModel via population
 class ChatMember {
   final String userId;
-  final String firebaseUid;
-  final String username;
-  final String displayName;
-  final String? avatar;
+  final UserModel? user; // Populated user data (null if not populated)
   final MemberRole role;
   final DateTime joinedAt;
   final DateTime lastSeenAt;
@@ -24,10 +23,7 @@ class ChatMember {
 
   const ChatMember({
     required this.userId,
-    required this.firebaseUid,
-    required this.username,
-    required this.displayName,
-    this.avatar,
+    this.user,
     required this.role,
     required this.joinedAt,
     required this.lastSeenAt,
@@ -35,45 +31,35 @@ class ChatMember {
     required this.notifications,
   });
 
+  /// Get display name from populated user or fallback
+  String get displayName =>
+      user?.bestDisplayName ?? 'User ${userId.substring(0, 8)}';
+
+  /// Get username from populated user or fallback
+  String get username => user?.username ?? 'user_${userId.substring(0, 8)}';
+
+  /// Get avatar from populated user
+  String? get avatar => user?.bestAvatar;
+
   factory ChatMember.fromJson(Map<String, dynamic> json) {
     // Handle populated userId (when user data is populated)
     final userIdData = json['userId'];
     final String userId;
-    final String firebaseUid;
-    final String username;
-    final String displayName;
-    final String? avatar;
+    UserModel? user;
 
     if (userIdData is Map<String, dynamic>) {
-      // User data is populated
+      // User data is populated - convert to UserModel
       userId = userIdData['_id'] as String;
-      firebaseUid = userIdData['firebaseUid'] as String? ?? '';
-      username =
-          userIdData['profile']?['username'] as String? ??
-          userIdData['displayName'] as String? ??
-          userIdData['email']?.toString().split('@')[0] ??
-          'user';
-      displayName =
-          userIdData['displayName'] as String? ??
-          userIdData['profile']?['username'] as String? ??
-          userIdData['email']?.toString().split('@')[0] ??
-          'User';
-      avatar = userIdData['photoURL'] as String?;
+      user = UserModel.fromJson(userIdData);
     } else {
-      // Legacy format or userId is just a string
+      // userId is just a string reference
       userId = userIdData as String;
-      firebaseUid = json['firebaseUid'] as String? ?? '';
-      username = json['username'] as String? ?? 'user';
-      displayName = json['displayName'] as String? ?? 'User';
-      avatar = json['avatar'] as String?;
+      user = null;
     }
 
     return ChatMember(
       userId: userId,
-      firebaseUid: firebaseUid,
-      username: username,
-      displayName: displayName,
-      avatar: avatar,
+      user: user,
       role: MemberRole.values.firstWhere(
         (e) => e.name == json['role'],
         orElse: () => MemberRole.member,
@@ -90,10 +76,6 @@ class ChatMember {
   Map<String, dynamic> toJson() {
     return {
       'userId': userId,
-      'firebaseUid': firebaseUid,
-      'username': username,
-      'displayName': displayName,
-      'avatar': avatar,
       'role': role.name,
       'joinedAt': joinedAt.toIso8601String(),
       'lastSeenAt': lastSeenAt.toIso8601String(),
@@ -104,10 +86,7 @@ class ChatMember {
 
   ChatMember copyWith({
     String? userId,
-    String? firebaseUid,
-    String? username,
-    String? displayName,
-    String? avatar,
+    UserModel? user,
     MemberRole? role,
     DateTime? joinedAt,
     DateTime? lastSeenAt,
@@ -116,10 +95,7 @@ class ChatMember {
   }) {
     return ChatMember(
       userId: userId ?? this.userId,
-      firebaseUid: firebaseUid ?? this.firebaseUid,
-      username: username ?? this.username,
-      displayName: displayName ?? this.displayName,
-      avatar: avatar ?? this.avatar,
+      user: user ?? this.user,
       role: role ?? this.role,
       joinedAt: joinedAt ?? this.joinedAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
@@ -154,13 +130,13 @@ class NotificationSettings {
   }
 }
 
-/// Last message preview model
+/// Last message preview model - SIMPLIFIED
 class LastMessage {
   final String messageId;
   final String content;
   final String type;
   final String senderId;
-  final String senderName;
+  final UserModel? sender; // Populated sender data (null if not populated)
   final DateTime timestamp;
 
   const LastMessage({
@@ -168,28 +144,28 @@ class LastMessage {
     required this.content,
     required this.type,
     required this.senderId,
-    required this.senderName,
+    this.sender,
     required this.timestamp,
   });
+
+  /// Get sender name from populated user or fallback
+  String get senderName =>
+      sender?.bestDisplayName ?? 'User ${senderId.substring(0, 8)}';
 
   factory LastMessage.fromJson(Map<String, dynamic> json) {
     // Handle populated senderId (when sender data is populated)
     final senderIdData = json['senderId'];
     final String senderId;
-    final String senderName;
+    UserModel? sender;
 
     if (senderIdData is Map<String, dynamic>) {
-      // Sender data is populated
+      // Sender data is populated - convert to UserModel
       senderId = senderIdData['_id'] as String;
-      senderName =
-          senderIdData['displayName'] as String? ??
-          senderIdData['profile']?['username'] as String? ??
-          senderIdData['email']?.toString().split('@')[0] ??
-          'User';
+      sender = UserModel.fromJson(senderIdData);
     } else {
-      // Legacy format or senderId is just a string
-      senderId = senderIdData as String;
-      senderName = json['senderName'] as String? ?? 'User';
+      // senderId is just a string reference
+      senderId = senderIdData as String? ?? json['senderId'] as String;
+      sender = null;
     }
 
     return LastMessage(
@@ -197,7 +173,7 @@ class LastMessage {
       content: json['content'] as String? ?? '',
       type: json['type'] as String,
       senderId: senderId,
-      senderName: senderName,
+      sender: sender,
       timestamp: DateTime.parse(json['timestamp'] as String),
     );
   }
@@ -208,7 +184,6 @@ class LastMessage {
       'content': content,
       'type': type,
       'senderId': senderId,
-      'senderName': senderName,
       'timestamp': timestamp.toIso8601String(),
     };
   }
@@ -272,7 +247,8 @@ class AutoDeleteSettings {
   }
 }
 
-/// Main Chat model
+/// Main Chat model - Industry Standard (TikTok/Instagram style)
+/// Stores only chat-specific data, user details come from UserModel
 class ChatModel {
   final String id;
   final ChatType type;
@@ -418,12 +394,14 @@ class ChatModel {
     }
 
     // For direct chats, return the other participant's name
-    final otherMember = members.firstWhere(
-      (member) => member.userId != currentUserId && member.isActive,
-      orElse: () => members.first,
-    );
-
-    return otherMember.displayName;
+    try {
+      final otherMember = members.firstWhere(
+        (member) => member.userId != currentUserId && member.isActive,
+      );
+      return otherMember.displayName;
+    } catch (e) {
+      return members.isNotEmpty ? members.first.displayName : 'User';
+    }
   }
 
   /// Get avatar for the chat
@@ -433,12 +411,14 @@ class ChatModel {
     }
 
     // For direct chats, return the other participant's avatar
-    final otherMember = members.firstWhere(
-      (member) => member.userId != currentUserId && member.isActive,
-      orElse: () => members.first,
-    );
-
-    return otherMember.avatar;
+    try {
+      final otherMember = members.firstWhere(
+        (member) => member.userId != currentUserId && member.isActive,
+      );
+      return otherMember.avatar;
+    } catch (e) {
+      return members.isNotEmpty ? members.first.avatar : null;
+    }
   }
 
   /// Get formatted last message time
@@ -498,11 +478,14 @@ class ChatModel {
 
   /// Check if current user is admin
   bool isCurrentUserAdmin(String currentUserId) {
-    final currentMember = members.firstWhere(
-      (member) => member.userId == currentUserId,
-      orElse: () => members.first,
-    );
-    return currentMember.role == MemberRole.admin;
+    try {
+      final currentMember = members.firstWhere(
+        (member) => member.userId == currentUserId,
+      );
+      return currentMember.role == MemberRole.admin;
+    } catch (e) {
+      return false;
+    }
   }
 
   /// Get active member count

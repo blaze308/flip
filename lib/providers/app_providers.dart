@@ -185,7 +185,9 @@ class StoriesNotifier extends StateNotifier<AsyncValue<List<StoryFeedItem>>> {
   final Ref ref;
   List<StoryFeedItem> _stories = [];
   DateTime? _lastFetch;
-  static const Duration cacheExpiry = Duration(minutes: 3);
+  static const Duration cacheExpiry = Duration(
+    minutes: 5,
+  ); // Increased cache duration
 
   Future<void> _loadStories() async {
     // Check cache first

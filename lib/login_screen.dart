@@ -193,7 +193,7 @@ class _LoginScreenState extends State<LoginScreen>
         } else if (mounted) {
           print('🔐 LoginScreen: Email login failed - ${result.message}');
           context.showErrorToaster(
-            result.message,
+            MessageService.getFirebaseErrorMessage(result.message),
             devMessage: 'Email login failed: ${result.message}',
           );
         }
@@ -221,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen>
 
     try {
       print('🔐 LoginScreen: Attempting Google login...');
-      final result = await TokenAuthService.signInWithGoogle();
+      final result = await TokenAuthService.signInWithGoogle(isSignup: false);
 
       if (result.success) {
         if (mounted) {
@@ -236,7 +236,7 @@ class _LoginScreenState extends State<LoginScreen>
           }
 
           context.showSuccessToaster(
-            'Welcome, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+            'Welcome back, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
             devMessage: 'Google login successful: ${result.message}',
           );
 
@@ -276,7 +276,7 @@ class _LoginScreenState extends State<LoginScreen>
 
     try {
       print('🔐 LoginScreen: Attempting Apple login...');
-      final result = await TokenAuthService.signInWithApple();
+      final result = await TokenAuthService.signInWithApple(isSignup: false);
 
       if (result.success) {
         if (mounted) {
@@ -291,15 +291,19 @@ class _LoginScreenState extends State<LoginScreen>
           }
 
           context.showSuccessToaster(
-            'Welcome, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+            'Welcome back, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
             devMessage: 'Apple login successful: ${result.message}',
           );
+
+          // Manual navigation to home screen
+          print('🔐 LoginScreen: Navigating to home screen...');
+          Navigator.of(context).pushReplacementNamed('/');
         }
       } else {
         if (mounted) {
           print('🔐 LoginScreen: Apple login failed - ${result.message}');
           context.showErrorToaster(
-            result.message,
+            MessageService.getFirebaseErrorMessage(result.message),
             devMessage: 'Apple login failed: ${result.message}',
           );
         }

@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'user_model.dart';
 
 /// Enum for message types
 enum MessageType {
@@ -20,27 +21,42 @@ enum MessageStatus { sending, sent, delivered, read, failed }
 /// Enum for message priority
 enum MessagePriority { low, normal, high, urgent }
 
-/// Message reaction model
+/// Message reaction model - Uses UserModel reference
 class MessageReaction {
   final String id;
   final String userId;
-  final String username;
+  final UserModel? user; // Populated user data
   final String emoji;
   final DateTime createdAt;
 
   const MessageReaction({
     required this.id,
     required this.userId,
-    required this.username,
+    this.user,
     required this.emoji,
     required this.createdAt,
   });
 
+  /// Get username from populated user or fallback
+  String get username => user?.username ?? 'user_${userId.substring(0, 8)}';
+
   factory MessageReaction.fromJson(Map<String, dynamic> json) {
+    final userIdData = json['userId'];
+    final String userId;
+    UserModel? user;
+
+    if (userIdData is Map<String, dynamic>) {
+      userId = userIdData['_id'] as String;
+      user = UserModel.fromJson(userIdData);
+    } else {
+      userId = userIdData as String;
+      user = null;
+    }
+
     return MessageReaction(
       id: json['_id'] as String,
-      userId: json['userId'] as String,
-      username: json['username'] as String,
+      userId: userId,
+      user: user,
       emoji: json['emoji'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
@@ -50,7 +66,6 @@ class MessageReaction {
     return {
       '_id': id,
       'userId': userId,
-      'username': username,
       'emoji': emoji,
       'createdAt': createdAt.toIso8601String(),
     };
@@ -227,11 +242,11 @@ class MessageContact {
   }
 }
 
-/// Message reference model (for replies and forwards)
+/// Message reference model (for replies and forwards) - Uses UserModel reference
 class MessageReference {
   final String messageId;
   final String senderId;
-  final String senderName;
+  final UserModel? sender; // Populated sender data
   final String content;
   final MessageType type;
   final DateTime timestamp;
@@ -239,17 +254,33 @@ class MessageReference {
   const MessageReference({
     required this.messageId,
     required this.senderId,
-    required this.senderName,
+    this.sender,
     required this.content,
     required this.type,
     required this.timestamp,
   });
 
+  /// Get sender name from populated user or fallback
+  String get senderName =>
+      sender?.bestDisplayName ?? 'User ${senderId.substring(0, 8)}';
+
   factory MessageReference.fromJson(Map<String, dynamic> json) {
+    final senderIdData = json['senderId'];
+    final String senderId;
+    UserModel? sender;
+
+    if (senderIdData is Map<String, dynamic>) {
+      senderId = senderIdData['_id'] as String;
+      sender = UserModel.fromJson(senderIdData);
+    } else {
+      senderId = senderIdData as String;
+      sender = null;
+    }
+
     return MessageReference(
       messageId: json['messageId'] as String,
-      senderId: json['senderId'] as String,
-      senderName: json['senderName'] as String,
+      senderId: senderId,
+      sender: sender,
       content: json['content'] as String? ?? '',
       type: MessageType.values.firstWhere(
         (e) => e.name == json['type'],
@@ -263,7 +294,6 @@ class MessageReference {
     return {
       'messageId': messageId,
       'senderId': senderId,
-      'senderName': senderName,
       'content': content,
       'type': type.name,
       'timestamp': timestamp.toIso8601String(),
@@ -271,111 +301,138 @@ class MessageReference {
   }
 }
 
-/// Message mention model
+/// Message mention model - Uses UserModel reference
 class MessageMention {
   final String userId;
-  final String username;
+  final UserModel? user; // Populated user data
   final int startIndex;
   final int length;
 
   const MessageMention({
     required this.userId,
-    required this.username,
+    this.user,
     required this.startIndex,
     required this.length,
   });
 
+  /// Get username from populated user or fallback
+  String get username => user?.username ?? 'user_${userId.substring(0, 8)}';
+
   factory MessageMention.fromJson(Map<String, dynamic> json) {
+    final userIdData = json['userId'];
+    final String userId;
+    UserModel? user;
+
+    if (userIdData is Map<String, dynamic>) {
+      userId = userIdData['_id'] as String;
+      user = UserModel.fromJson(userIdData);
+    } else {
+      userId = userIdData as String;
+      user = null;
+    }
+
     return MessageMention(
-      userId: json['userId'] as String,
-      username: json['username'] as String,
+      userId: userId,
+      user: user,
       startIndex: json['startIndex'] as int,
       length: json['length'] as int,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'userId': userId,
-      'username': username,
-      'startIndex': startIndex,
-      'length': length,
-    };
+    return {'userId': userId, 'startIndex': startIndex, 'length': length};
   }
 }
 
-/// Read receipt model
+/// Read receipt model - Uses UserModel reference
 class ReadReceipt {
   final String userId;
-  final String username;
+  final UserModel? user; // Populated user data
   final DateTime readAt;
 
-  const ReadReceipt({
-    required this.userId,
-    required this.username,
-    required this.readAt,
-  });
+  const ReadReceipt({required this.userId, this.user, required this.readAt});
+
+  /// Get username from populated user or fallback
+  String get username => user?.username ?? 'user_${userId.substring(0, 8)}';
 
   factory ReadReceipt.fromJson(Map<String, dynamic> json) {
+    final userIdData = json['userId'];
+    final String userId;
+    UserModel? user;
+
+    if (userIdData is Map<String, dynamic>) {
+      userId = userIdData['_id'] as String;
+      user = UserModel.fromJson(userIdData);
+    } else {
+      userId = userIdData as String;
+      user = null;
+    }
+
     return ReadReceipt(
-      userId: json['userId'] as String,
-      username: json['username'] as String,
+      userId: userId,
+      user: user,
       readAt: DateTime.parse(json['readAt'] as String),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'userId': userId,
-      'username': username,
-      'readAt': readAt.toIso8601String(),
-    };
+    return {'userId': userId, 'readAt': readAt.toIso8601String()};
   }
 }
 
-/// Delivery receipt model
+/// Delivery receipt model - Uses UserModel reference
 class DeliveryReceipt {
   final String userId;
-  final String username;
+  final UserModel? user; // Populated user data
   final DateTime deliveredAt;
 
   const DeliveryReceipt({
     required this.userId,
-    required this.username,
+    this.user,
     required this.deliveredAt,
   });
 
+  /// Get username from populated user or fallback
+  String get username => user?.username ?? 'user_${userId.substring(0, 8)}';
+
   factory DeliveryReceipt.fromJson(Map<String, dynamic> json) {
+    final userIdData = json['userId'];
+    final String userId;
+    UserModel? user;
+
+    if (userIdData is Map<String, dynamic>) {
+      userId = userIdData['_id'] as String;
+      user = UserModel.fromJson(userIdData);
+    } else {
+      userId = userIdData as String;
+      user = null;
+    }
+
     return DeliveryReceipt(
-      userId: json['userId'] as String,
-      username: json['username'] as String,
+      userId: userId,
+      user: user,
       deliveredAt: DateTime.parse(json['deliveredAt'] as String),
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'userId': userId,
-      'username': username,
-      'deliveredAt': deliveredAt.toIso8601String(),
-    };
+    return {'userId': userId, 'deliveredAt': deliveredAt.toIso8601String()};
   }
 }
 
-/// Main Message model
+/// Main Message model - Uses UserModel reference
 class MessageModel {
   final String id;
   final String chatId;
   final String senderId;
-  final String senderFirebaseUid;
-  final String senderName;
-  final String? senderAvatar;
+  final UserModel? sender; // Populated sender data
   final MessageType type;
   final String? content;
   final MessageMedia? media;
   final MessageLocation? location;
   final MessageContact? contact;
   final MessageStatus status;
+  final String? localFilePath; // For optimistic UI with local files
   final List<MessageReaction> reactions;
   final MessageReference? replyTo;
   final MessageReference? forwardedFrom;
@@ -398,15 +455,14 @@ class MessageModel {
     required this.id,
     required this.chatId,
     required this.senderId,
-    required this.senderFirebaseUid,
-    required this.senderName,
-    this.senderAvatar,
+    this.sender,
     required this.type,
     this.content,
     this.media,
     this.location,
     this.contact,
     required this.status,
+    this.localFilePath, // For optimistic UI
     required this.reactions,
     this.replyTo,
     this.forwardedFrom,
@@ -426,36 +482,34 @@ class MessageModel {
     required this.updatedAt,
   });
 
+  /// Get sender name from populated user or fallback
+  String get senderName =>
+      sender?.bestDisplayName ?? 'User ${senderId.substring(0, 8)}';
+
+  /// Get sender avatar from populated user
+  String? get senderAvatar => sender?.bestAvatar;
+
   factory MessageModel.fromJson(Map<String, dynamic> json) {
     // Handle populated senderId (when sender data is populated)
     final senderIdData = json['senderId'];
     final String senderId;
-    final String senderName;
-    final String? senderAvatar;
+    UserModel? sender;
 
     if (senderIdData is Map<String, dynamic>) {
-      // Sender data is populated
+      // Sender data is populated - convert to UserModel
       senderId = senderIdData['_id'] as String;
-      senderName =
-          senderIdData['displayName'] as String? ??
-          senderIdData['profile']?['username'] as String? ??
-          senderIdData['email']?.toString().split('@')[0] ??
-          'User';
-      senderAvatar = senderIdData['photoURL'] as String?;
+      sender = UserModel.fromJson(senderIdData);
     } else {
-      // Legacy format or senderId is just a string
+      // senderId is just a string reference
       senderId = senderIdData as String;
-      senderName = json['senderName'] as String? ?? 'User';
-      senderAvatar = json['senderAvatar'] as String?;
+      sender = null;
     }
 
     return MessageModel(
       id: json['_id'] as String,
       chatId: json['chatId'] as String,
       senderId: senderId,
-      senderFirebaseUid: json['senderFirebaseUid'] as String? ?? '',
-      senderName: senderName,
-      senderAvatar: senderAvatar,
+      sender: sender,
       type: MessageType.values.firstWhere(
         (e) => e.name == json['type'],
         orElse: () => MessageType.text,
@@ -546,9 +600,6 @@ class MessageModel {
       '_id': id,
       'chatId': chatId,
       'senderId': senderId,
-      'senderFirebaseUid': senderFirebaseUid,
-      'senderName': senderName,
-      'senderAvatar': senderAvatar,
       'type': type.name,
       'content': content,
       'media': media?.toJson(),
@@ -579,15 +630,14 @@ class MessageModel {
     String? id,
     String? chatId,
     String? senderId,
-    String? senderFirebaseUid,
-    String? senderName,
-    String? senderAvatar,
+    UserModel? sender,
     MessageType? type,
     String? content,
     MessageMedia? media,
     MessageLocation? location,
     MessageContact? contact,
     MessageStatus? status,
+    String? localFilePath,
     List<MessageReaction>? reactions,
     MessageReference? replyTo,
     MessageReference? forwardedFrom,
@@ -610,15 +660,14 @@ class MessageModel {
       id: id ?? this.id,
       chatId: chatId ?? this.chatId,
       senderId: senderId ?? this.senderId,
-      senderFirebaseUid: senderFirebaseUid ?? this.senderFirebaseUid,
-      senderName: senderName ?? this.senderName,
-      senderAvatar: senderAvatar ?? this.senderAvatar,
+      sender: sender ?? this.sender,
       type: type ?? this.type,
       content: content ?? this.content,
       media: media ?? this.media,
       location: location ?? this.location,
       contact: contact ?? this.contact,
       status: status ?? this.status,
+      localFilePath: localFilePath ?? this.localFilePath,
       reactions: reactions ?? this.reactions,
       replyTo: replyTo ?? this.replyTo,
       forwardedFrom: forwardedFrom ?? this.forwardedFrom,

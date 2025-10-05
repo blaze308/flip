@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'dart:async';
 
 import 'models/story_model.dart';
+import 'providers/app_providers.dart';
 import 'services/story_service.dart';
 import 'services/token_auth_service.dart';
 import 'services/contextual_auth_service.dart';
 import 'widgets/custom_toaster.dart';
 
-class StoryViewerScreen extends StatefulWidget {
+class StoryViewerScreen extends ConsumerStatefulWidget {
   final List<StoryFeedItem> storyFeedItems;
   final int initialUserIndex;
   final int initialStoryIndex;
@@ -22,10 +25,10 @@ class StoryViewerScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<StoryViewerScreen> createState() => _StoryViewerScreenState();
+  ConsumerState<StoryViewerScreen> createState() => _StoryViewerScreenState();
 }
 
-class _StoryViewerScreenState extends State<StoryViewerScreen>
+class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
     with TickerProviderStateMixin {
   late PageController _userPageController;
   late AnimationController _progressController;
@@ -34,6 +37,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   int _currentUserIndex = 0;
   int _currentStoryIndex = 0;
   VideoPlayerController? _videoController;
+  AudioPlayer? _audioPlayer;
   Timer? _storyTimer;
   bool _isOverlayVisible = true;
   bool _isPaused = false;
@@ -77,6 +81,7 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _progressController.dispose();
     _overlayController.dispose();
     _videoController?.dispose();
+    _audioPlayer?.dispose();
     _storyTimer?.cancel();
     super.dispose();
   }
@@ -97,6 +102,9 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
     _progressController.reset();
     _videoController?.dispose();
     _videoController = null;
+    _audioPlayer?.stop();
+    _audioPlayer?.dispose();
+    _audioPlayer = null;
     _storyTimer?.cancel();
 
     int duration = _textStoryDuration;
@@ -115,9 +123,77 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         _initializeVideo(story);
         return; // Video will handle its own timing
       case StoryMediaType.audio:
-        duration = _audioStoryDuration;
-        _startTimer(duration);
-        break;
+        _initializeAudio(story);
+        return; // Audio will handle its own timing
+    }
+  }
+
+  void _initializeAudio(StoryModel story) async {
+    if (story.mediaUrl == null) {
+      _startTimer(_audioStoryDuration);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Dispose previous audio player
+      await _audioPlayer?.dispose();
+
+      // Create new audio player
+      _audioPlayer = AudioPlayer();
+
+      // Load and play audio
+      await _audioPlayer!.play(UrlSource(story.mediaUrl!));
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+
+      // Get audio duration for progress bar
+      _audioPlayer!.onDurationChanged.listen((duration) {
+        if (mounted) {
+          _progressController.duration = duration;
+        }
+      });
+
+      // Update progress bar continuously as audio plays
+      _audioPlayer!.onPositionChanged.listen((position) {
+        if (mounted && _audioPlayer!.state == PlayerState.playing) {
+          final duration = _progressController.duration?.inMilliseconds ?? 1;
+          final progress = position.inMilliseconds / duration;
+          _progressController.value = progress.clamp(0.0, 1.0);
+        }
+      });
+
+      // Handle playback completion
+      _audioPlayer!.onPlayerComplete.listen((_) {
+        if (mounted && !_isPaused) {
+          _nextStory();
+        }
+      });
+
+      // Handle errors
+      _audioPlayer!.onPlayerStateChanged.listen((state) {
+        if (state == PlayerState.stopped && mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('Audio story error: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        // Fallback to timer if audio fails
+        _startTimer(_audioStoryDuration);
+      }
     }
   }
 
@@ -360,6 +436,10 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
   Future<void> _deleteStory(StoryModel story) async {
     try {
       await StoryService.deleteStory(story.id);
+
+      // Refresh stories provider to sync with backend
+      ref.read(storiesProvider.notifier).refresh();
+
       context.showSuccessToaster('Story deleted successfully');
 
       // Remove story from the current user's stories
@@ -516,14 +596,17 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         headers: const {'User-Agent': 'Mozilla/5.0 (compatible; Flutter app)'},
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
-          return Center(
-            child: CircularProgressIndicator(
-              value:
-                  loadingProgress.expectedTotalBytes != null
-                      ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                      : null,
-              color: const Color(0xFF4ECDC4),
+          return Container(
+            color: const Color(0xFF1A1A1A),
+            child: const Center(
+              child: SizedBox(
+                width: 60,
+                height: 60,
+                child: CircularProgressIndicator(
+                  color: Color(0xFF4ECDC4),
+                  strokeWidth: 3,
+                ),
+              ),
             ),
           );
         },
@@ -559,7 +642,14 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
       return Center(
         child:
             _isLoading
-                ? const CircularProgressIndicator(color: Color(0xFF4ECDC4))
+                ? const SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CircularProgressIndicator(
+                    color: Color(0xFF4ECDC4),
+                    strokeWidth: 3,
+                  ),
+                )
                 : const Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -597,22 +687,43 @@ class _StoryViewerScreenState extends State<StoryViewerScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.audiotrack,
-                size: 80,
-                color: Colors.white,
-              ),
+            // Animated audio visualizer
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.8, end: 1.2),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeInOut,
+              builder: (context, value, child) {
+                return Transform.scale(
+                  scale: value,
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _audioPlayer?.state == PlayerState.playing
+                          ? Icons.volume_up
+                          : Icons.audiotrack,
+                      size: 80,
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+              onEnd: () {
+                // Repeat animation
+                if (mounted) {
+                  setState(() {});
+                }
+              },
             ),
             const SizedBox(height: 32),
-            const Text(
-              'Audio Story',
-              style: TextStyle(
+            Text(
+              _audioPlayer?.state == PlayerState.playing
+                  ? 'Now Playing...'
+                  : 'Audio Story',
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,

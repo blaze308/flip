@@ -221,6 +221,7 @@ class TokenAuthService {
   static Future<TokenExchangeResult> _exchangeFirebaseToken(
     User firebaseUser, {
     bool rememberMe = false,
+    bool isSignup = false,
   }) async {
     try {
       final firebaseToken = await firebaseUser.getIdToken();
@@ -229,6 +230,7 @@ class TokenAuthService {
       print('🔐 TokenAuthService: Exchanging Firebase token...');
       print('🔐 TokenAuthService: Device info: $deviceInfo');
       print('🔐 TokenAuthService: Remember me: $rememberMe');
+      print('🔐 TokenAuthService: Is signup: $isSignup');
 
       final response = await http
           .post(
@@ -240,6 +242,7 @@ class TokenAuthService {
             body: jsonEncode({
               'deviceInfo': deviceInfo,
               'rememberMe': rememberMe,
+              'isSignup': isSignup,
             }),
           )
           .timeout(_timeoutDuration);
@@ -365,7 +368,7 @@ class TokenAuthService {
   static Future<AuthResult> registerWithEmailAndPassword({
     required String email,
     required String password,
-    required String fullName,
+    required String username,
   }) async {
     try {
       _updateState(AuthState.loading);
@@ -387,20 +390,27 @@ class TokenAuthService {
           .createUserWithEmailAndPassword(email: email, password: password);
 
       if (credential.user != null) {
-        // Update display name
-        await credential.user!.updateDisplayName(fullName);
+        // Update display name with username
+        await credential.user!.updateDisplayName(username);
         await credential.user!.sendEmailVerification();
         await credential.user!.reload();
 
         // Exchange Firebase token for JWT
-        final exchangeResult = await _exchangeFirebaseToken(credential.user!);
+        final exchangeResult = await _exchangeFirebaseToken(
+          credential.user!,
+          isSignup: true,
+        );
 
         if (exchangeResult.success && exchangeResult.user != null) {
           // Mark onboarding as completed for new users
           await _markOnboardingCompleted();
 
           _updateState(AuthState.authenticated, user: exchangeResult.user);
-          return AuthResult(success: true, message: 'Registration successful!');
+          return AuthResult(
+            success: true,
+            message: 'Registration successful!',
+            isNewUser: true,
+          );
         } else {
           _updateState(AuthState.error);
           return AuthResult(
@@ -425,7 +435,7 @@ class TokenAuthService {
   }
 
   /// Sign in with Google
-  static Future<AuthResult> signInWithGoogle() async {
+  static Future<AuthResult> signInWithGoogle({bool isSignup = false}) async {
     try {
       _updateState(AuthState.loading);
 
@@ -456,6 +466,7 @@ class TokenAuthService {
         // Exchange Firebase token for JWT
         final exchangeResult = await _exchangeFirebaseToken(
           userCredential.user!,
+          isSignup: isSignup,
         );
 
         if (exchangeResult.success && exchangeResult.user != null) {
@@ -467,6 +478,7 @@ class TokenAuthService {
           return AuthResult(
             success: true,
             message: 'Successfully signed in with Google!',
+            isNewUser: exchangeResult.isNewUser,
           );
         } else {
           _updateState(AuthState.error);
@@ -489,7 +501,7 @@ class TokenAuthService {
   }
 
   /// Sign in with Apple
-  static Future<AuthResult> signInWithApple() async {
+  static Future<AuthResult> signInWithApple({bool isSignup = false}) async {
     try {
       _updateState(AuthState.loading);
 
@@ -523,6 +535,7 @@ class TokenAuthService {
         // Exchange Firebase token for JWT
         final exchangeResult = await _exchangeFirebaseToken(
           userCredential.user!,
+          isSignup: isSignup,
         );
 
         if (exchangeResult.success && exchangeResult.user != null) {
@@ -534,6 +547,7 @@ class TokenAuthService {
           return AuthResult(
             success: true,
             message: 'Successfully signed in with Apple!',
+            isNewUser: exchangeResult.isNewUser,
           );
         } else {
           _updateState(AuthState.error);
@@ -761,7 +775,7 @@ class TokenAuthService {
       case 'user-not-found':
         return 'No user found with this email address.';
       case 'wrong-password':
-        return 'Incorrect password. Please try again.';
+        return 'Incorrect credentials. Please try again.';
       case 'email-already-in-use':
         return 'An account with this email already exists.';
       case 'weak-password':
@@ -881,6 +895,11 @@ class TokenExchangeResult {
 class AuthResult {
   final bool success;
   final String message;
+  final bool isNewUser;
 
-  AuthResult({required this.success, required this.message});
+  AuthResult({
+    required this.success,
+    required this.message,
+    this.isNewUser = false,
+  });
 }

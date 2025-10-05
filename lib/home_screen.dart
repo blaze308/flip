@@ -20,6 +20,7 @@ import 'create_post_type_screen.dart';
 import 'story_viewer_screen.dart';
 import 'immersive_viewer_screen.dart';
 import 'screens/message_list_screen.dart';
+import 'complete_profile_screen.dart';
 import 'providers/app_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -247,12 +248,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final currentTab = ref.watch(currentTabProvider);
 
     if (appState.isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF1A1A1A),
-        body: Center(
-          child: CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4ECDC4)),
-          ),
+      return Scaffold(
+        backgroundColor: const Color(0xFF1A1A1A),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: const [
+            StoryShimmer(),
+            SizedBox(height: 16),
+            PostShimmer(),
+            SizedBox(height: 16),
+            PostShimmer(),
+          ],
         ),
       );
     }
@@ -332,7 +338,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return GestureDetector(
       onTap: () => _onBottomNavTap(index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ), // Increased tap area
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -485,101 +494,133 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     return storiesAsync.when(
       data: (stories) {
-        // Always show the "Your Story" option for everyone (guests and authenticated users)
-        final totalItems = stories.length + 1; // Always add 1 for "Your Story"
+        final currentUser = ref.watch(currentUserProvider);
 
+        // Separate current user's stories and put them first
+        final currentUserStories = <StoryFeedItem>[];
+        final otherStories = <StoryFeedItem>[];
+
+        for (final story in stories) {
+          if (story.userId == currentUser?.id) {
+            currentUserStories.add(story);
+          } else {
+            otherStories.add(story);
+          }
+        }
+
+        // Build final list: current user's stories first, then others
+        final orderedStories = [...currentUserStories, ...otherStories];
+
+        // Always show the stories section (with create button), even if no stories exist
         return SliverToBoxAdapter(
           child: Container(
             height: 100,
             margin: const EdgeInsets.symmetric(vertical: 16),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: totalItems,
-              itemBuilder: (context, index) {
-                // First item is always "Your Story" option (for everyone)
-                if (index == 0) {
-                  return _buildCurrentUserStoryItem();
-                }
+            child: Row(
+              children: [
+                // LEFT: Create button (constant, always visible)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 8),
+                  child: _buildCreateButton(),
+                ),
+                // RIGHT: Scrollable stories list (empty if no stories)
+                if (orderedStories.isNotEmpty)
+                  Expanded(
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.only(right: 16),
+                      itemCount: orderedStories.length,
+                      itemBuilder: (context, index) {
+                        final storyFeedItem = orderedStories[index];
 
-                // Adjust index for story feed items
-                final storyIndex = index - 1;
-                final storyFeedItem = stories[storyIndex];
-
-                return GestureDetector(
-                  onTap: () => _viewUserStories(storyFeedItem),
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 16),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient:
-                                storyFeedItem.hasUnviewedStories
-                                    ? const LinearGradient(
-                                      colors: [
-                                        Color(0xFF4ECDC4),
-                                        Color(0xFF44A08D),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    )
-                                    : null,
-                            border:
-                                !storyFeedItem.hasUnviewedStories
-                                    ? Border.all(color: Colors.grey, width: 2)
-                                    : null,
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: CircleAvatar(
-                              radius: 28,
-                              backgroundColor: Colors.grey[800],
-                              backgroundImage:
-                                  storyFeedItem.userAvatar != null &&
-                                          storyFeedItem.userAvatar!.isNotEmpty
-                                      ? NetworkImage(storyFeedItem.userAvatar!)
-                                      : null,
-                              child:
-                                  storyFeedItem.userAvatar == null ||
-                                          storyFeedItem.userAvatar!.isEmpty
-                                      ? Text(
-                                        storyFeedItem.username.isNotEmpty
-                                            ? storyFeedItem.username[0]
-                                                .toUpperCase()
-                                            : '?',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      )
-                                      : null,
+                        return GestureDetector(
+                          onTap: () => _viewUserStories(storyFeedItem),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 16),
+                            child: Column(
+                              children: [
+                                Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient:
+                                        storyFeedItem.hasUnviewedStories
+                                            ? const LinearGradient(
+                                              colors: [
+                                                Color(0xFF4ECDC4),
+                                                Color(0xFF44A08D),
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            )
+                                            : null,
+                                    border:
+                                        !storyFeedItem.hasUnviewedStories
+                                            ? Border.all(
+                                              color: Colors.grey,
+                                              width: 2,
+                                            )
+                                            : null,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: CircleAvatar(
+                                      radius: 28,
+                                      backgroundColor: Colors.grey[800],
+                                      backgroundImage:
+                                          storyFeedItem.userAvatar != null &&
+                                                  storyFeedItem
+                                                      .userAvatar!
+                                                      .isNotEmpty
+                                              ? NetworkImage(
+                                                storyFeedItem.userAvatar!,
+                                              )
+                                              : null,
+                                      child:
+                                          storyFeedItem.userAvatar == null ||
+                                                  storyFeedItem
+                                                      .userAvatar!
+                                                      .isEmpty
+                                              ? Text(
+                                                storyFeedItem
+                                                        .username
+                                                        .isNotEmpty
+                                                    ? storyFeedItem.username[0]
+                                                        .toUpperCase()
+                                                    : '?',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              )
+                                              : null,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: 60,
+                                  child: Text(
+                                    storyFeedItem.username,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: 60,
-                          child: Text(
-                            storyFeedItem.username,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
-                );
-              },
+              ],
             ),
           ),
         );
@@ -589,11 +630,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             child: Container(
               height: 100,
               margin: const EdgeInsets.symmetric(vertical: 16),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: 5,
-                itemBuilder: (context, index) => const StoryShimmer(),
+              child: Row(
+                children: [
+                  // LEFT: Create button
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 8),
+                    child: _buildCreateButton(),
+                  ),
+                  // RIGHT: Loading shimmers
+                  Expanded(
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.only(right: 16),
+                      itemCount: 5,
+                      itemBuilder: (context, index) => const StoryShimmer(),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -602,124 +655,99 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             child: Container(
               height: 100,
               margin: const EdgeInsets.symmetric(vertical: 16),
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: 1, // Just show "Your Story"
-                itemBuilder: (context, index) => _buildCurrentUserStoryItem(),
+              child: Row(
+                children: [
+                  // LEFT: Create button (always visible even on error)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 8),
+                    child: _buildCreateButton(),
+                  ),
+                  // RIGHT: Error message
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'Failed to load stories',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
     );
   }
 
-  Widget _buildCurrentUserStoryItem() {
+  Widget _buildCreateButton() {
     final currentUser = ref.watch(currentUserProvider);
-    final storiesAsync = ref.watch(storiesProvider);
-
-    // Check if current user has any stories
-    StoryFeedItem? userStory;
-    storiesAsync.whenData((stories) {
-      try {
-        userStory = stories.firstWhere(
-          (story) => story.userId == currentUser?.id,
-        );
-      } catch (e) {
-        userStory = null;
-      }
-    });
-
-    final hasStories = userStory != null;
 
     return GestureDetector(
-      onTap: () {
-        // Always show modal (with View Story option if hasStories is true)
-        _showCreateOptions(context, userStory: userStory);
-      },
-      child: Container(
-        margin: const EdgeInsets.only(right: 16),
-        child: Column(
-          children: [
-            Stack(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: hasStories ? const Color(0xFF4ECDC4) : Colors.grey,
-                      width: 2,
-                    ),
-                  ),
-                  child: CircleAvatar(
-                    radius: 28,
-                    backgroundColor: Colors.grey[800],
-                    backgroundImage:
-                        ref.watch(currentUserProvider)?.photoURL != null &&
-                                ref
-                                    .watch(currentUserProvider)!
-                                    .photoURL!
-                                    .isNotEmpty
-                            ? NetworkImage(
-                              ref.watch(currentUserProvider)!.photoURL!,
-                            )
-                            : null,
-                    child:
-                        ref.watch(currentUserProvider)?.photoURL == null ||
-                                ref
-                                    .watch(currentUserProvider)!
-                                    .photoURL!
-                                    .isEmpty
-                            ? Text(
-                              ref
-                                          .watch(currentUserProvider)
-                                          ?.displayName
-                                          ?.isNotEmpty ==
-                                      true
-                                  ? ref
-                                      .watch(currentUserProvider)!
-                                      .displayName![0]
-                                      .toUpperCase()
-                                  : 'Y', // Show 'Y' for "Your Story" even for guests
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                            : null,
-                  ),
+      onTap: () => _showCreateOptions(context, userStory: null),
+      child: Column(
+        children: [
+          Stack(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey, width: 2),
                 ),
-                // Always show plus button
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF4ECDC4),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.add, color: Colors.white, size: 12),
-                  ),
+                child: CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.grey[800],
+                  backgroundImage:
+                      currentUser?.photoURL != null &&
+                              currentUser!.photoURL!.isNotEmpty
+                          ? NetworkImage(currentUser.photoURL!)
+                          : null,
+                  child:
+                      currentUser?.photoURL == null ||
+                              currentUser!.photoURL!.isEmpty
+                          ? Text(
+                            currentUser?.displayName?.isNotEmpty == true
+                                ? currentUser!.displayName![0].toUpperCase()
+                                : currentUser?.email?.isNotEmpty == true
+                                ? currentUser!.email![0].toUpperCase()
+                                : 'Y',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                          : null,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const SizedBox(
-              width: 60,
-              child: Text(
-                'Your Story',
-                style: TextStyle(color: Colors.white, fontSize: 12),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
+              // Plus button overlay
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF4ECDC4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.add, color: Colors.white, size: 12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const SizedBox(
+            width: 60,
+            child: Text(
+              'Create',
+              style: TextStyle(color: Colors.white, fontSize: 12),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1197,7 +1225,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         children: [
           OptimisticButton(
             onPressed: () => _toggleLike(post.id),
-            isActive: post.isLiked,
+            isActive: post.likes > 0, // Red if anyone liked it
             activeColor: Colors.red,
             inactiveColor: Colors.white,
             isDisabled: isButtonDisabled('like_${post.id}'),
@@ -1219,44 +1247,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ],
             ),
           ),
-          const SizedBox(width: 24),
+          const SizedBox(width: 12),
           GestureDetector(
             onTap: () => _showCommentsSheet(post),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.chat_bubble_outline,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${post.comments}',
-                  style: const TextStyle(
+            child: Container(
+              padding: const EdgeInsets.all(8), // Increased tap area
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.chat_bubble_outline,
                     color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    size: 24,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Text(
+                    '${post.comments}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(width: 24),
+          const SizedBox(width: 12),
           GestureDetector(
             onTap: () => _sharePost(post.id),
-            child: Row(
-              children: [
-                const Icon(Icons.share, color: Colors.white, size: 24),
-                const SizedBox(width: 8),
-                Text(
-                  '${post.shares}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+            child: Container(
+              padding: const EdgeInsets.all(8), // Increased tap area
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.share, color: Colors.white, size: 24),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${post.shares}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -1346,47 +1382,94 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildProfileTab() {
+    final currentUser = ref.watch(currentUserProvider);
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.grey[800],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.grey[800],
+                image:
+                    currentUser?.photoURL != null
+                        ? DecorationImage(
+                          image: NetworkImage(currentUser!.photoURL!),
+                          fit: BoxFit.cover,
+                        )
+                        : null,
+              ),
+              child:
+                  currentUser?.photoURL == null
+                      ? const Icon(Icons.person, color: Colors.white, size: 50)
+                      : null,
             ),
-            child: const Icon(Icons.person, color: Colors.white, size: 50),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            ref.watch(currentUserProvider)?.displayName ?? 'User',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            ref.watch(currentUserProvider)?.email ?? '',
-            style: const TextStyle(color: Colors.grey, fontSize: 16),
-          ),
-          const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: _handleLogout,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
+            const SizedBox(height: 16),
+            Text(
+              currentUser?.displayName ?? 'User',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            child: const Text('Logout'),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              currentUser?.email ?? currentUser?.phoneNumber ?? '',
+              style: const TextStyle(color: Colors.grey, fontSize: 16),
+            ),
+            const SizedBox(height: 32),
+
+            // Complete Profile Button
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const CompleteProfileScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.edit, color: Color(0xFF4ECDC4)),
+              label: const Text(
+                'Complete Profile',
+                style: TextStyle(color: Color(0xFF4ECDC4)),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF4ECDC4), width: 2),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Logout Button
+            ElevatedButton(
+              onPressed: _handleLogout,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
+                ),
+              ),
+              child: const Text('Logout'),
+            ),
+          ],
+        ),
       ),
     );
   }

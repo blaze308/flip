@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "ancientplustech.ancient.flip"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36  // Updated for record package v6.1.2 compatibility
     ndkVersion = "27.0.12077973"
 
     compileOptions {

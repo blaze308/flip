@@ -16,6 +16,7 @@ import 'otp_verification_screen.dart';
 import 'home_screen.dart';
 import 'biometric_setup_screen.dart';
 import 'biometric_login_screen.dart';
+import 'complete_profile_screen.dart';
 import 'token_app_router.dart';
 import 'create_story_type_screen.dart';
 import 'create_text_story_screen.dart';
@@ -69,6 +70,7 @@ class AncientFlipApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/biometric-setup': (context) => const BiometricSetupScreen(),
         '/biometric-login': (context) => const BiometricLoginScreen(),
+        '/complete-profile': (context) => const CompleteProfileScreen(),
         '/create-story': (context) => const CreateStoryTypeScreen(),
         '/create-text-story': (context) => const CreateTextStoryScreen(),
         '/create-image-story': (context) => const CreateImageStoryScreen(),

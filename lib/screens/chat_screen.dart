@@ -16,6 +16,7 @@ import '../services/cloudinary_service.dart';
 import '../widgets/custom_toaster.dart';
 import '../widgets/modern_message_bubble.dart';
 import '../widgets/message_input.dart';
+import '../widgets/shimmer_loading.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final ChatModel chat;
@@ -337,9 +338,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
       chatId: widget.chat.id,
       senderId: currentUser.id,
-      senderFirebaseUid: currentUser.firebaseUid,
-      senderName: currentUser.displayName ?? 'You',
-      senderAvatar: currentUser.photoURL,
+      sender: null, // Will be populated by backend
       type: MessageType.text,
       content: text,
       status: MessageStatus.sending,
@@ -358,7 +357,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ? MessageReference(
                 messageId: _replyToMessage!.id,
                 senderId: _replyToMessage!.senderId,
-                senderName: _replyToMessage!.senderName,
+                sender: _replyToMessage!.sender,
                 content: _replyToMessage!.content ?? '',
                 type: _replyToMessage!.type,
                 timestamp: _replyToMessage!.createdAt,
@@ -436,6 +435,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _sendMediaMessage(MessageType type, File file) async {
     try {
       print('🎵 ChatScreen: Sending ${type.name} message...');
+
+      // Get current user info
+      final currentUser = TokenAuthService.currentUser;
+      if (currentUser == null) return;
+
+      final optimisticMessage = MessageModel(
+        id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+        chatId: widget.chat.id,
+        senderId: currentUser.id,
+        sender: null, // Will be populated by backend
+        type: type,
+        content: null,
+        media: null, // Will be populated after upload
+        localFilePath: file.path, // For immediate UI display
+        status: MessageStatus.sending,
+        reactions: const [],
+        mentions: const [],
+        readBy: const [],
+        deliveredTo: const [],
+        isEdited: false,
+        isDeleted: false,
+        deletedFor: const [],
+        priority: MessagePriority.normal,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Add optimistic message to UI immediately
+      setState(() {
+        _messages.insert(0, optimisticMessage);
+      });
+      _scrollToBottom();
+
+      // Upload media in background
       final result = await ChatService.sendMediaMessage(
         widget.chat.id,
         type,
@@ -447,15 +480,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         print('🎵 ChatScreen: ${type.name} message sent successfully');
         _clearReply();
 
-        // Refresh messages to show the new audio message
-        await _loadMessages();
+        // Replace optimistic message with real message
+        final messageIndex = _messages.indexWhere(
+          (m) => m.id == optimisticMessage.id,
+        );
+        if (messageIndex != -1) {
+          setState(() {
+            _messages[messageIndex] = result.message!.copyWith(
+              status: MessageStatus.sent,
+            );
+          });
+        }
       } else {
         print(
           '🎵 ChatScreen: Failed to send ${type.name} message: ${result.resultMessage}',
         );
+        // Mark optimistic message as failed
+        final messageIndex = _messages.indexWhere(
+          (m) => m.id == optimisticMessage.id,
+        );
+        if (messageIndex != -1) {
+          setState(() {
+            _messages[messageIndex] = optimisticMessage.copyWith(
+              status: MessageStatus.failed,
+            );
+          });
+        }
       }
     } catch (e) {
-      print('🎵 ChatScreen: Error sending ${type.name} message: $e');
+      print('🎵 ChatScreen: Error sending ${type.name}: $e');
+      // Find and mark as failed
+      final failedMessage = _messages.firstWhere(
+        (m) => m.id.startsWith('temp_') && m.type == type,
+        orElse: () => _messages.first,
+      );
+      final messageIndex = _messages.indexOf(failedMessage);
+      if (messageIndex != -1) {
+        setState(() {
+          _messages[messageIndex] = failedMessage.copyWith(
+            status: MessageStatus.failed,
+          );
+        });
+      }
     }
   }
 
@@ -607,54 +673,56 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-            Expanded(
-              child: CloudinaryService.getMockLottieFiles().isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.animation,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No Lottie animations available',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 16,
+                Expanded(
+                  child:
+                      CloudinaryService.getMockLottieFiles().isEmpty
+                          ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.animation,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'No Lottie animations available',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Add Lottie files to Cloudinary lotties folder',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ),
+                          )
+                          : GridView.builder(
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 16,
+                                  mainAxisSpacing: 16,
+                                  childAspectRatio: 1,
+                                ),
+                            itemCount:
+                                CloudinaryService.getMockLottieFiles().length,
+                            itemBuilder: (context, index) {
+                              final lottie =
+                                  CloudinaryService.getMockLottieFiles()[index];
+                              return _buildLottieItem(lottie);
+                            },
                           ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Add Lottie files to Cloudinary lotties folder',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    )
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(16),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 1,
-                          ),
-                      itemCount: CloudinaryService.getMockLottieFiles().length,
-                      itemBuilder: (context, index) {
-                        final lottie =
-                            CloudinaryService.getMockLottieFiles()[index];
-                        return _buildLottieItem(lottie);
-                      },
-                    ),
-            ),
+                ),
               ],
             ),
           ),
@@ -686,53 +754,56 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-            Expanded(
-              child: CloudinaryService.getMockSvgaFiles().isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.play_circle_outline,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No SVGA animations available',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 16,
+                Expanded(
+                  child:
+                      CloudinaryService.getMockSvgaFiles().isEmpty
+                          ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.play_circle_outline,
+                                  size: 64,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'No SVGA animations available',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Add SVGA files to Cloudinary svga folder',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ),
+                          )
+                          : GridView.builder(
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 16,
+                                  mainAxisSpacing: 16,
+                                  childAspectRatio: 1,
+                                ),
+                            itemCount:
+                                CloudinaryService.getMockSvgaFiles().length,
+                            itemBuilder: (context, index) {
+                              final svga =
+                                  CloudinaryService.getMockSvgaFiles()[index];
+                              return _buildSvgaItem(svga);
+                            },
                           ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Add SVGA files to Cloudinary svga folder',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    )
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(16),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                            childAspectRatio: 1,
-                          ),
-                      itemCount: CloudinaryService.getMockSvgaFiles().length,
-                      itemBuilder: (context, index) {
-                        final svga = CloudinaryService.getMockSvgaFiles()[index];
-                        return _buildSvgaItem(svga);
-                      },
-                    ),
-            ),
+                ),
               ],
             ),
           ),
@@ -852,12 +923,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      Navigator.pop(context); // Close media picker modal
+
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: source);
 
-      if (pickedFile != null) {
+      if (pickedFile != null && mounted) {
         final file = File(pickedFile.path);
-        await _sendMediaMessage(MessageType.image, file);
+        // Show preview before sending
+        await _showMediaPreview(file, MessageType.image);
       }
     } catch (e) {
       ToasterService.showError(context, 'Failed to pick image');
@@ -866,12 +940,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Future<void> _pickVideo() async {
     try {
+      Navigator.pop(context); // Close media picker modal
+
       final picker = ImagePicker();
       final pickedFile = await picker.pickVideo(source: ImageSource.gallery);
 
-      if (pickedFile != null) {
+      if (pickedFile != null && mounted) {
         final file = File(pickedFile.path);
-        await _sendMediaMessage(MessageType.video, file);
+        // Show preview before sending
+        await _showMediaPreview(file, MessageType.video);
       }
     } catch (e) {
       ToasterService.showError(context, 'Failed to pick video');
@@ -899,6 +976,150 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
     } catch (e) {
       ToasterService.showError(context, 'Failed to pick file');
+    }
+  }
+
+  /// Show media preview before sending
+  Future<void> _showMediaPreview(File file, MessageType type) async {
+    final shouldSend = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder:
+          (context) => Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.7,
+                maxWidth: MediaQuery.of(context).size.width * 0.9,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          type == MessageType.image
+                              ? 'Send Image'
+                              : type == MessageType.video
+                              ? 'Send Video'
+                              : 'Send Audio',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          icon: const Icon(Icons.close, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Media Preview
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child:
+                            type == MessageType.image
+                                ? Image.file(file, fit: BoxFit.contain)
+                                : type == MessageType.video
+                                ? Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      color: Colors.black,
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.videocam,
+                                          size: 64,
+                                          color: Colors.white54,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.play_circle_outline,
+                                      size: 80,
+                                      color: Colors.white,
+                                    ),
+                                  ],
+                                )
+                                : Container(
+                                  color: const Color(0xFF2A2A2A),
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.audiotrack,
+                                          size: 64,
+                                          color: Colors.white54,
+                                        ),
+                                        SizedBox(height: 16),
+                                        Text(
+                                          'Audio Ready',
+                                          style: TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                      ),
+                    ),
+                  ),
+
+                  // Send Button
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4ECDC4),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            icon: const Icon(Icons.send),
+                            label: const Text(
+                              'Send',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+    );
+
+    // If user confirmed, send the media
+    if (shouldSend == true && mounted) {
+      await _sendMediaMessage(type, file);
     }
   }
 
@@ -1089,7 +1310,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
       final audioFile = await AudioService.stopRecording();
       if (audioFile != null && mounted) {
-        await _sendMediaMessage(MessageType.audio, audioFile);
+        // Show preview before sending
+        await _showMediaPreview(audioFile, MessageType.audio);
       }
     } catch (e) {
       setState(() {
@@ -1297,11 +1519,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Widget _buildMessageList() {
     if (_isLoading && _messages.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4ECDC4)),
-        ),
-      );
+      return const MessageShimmer();
     }
 
     if (_messages.isEmpty) {

@@ -80,7 +80,7 @@ dependencies:
   intl: ^0.19.0
 
   # Audio recording and playback
-  flutter_sound: ^9.2.13
+  record: ^6.1.2 # Simpler, more reliable audio recording
   audioplayers: ^5.2.1
 
   # Jitsi Meet for video/audio calls

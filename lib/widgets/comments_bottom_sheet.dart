@@ -1,3 +1,4 @@
+import 'package:flip/widgets/shimmer_loading.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/post_model.dart';
@@ -8,8 +9,11 @@ class CommentsBottomSheet extends StatefulWidget {
   final PostModel post;
   final VoidCallback? onCommentAdded;
 
-  const CommentsBottomSheet({Key? key, required this.post, this.onCommentAdded})
-    : super(key: key);
+  const CommentsBottomSheet({
+    super.key,
+    required this.post,
+    this.onCommentAdded,
+  });
 
   @override
   State<CommentsBottomSheet> createState() => _CommentsBottomSheetState();
@@ -290,95 +294,94 @@ class _CommentsBottomSheetState extends State<CommentsBottomSheet>
 
   @override
   Widget build(BuildContext context) {
-    return SlideTransition(
-      position: _slideAnimation,
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.75,
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(2),
-              ),
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom, // Keyboard padding
+      ),
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
-
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              child: Row(
-                children: [
-                  const Text(
-                    'Comments',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${_comments.length}',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 16),
-                  ),
-                ],
-              ),
-            ),
 
-            // Comments list
-            Expanded(
-              child:
-                  _isLoading
-                      ? _buildLoadingState()
-                      : _comments.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: _comments.length,
-                        itemBuilder: (context, index) {
-                          return _buildCommentItem(_comments[index]);
-                        },
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Comments',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                       ),
-            ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_comments.length}',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
 
-            // Comment input
-            _buildCommentInput(),
-          ],
+              // Comments list
+              Expanded(
+                child:
+                    _isLoading
+                        ? _buildLoadingState()
+                        : _comments.isEmpty
+                        ? _buildEmptyState()
+                        : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: _comments.length,
+                          itemBuilder: (context, index) {
+                            return _buildCommentItem(_comments[index]);
+                          },
+                        ),
+              ),
+
+              // Comment input
+              _buildCommentInput(),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: Color(0xFF4ECDC4)),
-          SizedBox(height: 16),
-          Text(
-            'Loading comments...',
-            style: TextStyle(color: Colors.grey, fontSize: 16),
-          ),
-        ],
-      ),
+    return ListView.builder(
+      itemCount: 5,
+      itemBuilder: (context, index) => const CommentShimmer(),
     );
   }
 

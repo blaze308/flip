@@ -84,8 +84,12 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
     _overlayAnimationController.dispose();
     _pageController.dispose();
 
-    // Dispose all video controllers
+    // Pause and dispose all video controllers
     for (var controller in _videoControllers.values) {
+      if (controller.value.isInitialized) {
+        controller.pause(); // Pause video before disposing
+        controller.setVolume(0.0); // Mute immediately
+      }
       controller.dispose();
     }
 
@@ -721,7 +725,7 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
                   children: [
                     OptimisticButton(
                       onPressed: () => _toggleLike(currentPost.id),
-                      isActive: currentPost.isLiked,
+                      isActive: currentPost.likes > 0, // Red if anyone liked it
                       activeColor: Colors.red,
                       inactiveColor: Colors.white,
                       isDisabled: isButtonDisabled('like_${currentPost.id}'),

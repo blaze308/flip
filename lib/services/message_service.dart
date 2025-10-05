@@ -27,7 +27,7 @@ class MessageService {
         '📧 This email is already registered. Try logging in instead.',
     'user_not_found':
         '👤 No account found with this email. Please check or sign up.',
-    'wrong_password': '🔒 Incorrect password. Please try again.',
+    'wrong_password': '🔒 Incorrect credentials. Please try again.',
     'too_many_requests':
         '⏰ Too many attempts. Please wait a moment before trying again.',
     'network_error':
@@ -104,9 +104,10 @@ class MessageService {
     return '📱 $key';
   }
 
-  /// Get error message based on Firebase error code
-  static String getFirebaseErrorMessage(String errorCode) {
-    switch (errorCode) {
+  /// Get error message based on Firebase error code or error message
+  static String getFirebaseErrorMessage(String errorCodeOrMessage) {
+    // Handle Firebase error codes
+    switch (errorCodeOrMessage) {
       case 'user-not-found':
         return getMessage('user_not_found');
       case 'wrong-password':
@@ -123,9 +124,51 @@ class MessageService {
         return getMessage('network_error');
       case 'user-disabled':
         return getMessage('account_disabled');
-      default:
-        return getMessage('error');
     }
+
+    // Handle backend error messages
+    final lowerMessage = errorCodeOrMessage.toLowerCase();
+
+    if (lowerMessage.contains('no account found') ||
+        lowerMessage.contains('user not found')) {
+      return getMessage('user_not_found');
+    }
+
+    if (lowerMessage.contains('already exists') ||
+        lowerMessage.contains('email already in use')) {
+      return getMessage('email_already_exists');
+    }
+
+    if (lowerMessage.contains('incorrect') ||
+        lowerMessage.contains('wrong password') ||
+        lowerMessage.contains('invalid credential') ||
+        lowerMessage.contains('malformed')) {
+      return getMessage('wrong_password');
+    }
+
+    if (lowerMessage.contains('weak password')) {
+      return getMessage('weak_password');
+    }
+
+    if (lowerMessage.contains('invalid email')) {
+      return getMessage('invalid_email');
+    }
+
+    if (lowerMessage.contains('too many')) {
+      return getMessage('too_many_requests');
+    }
+
+    if (lowerMessage.contains('network') ||
+        lowerMessage.contains('connection')) {
+      return getMessage('network_error');
+    }
+
+    if (lowerMessage.contains('disabled')) {
+      return getMessage('account_disabled');
+    }
+
+    // Default fallback
+    return getMessage('error');
   }
 
   /// Get network error message based on exception type

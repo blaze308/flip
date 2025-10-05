@@ -14,11 +14,13 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _fullNameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
 
   late AnimationController _animationController;
@@ -57,21 +59,28 @@ class _RegisterScreenState extends State<RegisterScreen>
   @override
   void dispose() {
     _animationController.dispose();
-    _fullNameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  String? _validateFullName(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Full name is required';
+  String? _validateUsername(String? value) {
+    // Trim the value first
+    final trimmedValue = value?.trim();
+
+    if (trimmedValue == null || trimmedValue.isEmpty) {
+      return 'Username is required';
     }
-    if (value.length < 2) {
-      return 'Full name must be at least 2 characters';
+    if (trimmedValue.length < 3) {
+      return 'Username must be at least 3 characters';
     }
-    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(value)) {
-      return 'Full name can only contain letters and spaces';
+    if (trimmedValue.length > 20) {
+      return 'Username must be less than 20 characters';
+    }
+    if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(trimmedValue)) {
+      return 'Username can only contain letters, numbers, and underscores';
     }
     return null;
   }
@@ -91,11 +100,21 @@ class _RegisterScreenState extends State<RegisterScreen>
       return 'Password is required';
     }
     if (value.length < 8) {
-      return 'Password must be at least 6 characters';
+      return 'Password must be at least 8 characters';
     }
     // if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)').hasMatch(value)) {
     //   return 'Password must contain uppercase, lowercase, and number';
     // }
+    return null;
+  }
+
+  String? _validateConfirmPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please confirm your password';
+    }
+    if (value != _passwordController.text) {
+      return 'Passwords do not match';
+    }
     return null;
   }
 
@@ -107,12 +126,12 @@ class _RegisterScreenState extends State<RegisterScreen>
 
       try {
         print('📝 RegisterScreen: Attempting registration...');
-        print('   - Full Name: ${_fullNameController.text.trim()}');
+        print('   - Username: ${_usernameController.text.trim()}');
         print('   - Email: ${_emailController.text.trim()}');
 
         // Call token auth registration
         final result = await TokenAuthService.registerWithEmailAndPassword(
-          fullName: _fullNameController.text.trim(),
+          username: _usernameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
@@ -130,14 +149,20 @@ class _RegisterScreenState extends State<RegisterScreen>
               print('   - Profile Image: ${user.photoURL ?? "No image"}');
             }
             print('   - Backend Sync: Success');
+            print('   - Is New User: ${result.isNewUser}');
 
             context.showSuccessToaster(
               'Welcome ${user?.displayName ?? 'User'}! ${MessageService.getMessage('registration_success')}',
               devMessage: 'User registration successful: ${result.message}',
             );
 
-            // Navigate to biometric setup
-            Navigator.of(context).pushReplacementNamed('/biometric-setup');
+            // Check if this is a new user - if so, show complete profile screen
+            // Otherwise go directly to biometric setup
+            if (result.isNewUser) {
+              Navigator.of(context).pushReplacementNamed('/complete-profile');
+            } else {
+              Navigator.of(context).pushReplacementNamed('/biometric-setup');
+            }
           }
         } else {
           // Complete failure - Firebase registration failed
@@ -146,7 +171,7 @@ class _RegisterScreenState extends State<RegisterScreen>
             print('   - Error: ${result.message}');
 
             context.showErrorToaster(
-              result.message,
+              MessageService.getFirebaseErrorMessage(result.message),
               devMessage: 'Registration failed: ${result.message}',
             );
           }
@@ -175,7 +200,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     });
 
     try {
-      final result = await TokenAuthService.signInWithGoogle();
+      final result = await TokenAuthService.signInWithGoogle(isSignup: true);
 
       if (result.success) {
         if (mounted) {
@@ -184,14 +209,19 @@ class _RegisterScreenState extends State<RegisterScreen>
             devMessage: 'Google registration successful: ${result.message}',
           );
 
-          // Navigate to biometric setup
-          Navigator.of(context).pushReplacementNamed('/biometric-setup');
+          // Check if this is a new user - if so, show complete profile screen
+          // Otherwise go directly to biometric setup
+          if (result.isNewUser) {
+            Navigator.of(context).pushReplacementNamed('/complete-profile');
+          } else {
+            Navigator.of(context).pushReplacementNamed('/biometric-setup');
+          }
         }
       } else {
         if (mounted) {
           context.showErrorToaster(
-            result.message,
-            devMessage: 'OAuth registration failed: ${result.message}',
+            MessageService.getFirebaseErrorMessage(result.message),
+            devMessage: 'Google OAuth registration failed: ${result.message}',
           );
         }
       }
@@ -217,23 +247,28 @@ class _RegisterScreenState extends State<RegisterScreen>
     });
 
     try {
-      final result = await TokenAuthService.signInWithApple();
+      final result = await TokenAuthService.signInWithApple(isSignup: true);
 
       if (result.success) {
         if (mounted) {
           context.showSuccessToaster(
             'Welcome ${TokenAuthService.currentUser?.displayName ?? 'User'}! ${MessageService.getMessage('registration_success')}',
-            devMessage: 'Google registration successful: ${result.message}',
+            devMessage: 'Apple registration successful: ${result.message}',
           );
 
-          // Navigate to biometric setup
-          Navigator.of(context).pushReplacementNamed('/biometric-setup');
+          // Check if this is a new user - if so, show complete profile screen
+          // Otherwise go directly to biometric setup
+          if (result.isNewUser) {
+            Navigator.of(context).pushReplacementNamed('/complete-profile');
+          } else {
+            Navigator.of(context).pushReplacementNamed('/biometric-setup');
+          }
         }
       } else {
         if (mounted) {
           context.showErrorToaster(
-            result.message,
-            devMessage: 'OAuth registration failed: ${result.message}',
+            MessageService.getFirebaseErrorMessage(result.message),
+            devMessage: 'Apple OAuth registration failed: ${result.message}',
           );
         }
       }
@@ -321,23 +356,26 @@ class _RegisterScreenState extends State<RegisterScreen>
 
                         const SizedBox(height: 40),
 
-                        // Full Name Field
+                        // Username Field
                         Container(
                           decoration: BoxDecoration(
                             color: const Color(0xFF34495E),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: TextFormField(
-                            controller: _fullNameController,
-                            validator: _validateFullName,
+                            controller: _usernameController,
+                            validator: _validateUsername,
                             style: const TextStyle(color: Colors.white),
+                            textCapitalization: TextCapitalization.none,
+                            autocorrect: false,
                             decoration: InputDecoration(
-                              hintText: 'Full Name',
+                              hintText: 'Username (e.g., john_doe123)',
                               hintStyle: TextStyle(
                                 color: Colors.white.withOpacity(0.6),
+                                fontSize: 14,
                               ),
                               prefixIcon: Icon(
-                                Icons.person_outline,
+                                Icons.alternate_email,
                                 color: Colors.white.withOpacity(0.7),
                               ),
                               border: InputBorder.none,
@@ -410,6 +448,51 @@ class _RegisterScreenState extends State<RegisterScreen>
                                 },
                                 icon: Icon(
                                   _isPasswordVisible
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  color: Colors.white.withOpacity(0.7),
+                                ),
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Confirm Password Field
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF34495E),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: TextFormField(
+                            controller: _confirmPasswordController,
+                            validator: _validateConfirmPassword,
+                            obscureText: !_isConfirmPasswordVisible,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: 'Confirm Password',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.6),
+                              ),
+                              prefixIcon: Icon(
+                                Icons.lock_outline,
+                                color: Colors.white.withOpacity(0.7),
+                              ),
+                              suffixIcon: IconButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _isConfirmPasswordVisible =
+                                        !_isConfirmPasswordVisible;
+                                  });
+                                },
+                                icon: Icon(
+                                  _isConfirmPasswordVisible
                                       ? Icons.visibility_off_outlined
                                       : Icons.visibility_outlined,
                                   color: Colors.white.withOpacity(0.7),
