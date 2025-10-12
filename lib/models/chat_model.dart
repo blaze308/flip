@@ -38,6 +38,20 @@ class ChatMember {
   /// Get username from populated user or fallback
   String get username => user?.username ?? 'user_${userId.substring(0, 8)}';
 
+  /// Get best name for chat display (prefers username to avoid emails)
+  String get bestChatName {
+    if (user != null) {
+      final uname = user!.username;
+      // If username is valid (not default), use it
+      if (uname.isNotEmpty && uname != 'user') {
+        return '@$uname';
+      }
+      // Otherwise use displayName
+      return user!.bestDisplayName;
+    }
+    return 'User ${userId.substring(0, 8)}';
+  }
+
   /// Get avatar from populated user
   String? get avatar => user?.bestAvatar;
 
@@ -49,11 +63,16 @@ class ChatMember {
 
     if (userIdData is Map<String, dynamic>) {
       // User data is populated - convert to UserModel
-      userId = userIdData['_id'] as String;
+      userId =
+          (userIdData['_id'] as String?) ?? (userIdData['id'] as String?) ?? '';
       user = UserModel.fromJson(userIdData);
-    } else {
+    } else if (userIdData is String) {
       // userId is just a string reference
-      userId = userIdData as String;
+      userId = userIdData;
+      user = null;
+    } else {
+      // Fallback for null or unexpected type
+      userId = '';
       user = null;
     }
 
@@ -64,8 +83,12 @@ class ChatMember {
         (e) => e.name == json['role'],
         orElse: () => MemberRole.member,
       ),
-      joinedAt: DateTime.parse(json['joinedAt'] as String),
-      lastSeenAt: DateTime.parse(json['lastSeenAt'] as String),
+      joinedAt:
+          DateTime.tryParse(json['joinedAt'] as String? ?? '') ??
+          DateTime.now(),
+      lastSeenAt:
+          DateTime.tryParse(json['lastSeenAt'] as String? ?? '') ??
+          DateTime.now(),
       isActive: json['isActive'] as bool? ?? true,
       notifications: NotificationSettings.fromJson(
         json['notifications'] as Map<String, dynamic>? ?? {},
@@ -160,21 +183,30 @@ class LastMessage {
 
     if (senderIdData is Map<String, dynamic>) {
       // Sender data is populated - convert to UserModel
-      senderId = senderIdData['_id'] as String;
+      senderId =
+          (senderIdData['_id'] as String?) ??
+          (senderIdData['id'] as String?) ??
+          '';
       sender = UserModel.fromJson(senderIdData);
-    } else {
+    } else if (senderIdData is String) {
       // senderId is just a string reference
-      senderId = senderIdData as String? ?? json['senderId'] as String;
+      senderId = senderIdData;
+      sender = null;
+    } else {
+      // Fallback for null or unexpected type
+      senderId = '';
       sender = null;
     }
 
     return LastMessage(
-      messageId: json['messageId'] as String,
+      messageId: (json['messageId'] as String?) ?? '',
       content: json['content'] as String? ?? '',
-      type: json['type'] as String,
+      type: (json['type'] as String?) ?? 'text',
       senderId: senderId,
       sender: sender,
-      timestamp: DateTime.parse(json['timestamp'] as String),
+      timestamp:
+          DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -393,14 +425,14 @@ class ChatModel {
       return name ?? 'Group Chat';
     }
 
-    // For direct chats, return the other participant's name
+    // For direct chats, return the other participant's best chat name
     try {
       final otherMember = members.firstWhere(
         (member) => member.userId != currentUserId && member.isActive,
       );
-      return otherMember.displayName;
+      return otherMember.bestChatName;
     } catch (e) {
-      return members.isNotEmpty ? members.first.displayName : 'User';
+      return members.isNotEmpty ? members.first.bestChatName : 'User';
     }
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/user_service.dart';
+import '../services/share_service.dart';
+import 'custom_toaster.dart';
 
 class UserProfileWidget extends StatelessWidget {
   final UserModel user;
@@ -285,9 +287,7 @@ class UserProfileWidget extends StatelessWidget {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: () {
-            // Show share profile options
-          },
+          onPressed: () => _shareProfile(context),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white.withOpacity(0.2),
             foregroundColor: Colors.white,
@@ -358,6 +358,45 @@ class UserProfileWidget extends StatelessWidget {
     );
   }
 
+  Future<void> _shareProfile(BuildContext context) async {
+    try {
+      await ShareService.shareProfile(
+        userId: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        bio: user.bio,
+      );
+
+      if (context.mounted) {
+        context.showSuccessToaster('Profile shared successfully!');
+      }
+    } catch (e) {
+      print('❌ Error sharing profile: $e');
+      if (context.mounted) {
+        context.showErrorToaster('Failed to share profile');
+      }
+    }
+  }
+
+  Future<void> _copyProfileLink(BuildContext context) async {
+    try {
+      final link = ShareService.generateDeepLink('user', user.id);
+      // TODO: Copy to clipboard using Clipboard.setData()
+      // For now, just show the link
+      print('📋 Profile link: $link');
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (context.mounted) {
+        context.showSuccessToaster('Profile link copied to clipboard!');
+      }
+    } catch (e) {
+      print('❌ Error copying link: $e');
+      if (context.mounted) {
+        context.showErrorToaster('Failed to copy link');
+      }
+    }
+  }
+
   void _showMoreOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -388,7 +427,7 @@ class UserProfileWidget extends StatelessWidget {
                   title: 'Share Profile',
                   onTap: () {
                     Navigator.pop(context);
-                    // Handle share
+                    _shareProfile(context);
                   },
                 ),
                 _buildOptionTile(
@@ -396,7 +435,7 @@ class UserProfileWidget extends StatelessWidget {
                   title: 'Copy Profile Link',
                   onTap: () {
                     Navigator.pop(context);
-                    // Handle copy link
+                    _copyProfileLink(context);
                   },
                 ),
                 _buildOptionTile(

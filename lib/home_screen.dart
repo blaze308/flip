@@ -8,11 +8,14 @@ import 'services/post_service.dart';
 import 'services/event_bus.dart';
 import 'services/optimistic_ui_service.dart';
 import 'services/contextual_auth_service.dart';
+import 'services/video_downloader_service.dart';
 import 'widgets/custom_toaster.dart';
 import 'widgets/post_menu_widget.dart';
 import 'widgets/loading_button.dart';
 import 'widgets/shimmer_loading.dart';
 import 'widgets/comments_bottom_sheet.dart';
+import 'widgets/connection_status_indicator.dart';
+import 'widgets/video_download_progress.dart';
 import 'models/post_model.dart';
 import 'models/story_model.dart';
 import 'create_story_type_screen.dart';
@@ -59,7 +62,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _postCreatedSubscription = EventBus().on<PostCreatedEvent>().listen((
       event,
     ) {
-      print(
+      debugPrint(
         '🔄 Post created event received: ${event.postType} post ${event.postId}',
       );
       _refreshAfterPostCreation();
@@ -160,7 +163,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   // Method to refresh after post creation
   Future<void> _refreshAfterPostCreation() async {
-    print('🔄 Refreshing home screen after post creation...');
+    debugPrint('🔄 Refreshing home screen after post creation...');
     await ref.read(postsProvider.notifier).refresh();
 
     // Scroll to top to show the new post
@@ -180,18 +183,130 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       final result = await PostService.sharePost(postId);
       if (result.success) {
         await ref.read(postsProvider.notifier).refresh();
-        ToasterService.showSuccess(context, 'Post shared successfully!');
+        if (mounted) {
+          ToasterService.showSuccess(context, 'Post shared successfully!');
+        }
       } else {
-        ToasterService.showError(
-          context,
-          'Failed to share post. Please try again.',
-        );
+        if (mounted) {
+          ToasterService.showError(
+            context,
+            'Failed to share post. Please try again.',
+          );
+        }
       }
     } catch (e) {
-      ToasterService.showError(
-        context,
-        'Failed to share post. Please check your connection.',
+      if (mounted) {
+        ToasterService.showError(
+          context,
+          'Failed to share post. Please check your connection.',
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadPost(PostModel post) async {
+    HapticFeedback.lightImpact();
+
+    double downloadProgress = 0.0;
+    OverlayEntry? progressOverlay;
+
+    try {
+      // Show download progress overlay
+      progressOverlay = OverlayEntry(
+        builder:
+            (context) => Positioned(
+              bottom: 100,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: CompactDownloadProgress(progress: downloadProgress),
+              ),
+            ),
       );
+      Overlay.of(context).insert(progressOverlay);
+
+      if (post.type == PostType.video && post.videoUrl != null) {
+        // Download video
+        final fileName =
+            'flip_video_${DateTime.now().millisecondsSinceEpoch}.mp4';
+        final result = await VideoDownloaderService.downloadVideo(
+          videoUrl: post.videoUrl!,
+          fileName: fileName,
+          onProgress: (progress) {
+            downloadProgress = progress;
+            progressOverlay?.markNeedsBuild();
+          },
+        );
+
+        progressOverlay?.remove();
+
+        if (mounted) {
+          if (result.success) {
+            // Show success indicator
+            final successOverlay = OverlayEntry(
+              builder:
+                  (context) => const Positioned(
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(child: DownloadSuccessIndicator()),
+                  ),
+            );
+            Overlay.of(context).insert(successOverlay);
+            await Future.delayed(const Duration(seconds: 2));
+            successOverlay.remove();
+
+            context.showSuccessToaster('Video saved to gallery!');
+          } else {
+            context.showErrorToaster(result.message);
+          }
+        }
+      } else if (post.type == PostType.image &&
+          post.imageUrls != null &&
+          post.imageUrls!.isNotEmpty) {
+        // Download first image (or all images if multiple)
+        final imageUrl = post.imageUrls!.first;
+        final fileName =
+            'flip_image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final result = await MediaDownloaderService.downloadImage(
+          imageUrl: imageUrl,
+          fileName: fileName,
+          onProgress: (progress) {
+            downloadProgress = progress;
+            progressOverlay?.markNeedsBuild();
+          },
+        );
+
+        progressOverlay?.remove();
+
+        if (mounted) {
+          if (result.success) {
+            // Show success indicator
+            final successOverlay = OverlayEntry(
+              builder:
+                  (context) => const Positioned(
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(child: DownloadSuccessIndicator()),
+                  ),
+            );
+            Overlay.of(context).insert(successOverlay);
+            await Future.delayed(const Duration(seconds: 2));
+            successOverlay.remove();
+
+            context.showSuccessToaster('Image saved to gallery!');
+          } else {
+            context.showErrorToaster(result.message);
+          }
+        }
+      }
+    } catch (e) {
+      progressOverlay?.remove();
+      if (mounted) {
+        context.showErrorToaster('Failed to download. Please try again.');
+      }
+      print('❌ Error downloading post: $e');
     }
   }
 
@@ -245,7 +360,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
-    final currentTab = ref.watch(currentTabProvider);
 
     if (appState.isLoading) {
       return Scaffold(
@@ -267,63 +381,81 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       onWillPop: _onWillPop,
       child: Scaffold(
         backgroundColor: const Color(0xFF1A1A1A),
-        body: Stack(
+        body: Column(
           children: [
-            // Main content with bottom padding to avoid overlap
-            Positioned.fill(
-              bottom: 80, // Height of bottom navigation
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(), // Disable swipe
-                onPageChanged: (index) {
-                  ref.read(currentTabProvider.notifier).state = index;
-                },
+            // Connection status indicator
+            const ConnectionStatusIndicator(),
+            // Main content
+            Expanded(
+              child: Stack(
                 children: [
-                  _buildHomeTab(), // Home/Feed
-                  _buildHomeTab(), // Reels (handled by navigation)
-                  _buildLiveTab(), // Live Streams
-                  _buildChatTab(), // Chat/Messages
-                  _buildProfileTab(), // Profile
-                ],
-              ),
-            ),
-
-            // Bottom navigation positioned on top
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(25),
-                    topRight: Radius.circular(25),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: Container(
-                    height: 80,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  // Main content with bottom padding to avoid overlap
+                  Positioned.fill(
+                    bottom: 80, // Height of bottom navigation
+                    child: PageView(
+                      controller: _pageController,
+                      physics:
+                          const NeverScrollableScrollPhysics(), // Disable swipe
+                      onPageChanged: (index) {
+                        ref.read(currentTabProvider.notifier).state = index;
+                      },
                       children: [
-                        _buildNavItem(Icons.home, 0, 'Home'),
-                        _buildNavItem(Icons.play_circle_outline, 1, 'Reels'),
-                        _buildCenterNavItem(), // Center create button
-                        _buildNavItem(Icons.chat_bubble_outline, 3, 'Chat'),
-                        _buildNavItem(Icons.person_outline, 4, 'Profile'),
+                        _buildHomeTab(), // Home/Feed
+                        _buildHomeTab(), // Reels (handled by navigation)
+                        _buildLiveTab(), // Live Streams
+                        _buildChatTab(), // Chat/Messages
+                        _buildProfileTab(), // Profile
                       ],
                     ),
                   ),
-                ),
+
+                  // Bottom navigation positioned on top
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(25),
+                          topRight: Radius.circular(25),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, -2),
+                          ),
+                        ],
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: Container(
+                          height: 80,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _buildNavItem(Icons.home, 0, 'Home'),
+                              _buildNavItem(
+                                Icons.play_circle_outline,
+                                1,
+                                'Reels',
+                              ),
+                              _buildCenterNavItem(), // Center create button
+                              _buildNavItem(
+                                Icons.chat_bubble_outline,
+                                3,
+                                'Chat',
+                              ),
+                              _buildNavItem(Icons.person_outline, 4, 'Profile'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -1226,16 +1358,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           OptimisticButton(
             onPressed: () => _toggleLike(post.id),
             isActive: post.likes > 0, // Red if anyone liked it
-            activeColor: Colors.red,
+            activeColor: post.isLiked ? Colors.red : Colors.white,
             inactiveColor: Colors.white,
             isDisabled: isButtonDisabled('like_${post.id}'),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  post.isLiked ? Icons.favorite : Icons.favorite_border,
-                  size: 24,
-                ),
+                Icon(Icons.favorite, size: 24),
                 const SizedBox(width: 8),
                 Text(
                   '${post.likes}',
@@ -1295,6 +1424,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
           ),
+          // Download button for images and videos
+          if (post.type == PostType.image || post.type == PostType.video) ...[
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: () => _downloadPost(post),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                child: const Icon(
+                  Icons.download,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1561,9 +1705,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                       onTap: () {
                         Navigator.of(context).pop();
-                        if (userStory != null) {
-                          _viewUserStories(userStory);
-                        }
+                        _viewUserStories(userStory);
                       },
                     ),
                     const Divider(color: Color(0xFF3A3A3A), height: 1),

@@ -101,10 +101,10 @@ class MessageMedia {
       url: json['url'] as String,
       thumbnailUrl: json['thumbnailUrl'] as String?,
       fileName: json['fileName'] as String,
-      fileSize: (json['fileSize'] as num).toInt(),
-      mimeType: json['mimeType'] as String,
+      fileSize: (json['fileSize'] as num?)?.toInt() ?? 0,
+      mimeType: json['mimeType'] as String? ?? 'application/octet-stream',
       duration:
-          json['duration'] != null ? (json['duration'] as num).toInt() : null,
+          json['duration'] != null ? (json['duration'] as num).round() : null,
       dimensions:
           json['dimensions'] != null
               ? MessageDimensions.fromJson(
@@ -156,15 +156,19 @@ class MessageMedia {
 
 /// Message dimensions model
 class MessageDimensions {
-  final int width;
-  final int height;
+  final int? width;
+  final int? height;
 
-  const MessageDimensions({required this.width, required this.height});
+  const MessageDimensions({this.width, this.height});
 
   factory MessageDimensions.fromJson(Map<String, dynamic> json) {
+    // Handle null values for width and height (e.g., audio files)
+    final widthValue = json['width'];
+    final heightValue = json['height'];
+
     return MessageDimensions(
-      width: (json['width'] as num).toInt(),
-      height: (json['height'] as num).toInt(),
+      width: widthValue != null ? (widthValue as num).toInt() : null,
+      height: heightValue != null ? (heightValue as num).toInt() : null,
     );
   }
 
@@ -172,8 +176,11 @@ class MessageDimensions {
     return {'width': width, 'height': height};
   }
 
-  /// Get aspect ratio
-  double get aspectRatio => width / height;
+  /// Get aspect ratio (returns null if dimensions are not available)
+  double? get aspectRatio {
+    if (width == null || height == null || height == 0) return null;
+    return width! / height!;
+  }
 }
 
 /// Message location model

@@ -19,7 +19,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool _isPasswordVisible = false;
   bool _isLoading = false;
-  bool _rememberMe = false;
   bool _biometricAvailable = false;
 
   late AnimationController _animationController;
@@ -161,7 +160,6 @@ class _LoginScreenState extends State<LoginScreen>
         final result = await TokenAuthService.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
-          rememberMe: _rememberMe,
         );
 
         if (result.success && mounted) {
@@ -173,23 +171,34 @@ class _LoginScreenState extends State<LoginScreen>
             print('   - ID: ${user.id}');
             print('   - Email: ${user.email}');
             print('   - Display Name: ${user.displayName}');
-            print('   - Remember Me: $_rememberMe');
+            print('   - Session will persist: 90 days');
+            print('   - Is New User: ${result.isNewUser}');
           } else {
             print('   - Warning: Login successful but user data is null');
           }
 
-          context.showSuccessToaster(
-            'Welcome back, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
-            devMessage: 'Email login successful with remember me: $_rememberMe',
-          );
+          // Check if this is a new user (incomplete signup recovery)
+          if (result.isNewUser) {
+            context.showSuccessToaster(
+              'Welcome! Please complete your profile to continue.',
+              devMessage:
+                  'Incomplete signup recovered, redirecting to complete profile',
+            );
+            Navigator.of(context).pushReplacementNamed('/complete-profile');
+          } else {
+            context.showSuccessToaster(
+              'Welcome back, ${user?.displayName ?? 'User'}! ${MessageService.getMessage('login_success')}',
+              devMessage: 'Email login successful',
+            );
 
-          // Debug: Show session info
-          final sessionInfo = await TokenAuthService.getSessionInfo();
-          print('🔐 Session Info: $sessionInfo');
+            // Debug: Show session info
+            final sessionInfo = await TokenAuthService.getSessionInfo();
+            print('🔐 Session Info: $sessionInfo');
 
-          // Manual navigation to home screen
-          print('🔐 LoginScreen: Navigating to home screen...');
-          Navigator.of(context).pushReplacementNamed('/');
+            // Manual navigation to home screen
+            print('🔐 LoginScreen: Navigating to home screen...');
+            Navigator.of(context).pushReplacementNamed('/');
+          }
         } else if (mounted) {
           print('🔐 LoginScreen: Email login failed - ${result.message}');
           context.showErrorToaster(
@@ -470,42 +479,10 @@ class _LoginScreenState extends State<LoginScreen>
 
                         const SizedBox(height: 16),
 
-                        // Save Me Toggle and Forget Password
+                        // Forget Password (Remember Me removed - users stay logged in by default)
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            Row(
-                              children: [
-                                Transform.scale(
-                                  scale: 0.8,
-                                  child: Switch(
-                                    value: _rememberMe,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _rememberMe = value;
-                                      });
-                                    },
-                                    activeColor: const Color(0xFF4ECDC4),
-                                    activeTrackColor: const Color(
-                                      0xFF4ECDC4,
-                                    ).withOpacity(0.3),
-                                    inactiveThumbColor: Colors.white
-                                        .withOpacity(0.7),
-                                    inactiveTrackColor: Colors.white
-                                        .withOpacity(0.2),
-                                  ),
-                                ),
-
-                                const Text(
-                                  'Remember Me',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
                             TextButton(
                               onPressed: () {
                                 Navigator.of(

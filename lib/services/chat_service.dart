@@ -116,26 +116,55 @@ class ChatService {
           .timeout(timeoutDuration);
 
       print('💬 ChatService: Response status: ${response.statusCode}');
+      print('💬 ChatService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as Map<String, dynamic>;
+
+        // Handle case where data might not have expected structure
+        if (data['data'] == null) {
+          print('💬 ChatService: Warning - No data field in response');
+          return ChatListResult(
+            success: true,
+            chats: [],
+            message: data['message']?.toString() ?? 'No chats available',
+          );
+        }
+
         final chatsData = data['data'] as Map<String, dynamic>;
-        final chatsList = chatsData['chats'] as List<dynamic>;
+        final chatsList = (chatsData['chats'] as List<dynamic>?) ?? [];
 
         final chats =
-            chatsList
-                .map(
-                  (chatJson) =>
-                      ChatModel.fromJson(chatJson as Map<String, dynamic>),
-                )
-                .toList();
+            chatsList.map((chatJson) {
+              final chat = ChatModel.fromJson(chatJson as Map<String, dynamic>);
+              // Log chat details for debugging
+              print('💬 ChatService: Chat ${chat.id}:');
+              print('  - Type: ${chat.type.name}');
+              print('  - Name: ${chat.name}');
+              print('  - Members count: ${chat.members.length}');
+              for (var i = 0; i < chat.members.length; i++) {
+                final member = chat.members[i];
+                print('  - Member $i:');
+                print('    - userId: ${member.userId}');
+                print('    - displayName: ${member.displayName}');
+                print('    - username: ${member.username}');
+                print(
+                  '    - user object: ${member.user != null ? "populated" : "null"}',
+                );
+                if (member.user != null) {
+                  print('    - user.username: ${member.user!.username}');
+                  print('    - user.displayName: ${member.user!.displayName}');
+                }
+              }
+              return chat;
+            }).toList();
 
         print('💬 ChatService: Successfully loaded ${chats.length} chats');
 
         return ChatListResult(
           success: true,
           chats: chats,
-          message: data['message'] as String? ?? 'Chats loaded successfully',
+          message: data['message']?.toString() ?? 'Chats loaded successfully',
         );
       } else {
         final errorData = json.decode(response.body) as Map<String, dynamic>;
@@ -177,7 +206,7 @@ class ChatService {
         return ChatResult(
           success: true,
           chat: chat,
-          message: data['message'] as String? ?? 'Chat loaded successfully',
+          message: data['message']?.toString() ?? 'Chat loaded successfully',
         );
       } else {
         final errorData = json.decode(response.body) as Map<String, dynamic>;
@@ -233,7 +262,7 @@ class ChatService {
         return ChatResult(
           success: true,
           chat: chat,
-          message: data['message'] as String? ?? 'Chat created successfully',
+          message: data['message']?.toString() ?? 'Chat created successfully',
         );
       } else {
         final errorData = json.decode(response.body) as Map<String, dynamic>;
@@ -340,7 +369,8 @@ class ChatService {
         return MessageListResult(
           success: true,
           messages: messages,
-          message: data['message'] as String? ?? 'Messages loaded successfully',
+          message:
+              data['message']?.toString() ?? 'Messages loaded successfully',
         );
       } else {
         final errorData = json.decode(response.body) as Map<String, dynamic>;
@@ -393,7 +423,7 @@ class ChatService {
           success: true,
           message: message,
           resultMessage:
-              data['message'] as String? ?? 'Message sent successfully',
+              data['message']?.toString() ?? 'Message sent successfully',
         );
       } else {
         final errorData = json.decode(response.body) as Map<String, dynamic>;
@@ -471,7 +501,7 @@ class ChatService {
             success: true,
             message: message,
             resultMessage:
-                data['message'] as String? ?? 'Message sent successfully',
+                data['message']?.toString() ?? 'Message sent successfully',
           );
         } catch (e) {
           print('💬 ChatService: Error parsing response: $e');
@@ -552,7 +582,7 @@ class ChatService {
           success: true,
           message: message,
           resultMessage:
-              data['message'] as String? ?? 'Location sent successfully',
+              data['message']?.toString() ?? 'Location sent successfully',
         );
       } else {
         final errorData = json.decode(response.body) as Map<String, dynamic>;
@@ -615,7 +645,7 @@ class ChatService {
           success: true,
           message: message,
           resultMessage:
-              data['message'] as String? ?? 'Contact sent successfully',
+              data['message']?.toString() ?? 'Contact sent successfully',
         );
       } else {
         final errorData = json.decode(response.body) as Map<String, dynamic>;
@@ -729,6 +759,40 @@ class ChatService {
       }
     } catch (e) {
       print('💬 ChatService: Error removing reaction: $e');
+      return false;
+    }
+  }
+
+  /// Delete a message
+  static Future<bool> deleteMessage(String chatId, String messageId) async {
+    try {
+      print('💬 ChatService: Deleting message $messageId from chat $chatId');
+
+      final headers = await _getAuthHeaders();
+      final uri = Uri.parse(
+        '$baseUrl/api/chats/$chatId/messages/$messageId',
+      );
+
+      final response = await http
+          .delete(uri, headers: headers)
+          .timeout(timeoutDuration);
+
+      print('💬 ChatService: Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        print('💬 ChatService: Successfully deleted message');
+        // Clear cache when message is deleted
+        clearMessageCache(chatId);
+        return true;
+      } else {
+        final errorData = json.decode(response.body) as Map<String, dynamic>;
+        print(
+          '💬 ChatService: Failed to delete message: ${errorData['message']}',
+        );
+        return false;
+      }
+    } catch (e) {
+      print('💬 ChatService: Error deleting message: $e');
       return false;
     }
   }

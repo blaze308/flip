@@ -18,8 +18,8 @@ class CommentService {
     _cacheTimestamps.remove(postId);
   }
 
-  /// Get authentication headers (JWT first, Firebase fallback)
-  static Future<Map<String, String>> _getHeaders() async {
+  /// Get authentication headers (JWT first, Firebase fallback, null for guests)
+  static Future<Map<String, String>?> _getHeaders() async {
     // Check if user is authenticated with JWT
     if (TokenAuthService.isAuthenticated) {
       final headers = await TokenAuthService.getAuthHeaders();
@@ -31,15 +31,31 @@ class CommentService {
 
     // Fallback to Firebase auth
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('User not authenticated');
+    if (user != null) {
+      final token = await user.getIdToken();
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
     }
 
-    final token = await user.getIdToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
+    // Guest user - no authentication headers
+    print('💬 CommentService: Guest user - no authentication headers');
+    return null;
+  }
+
+  /// Get authentication headers for operations that require auth (throws if not authenticated)
+  static Future<Map<String, String>> _getAuthHeaders() async {
+    final headers = await _getHeaders();
+    if (headers == null) {
+      throw Exception('Authentication required for this operation');
+    }
+    return headers;
+  }
+
+  /// Get basic headers for public requests
+  static Map<String, String> _getPublicHeaders() {
+    return {'Content-Type': 'application/json'};
   }
 
   // Get comments for a post
@@ -78,9 +94,10 @@ class CommentService {
       print('🔄 CommentService: Getting comments for post $postId');
       print('🔄 CommentService: Request URL: $uri');
 
+      // Get headers (optional for fetching comments - guests can view)
       final headers = await _getHeaders();
       final response = await http
-          .get(uri, headers: headers)
+          .get(uri, headers: headers ?? _getPublicHeaders())
           .timeout(timeoutDuration);
 
       print('🔄 CommentService: Response status: ${response.statusCode}');
@@ -143,7 +160,8 @@ class CommentService {
       print('🔄 CommentService: Creating comment for post $postId');
       print('🔄 CommentService: Request body: ${json.encode(body)}');
 
-      final headers = await _getHeaders();
+      // Require authentication for creating comments
+      final headers = await _getAuthHeaders();
       final response = await http
           .post(uri, headers: headers, body: json.encode(body))
           .timeout(timeoutDuration);
@@ -182,7 +200,8 @@ class CommentService {
       print('🔄 CommentService: Updating comment $commentId');
       print('🔄 CommentService: Request body: ${json.encode(body)}');
 
-      final headers = await _getHeaders();
+      // Require authentication for updating comments
+      final headers = await _getAuthHeaders();
       final response = await http
           .put(uri, headers: headers, body: json.encode(body))
           .timeout(timeoutDuration);
@@ -215,7 +234,8 @@ class CommentService {
 
       print('🔄 CommentService: Deleting comment $commentId');
 
-      final headers = await _getHeaders();
+      // Require authentication for deleting comments
+      final headers = await _getAuthHeaders();
       final response = await http
           .delete(uri, headers: headers)
           .timeout(timeoutDuration);
@@ -247,7 +267,8 @@ class CommentService {
 
       print('🔄 CommentService: Toggling like for comment $commentId');
 
-      final headers = await _getHeaders();
+      // Require authentication for liking comments
+      final headers = await _getAuthHeaders();
       final response = await http
           .post(uri, headers: headers)
           .timeout(timeoutDuration);
@@ -291,9 +312,10 @@ class CommentService {
 
       print('🔄 CommentService: Getting replies for comment $commentId');
 
+      // Get headers (optional for fetching replies - guests can view)
       final headers = await _getHeaders();
       final response = await http
-          .get(uri, headers: headers)
+          .get(uri, headers: headers ?? _getPublicHeaders())
           .timeout(timeoutDuration);
 
       print('🔄 CommentService: Response status: ${response.statusCode}');

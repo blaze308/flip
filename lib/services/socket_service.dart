@@ -239,8 +239,8 @@ class SocketService {
     _socket!.on('user_online', (data) {
       try {
         final statusEvent = UserStatusEvent(
-          userId: data['userId'] as String,
-          username: data['username'] as String,
+          userId: data['userId'] as String? ?? '',
+          username: data['username'] as String? ?? 'Unknown',
           displayName: data['displayName'] as String?,
           status: UserStatus.online,
           timestamp: DateTime.now(),
@@ -254,8 +254,8 @@ class SocketService {
     _socket!.on('user_offline', (data) {
       try {
         final statusEvent = UserStatusEvent(
-          userId: data['userId'] as String,
-          username: data['username'] as String,
+          userId: data['userId'] as String? ?? '',
+          username: data['username'] as String? ?? 'Unknown',
           displayName: null,
           status: UserStatus.offline,
           timestamp:
@@ -273,10 +273,10 @@ class SocketService {
     _socket!.on('user_typing', (data) {
       try {
         final typingEvent = TypingEvent(
-          userId: data['userId'] as String,
-          username: data['username'] as String,
+          userId: data['userId'] as String? ?? '',
+          username: data['username'] as String? ?? 'Unknown',
           displayName: data['displayName'] as String?,
-          chatId: data['chatId'] as String,
+          chatId: data['chatId'] as String? ?? '',
           isTyping: true,
         );
         _typingController.add(typingEvent);
@@ -288,10 +288,10 @@ class SocketService {
     _socket!.on('user_stopped_typing', (data) {
       try {
         final typingEvent = TypingEvent(
-          userId: data['userId'] as String,
-          username: data['username'] as String,
+          userId: data['userId'] as String? ?? '',
+          username: data['username'] as String? ?? 'Unknown',
           displayName: null,
-          chatId: data['chatId'] as String,
+          chatId: data['chatId'] as String? ?? '',
           isTyping: false,
         );
         _typingController.add(typingEvent);
@@ -304,9 +304,9 @@ class SocketService {
     _socket!.on('message_read_update', (data) {
       try {
         final updateEvent = MessageUpdateEvent(
-          messageId: data['messageId'] as String,
+          messageId: data['messageId'] as String? ?? '',
           updateType: MessageUpdateType.read,
-          data: data,
+          data: data as Map<String, dynamic>? ?? {},
           timestamp: DateTime.now(),
         );
         _messageUpdateController.add(updateEvent);
@@ -319,9 +319,9 @@ class SocketService {
     _socket!.on('message_delivery_update', (data) {
       try {
         final updateEvent = MessageUpdateEvent(
-          messageId: data['messageId'] as String,
+          messageId: data['messageId'] as String? ?? '',
           updateType: MessageUpdateType.delivered,
-          data: data,
+          data: data as Map<String, dynamic>? ?? {},
           timestamp: DateTime.now(),
         );
         _messageUpdateController.add(updateEvent);

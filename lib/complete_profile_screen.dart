@@ -147,6 +147,12 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
       return;
     }
 
+    // Validate profile picture is required
+    if (_profileImage == null && _currentPhotoURL == null) {
+      context.showErrorToaster('Profile picture is required');
+      return;
+    }
+
     if (_selectedInterests.length < 3) {
       context.showErrorToaster('Please select at least 3 interests');
       return;
@@ -185,60 +191,6 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
       }
     } catch (e) {
       print('❌ CompleteProfileScreen: Error saving profile: $e');
-      if (mounted) {
-        context.showErrorToaster(
-          'Failed to save profile. Please try again.',
-          devMessage: 'Error: $e',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _skipOptional() async {
-    // Check if required fields are filled
-    if (!_formKey.currentState!.validate()) {
-      context.showErrorToaster('Please complete required fields first');
-      return;
-    }
-
-    if (_selectedInterests.length < 3) {
-      context.showErrorToaster('Please select at least 3 interests');
-      return;
-    }
-
-    setState(() {
-      _isSaving = true;
-    });
-
-    try {
-      print('📝 CompleteProfileScreen: Saving required fields only...');
-
-      // Save only the required fields
-      await UserService.completeProfile(
-        bio: _bioController.text.trim(),
-        location: _locationController.text.trim(),
-        interests: _selectedInterests,
-        profileImage: _profileImage,
-        coverImage: null, // Skip cover image
-        website: null, // Skip website
-        occupation: null, // Skip occupation
-      );
-
-      print('📝 CompleteProfileScreen: Required fields saved successfully');
-
-      if (mounted) {
-        context.showSuccessToaster('Profile saved successfully!');
-        // Skip optional details and go straight to biometric setup
-        Navigator.of(context).pushReplacementNamed('/biometric-setup');
-      }
-    } catch (e) {
-      print('❌ CompleteProfileScreen: Error saving required fields: $e');
       if (mounted) {
         context.showErrorToaster(
           'Failed to save profile. Please try again.',
@@ -802,17 +754,6 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextButton(
-          onPressed: _isSaving ? null : _skipOptional,
-          child: Text(
-            'Skip for Now',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
-              fontSize: 16,
-            ),
           ),
         ),
       ],

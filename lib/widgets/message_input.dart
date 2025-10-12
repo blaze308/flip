@@ -11,6 +11,9 @@ class MessageInput extends StatefulWidget {
   final VoidCallback? onAudioPause;
   final VoidCallback? onAudioStop;
   final bool isRecording;
+  final int recordingDuration; // in milliseconds
+  final bool isRecordingLocked;
+  final bool isRecordingPaused;
 
   const MessageInput({
     super.key,
@@ -22,6 +25,9 @@ class MessageInput extends StatefulWidget {
     this.onAudioPause,
     this.onAudioStop,
     this.isRecording = false,
+    this.recordingDuration = 0,
+    this.isRecordingLocked = false,
+    this.isRecordingPaused = false,
   });
 
   @override
@@ -211,14 +217,43 @@ class _MessageInputState extends State<MessageInput>
   }
 
   Widget _buildRecordingView() {
+    // Format duration
+    final seconds = (widget.recordingDuration / 1000).floor();
+    final minutes = (seconds / 60).floor();
+    final remainingSeconds = seconds % 60;
+    final durationText =
+        '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+
+    // Determine status text
+    String statusText;
+    Color statusColor;
+    if (widget.isRecordingPaused) {
+      statusText = 'Recording Paused ⏸️';
+      statusColor = Colors.orange;
+    } else if (widget.isRecordingLocked) {
+      statusText = 'Recording (Locked) 🔒';
+      statusColor = const Color(0xFF4ECDC4);
+    } else if (widget.recordingDuration < 2000) {
+      statusText =
+          'Hold for ${((2000 - widget.recordingDuration) / 1000).ceil()}s to lock...';
+      statusColor = Colors.orange;
+    } else {
+      statusText = 'Recording...';
+      statusColor = const Color(0xFF4ECDC4);
+    }
+
     return Column(
       children: [
-        // Simple text above
+        // Status text above
         Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: const Text(
-            'Hold to record, release to send',
-            style: TextStyle(color: Colors.grey, fontSize: 12),
+          child: Text(
+            statusText,
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
 
@@ -228,11 +263,19 @@ class _MessageInputState extends State<MessageInput>
           decoration: BoxDecoration(
             color: const Color(0xFF2A2A2A),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFF4ECDC4), width: 2),
+            border: Border.all(
+              color:
+                  widget.isRecordingPaused
+                      ? Colors.orange
+                      : widget.isRecordingLocked
+                      ? const Color(0xFF4ECDC4)
+                      : Colors.orange,
+              width: 2,
+            ),
           ),
           child: Row(
             children: [
-              // Recording indicator (pulsing red dot)
+              // Recording indicator (pulsing red dot or paused icon)
               AnimatedBuilder(
                 animation: _recordingAnimation,
                 builder: (context, child) {
@@ -240,7 +283,12 @@ class _MessageInputState extends State<MessageInput>
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(_recordingAnimation.value),
+                      color:
+                          widget.isRecordingPaused
+                              ? Colors.orange
+                              : Colors.red.withOpacity(
+                                _recordingAnimation.value,
+                              ),
                       shape: BoxShape.circle,
                     ),
                   );
@@ -249,57 +297,87 @@ class _MessageInputState extends State<MessageInput>
 
               const SizedBox(width: 16),
 
-              // Waveform animation
-              const Expanded(
-                child: WaveformAnimation(
-                  isRecording: true,
-                  color: Color(0xFF4ECDC4),
-                  height: 30,
-                  barCount: 15,
+              // Duration text
+              Text(
+                durationText,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
 
               const SizedBox(width: 16),
 
-              // Recording text
-              const Text(
-                'Recording...',
-                style: TextStyle(
-                  color: Color(0xFF4ECDC4),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+              // Waveform animation
+              Expanded(
+                child: WaveformAnimation(
+                  isRecording: !widget.isRecordingPaused,
+                  color: const Color(0xFF4ECDC4),
+                  height: 30,
+                  barCount: 15,
                 ),
               ),
 
               const SizedBox(width: 12),
 
-              // Pause button
-              GestureDetector(
-                onTap: widget.onAudioPause,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.orange,
-                    borderRadius: BorderRadius.circular(18),
+              // Pause/Resume button (only show when locked)
+              if (widget.isRecordingLocked)
+                GestureDetector(
+                  onTap: widget.onAudioPause,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withOpacity(0.3),
+                          blurRadius: 8,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      widget.isRecordingPaused ? Icons.play_arrow : Icons.pause,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
-                  child: const Icon(Icons.pause, color: Colors.white, size: 18),
                 ),
-              ),
 
-              const SizedBox(width: 8),
+              if (widget.isRecordingLocked) const SizedBox(width: 8),
 
-              // Stop button
+              // Stop/Finish button
               GestureDetector(
                 onTap: widget.onAudioStop,
                 child: Container(
-                  width: 36,
-                  height: 36,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(18),
+                    color:
+                        widget.isRecordingLocked
+                            ? const Color(0xFF4ECDC4)
+                            : Colors.red,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (widget.isRecordingLocked
+                                ? const Color(0xFF4ECDC4)
+                                : Colors.red)
+                            .withOpacity(0.3),
+                        blurRadius: 8,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.stop, color: Colors.white, size: 18),
+                  child: Icon(
+                    widget.isRecordingLocked ? Icons.check : Icons.close,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                 ),
               ),
             ],

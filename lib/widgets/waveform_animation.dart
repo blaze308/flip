@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
+import 'dart:math';
 
 class WaveformAnimation extends StatefulWidget {
   final bool isRecording;
@@ -22,41 +22,39 @@ class WaveformAnimation extends StatefulWidget {
 }
 
 class _WaveformAnimationState extends State<WaveformAnimation>
-    with TickerProviderStateMixin {
-  late AnimationController _animationController;
-  late List<AnimationController> _barControllers;
-  late List<Animation<double>> _barAnimations;
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  final List<double> _barHeights = [];
+  final Random _random = Random();
 
   @override
   void initState() {
     super.initState();
-    _setupAnimations();
-  }
 
-  void _setupAnimations() {
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+    // Initialize bar heights
+    for (int i = 0; i < widget.barCount; i++) {
+      _barHeights.add(_random.nextDouble());
+    }
+
+    _controller = AnimationController(
       vsync: this,
-    );
+      duration: const Duration(milliseconds: 100),
+    )..addListener(() {
+      if (widget.isRecording) {
+        setState(() {
+          // Update random bars to create wave effect
+          for (int i = 0; i < widget.barCount; i++) {
+            if (_random.nextDouble() > 0.7) {
+              _barHeights[i] = 0.2 + (_random.nextDouble() * 0.8);
+            }
+          }
+        });
+      }
+    });
 
-    // Create individual controllers for each bar
-    _barControllers = List.generate(
-      widget.barCount,
-      (index) => AnimationController(
-        duration: Duration(
-          milliseconds: 300 + (index * 50),
-        ), // Staggered timing
-        vsync: this,
-      ),
-    );
-
-    // Create animations for each bar
-    _barAnimations =
-        _barControllers.map((controller) {
-          return Tween<double>(begin: 0.1, end: 1.0).animate(
-            CurvedAnimation(parent: controller, curve: Curves.easeInOut),
-          );
-        }).toList();
+    if (widget.isRecording) {
+      _controller.repeat();
+    }
   }
 
   @override
@@ -64,82 +62,68 @@ class _WaveformAnimationState extends State<WaveformAnimation>
     super.didUpdateWidget(oldWidget);
     if (widget.isRecording != oldWidget.isRecording) {
       if (widget.isRecording) {
-        _startAnimation();
+        _controller.repeat();
       } else {
-        _stopAnimation();
+        _controller.stop();
+        // Reset to low heights when not recording
+        setState(() {
+          for (int i = 0; i < widget.barCount; i++) {
+            _barHeights[i] = 0.2;
+          }
+        });
       }
-    }
-  }
-
-  void _startAnimation() {
-    _animationController.repeat();
-
-    // Start each bar with a slight delay
-    for (int i = 0; i < _barControllers.length; i++) {
-      Future.delayed(Duration(milliseconds: i * 50), () {
-        if (mounted && widget.isRecording) {
-          _barControllers[i].repeat(reverse: true);
-        }
-      });
-    }
-  }
-
-  void _stopAnimation() {
-    _animationController.stop();
-    for (final controller in _barControllers) {
-      controller.stop();
-      controller.reset();
     }
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
-    for (final controller in _barControllers) {
-      controller.dispose();
-    }
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: widget.width,
-      height: widget.height,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: List.generate(widget.barCount, (index) {
-          return AnimatedBuilder(
-            animation: _barAnimations[index],
-            builder: (context, child) {
-              // Create varying heights for a more natural waveform
-              final baseHeight =
-                  widget.isRecording
-                      ? (0.3 + (math.sin(index * 0.5) * 0.2)) * widget.height
-                      : widget.height * 0.2;
-
-              final animatedHeight =
-                  widget.isRecording
-                      ? baseHeight * _barAnimations[index].value
-                      : baseHeight;
-
-              return Container(
-                width: 3,
-                height: animatedHeight,
-                decoration: BoxDecoration(
-                  color: widget.color.withOpacity(
-                    widget.isRecording ? 0.8 : 0.3,
-                  ),
-                  borderRadius: BorderRadius.circular(1.5),
-                ),
-              );
-            },
-          );
-        }),
+    return CustomPaint(
+      size: Size(widget.width, widget.height),
+      painter: WaveformPainter(
+        barHeights: _barHeights,
+        color: widget.color.withOpacity(widget.isRecording ? 0.9 : 0.3),
       ),
     );
   }
+}
+
+class WaveformPainter extends CustomPainter {
+  final List<double> barHeights;
+  final Color color;
+
+  WaveformPainter({required this.barHeights, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final barWidth = size.width / barHeights.length;
+    final paint =
+        Paint()
+          ..color = color
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.fill;
+
+    for (int i = 0; i < barHeights.length; i++) {
+      final barHeight = barHeights[i] * size.height;
+      final x = i * barWidth;
+      final y = (size.height - barHeight) / 2;
+
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, barWidth * 0.7, barHeight),
+        const Radius.circular(2),
+      );
+
+      canvas.drawRRect(rect, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(WaveformPainter oldDelegate) => true;
 }
 
 /// Circular waveform animation (alternative style)

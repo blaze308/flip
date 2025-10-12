@@ -170,10 +170,50 @@ class _RegisterScreenState extends State<RegisterScreen>
             print('📝 RegisterScreen: Registration failed completely');
             print('   - Error: ${result.message}');
 
-            context.showErrorToaster(
-              MessageService.getFirebaseErrorMessage(result.message),
-              devMessage: 'Registration failed: ${result.message}',
-            );
+            // Check if it's an "already exists" error
+            final errorMessage = result.message.toLowerCase();
+
+            if (errorMessage.contains('already exists') ||
+                errorMessage.contains('email already in use') ||
+                errorMessage.contains('email-already-in-use')) {
+              // Show helpful dialog to redirect to login
+              // This handles both: real duplicates AND incomplete signups
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder:
+                    (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF2C3E50),
+                      title: const Text(
+                        'Account Found',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      content: const Text(
+                        'An account with this email already exists. Please log in to continue.\n\nIf your signup was incomplete, logging in will let you complete your profile.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            Navigator.of(
+                              context,
+                            ).pushReplacementNamed('/login');
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4ECDC4),
+                          ),
+                          child: const Text('Go to Login'),
+                        ),
+                      ],
+                    ),
+              );
+            } else {
+              context.showErrorToaster(
+                MessageService.getFirebaseErrorMessage(result.message),
+                devMessage: 'Registration failed: ${result.message}',
+              );
+            }
           }
         }
       } catch (e) {

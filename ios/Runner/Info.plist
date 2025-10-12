@@ -60,6 +60,20 @@
 				<string>com.googleusercontent.apps.979501294062-9phc9i29ugicf894gc7rbemsmni3j7ip</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>flip</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Deep link scheme -->
+				<string>flip</string>
+			</array>
+		</dict>
 	</array>
+	<!-- Photo Library Permission -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save videos to your photo library</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Access your photo library to save videos</string>
 </dict>
 </plist>

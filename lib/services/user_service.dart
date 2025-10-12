@@ -138,8 +138,15 @@ class UserService {
         body['profile'] = profile;
       }
 
-      // Note: photoURL and coverPhotoURL are handled separately
-      // They need to be uploaded first, then the URL is saved
+      // Add photoURL and coverPhotoURL to the body if provided
+      if (photoURL != null) body['photoURL'] = photoURL;
+      if (coverPhotoURL != null) {
+        // coverPhotoURL goes in the profile object
+        if (body['profile'] == null) {
+          body['profile'] = {};
+        }
+        body['profile']['coverPhotoURL'] = coverPhotoURL;
+      }
 
       print('👤 UserService: Request body: ${json.encode(body)}');
 
@@ -240,6 +247,10 @@ class UserService {
         occupation: occupation,
         coverPhotoURL: coverImageUrl,
       );
+
+      // Step 4: Refresh current user data to update UI
+      print('👤 UserService: Refreshing current user data...');
+      await TokenAuthService.refreshCurrentUser();
 
       print('👤 UserService: Complete profile flow finished successfully');
     } catch (e) {

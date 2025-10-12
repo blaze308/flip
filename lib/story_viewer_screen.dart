@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -9,7 +8,6 @@ import 'models/story_model.dart';
 import 'providers/app_providers.dart';
 import 'services/story_service.dart';
 import 'services/token_auth_service.dart';
-import 'services/contextual_auth_service.dart';
 import 'widgets/custom_toaster.dart';
 
 class StoryViewerScreen extends ConsumerStatefulWidget {
@@ -18,11 +16,11 @@ class StoryViewerScreen extends ConsumerStatefulWidget {
   final int initialStoryIndex;
 
   const StoryViewerScreen({
-    Key? key,
+    super.key,
     required this.storyFeedItems,
     this.initialUserIndex = 0,
     this.initialStoryIndex = 0,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<StoryViewerScreen> createState() => _StoryViewerScreenState();
@@ -440,7 +438,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
       // Refresh stories provider to sync with backend
       ref.read(storiesProvider.notifier).refresh();
 
-      context.showSuccessToaster('Story deleted successfully');
+      if (mounted) {
+        context.showSuccessToaster('Story deleted successfully');
+      }
 
       // Remove story from the current user's stories
       final currentUser = widget.storyFeedItems[_currentUserIndex];
@@ -451,17 +451,23 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
         if (_currentUserIndex < widget.storyFeedItems.length - 1) {
           _nextUser();
         } else {
-          Navigator.of(context).pop();
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
         }
       } else {
         // Adjust story index if needed
         if (_currentStoryIndex >= currentUser.stories.length) {
           _currentStoryIndex = currentUser.stories.length - 1;
         }
-        _initializeStory();
+        if (mounted) {
+          _initializeStory();
+        }
       }
     } catch (e) {
-      context.showErrorToaster('Failed to delete story');
+      if (mounted) {
+        context.showErrorToaster('Failed to delete story');
+      }
     }
   }
 
@@ -587,7 +593,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   }
 
   Widget _buildImageStory(StoryModel story) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
       height: double.infinity,
       child: Image.network(
@@ -611,8 +617,8 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
           );
         },
         errorBuilder: (context, error, stackTrace) {
-          print('📖 Image loading error: $error');
-          print('📖 Image URL: ${story.mediaUrl}');
+          debugPrint('📖 Image loading error: $error');
+          debugPrint('📖 Image URL: ${story.mediaUrl}');
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -698,7 +704,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                   child: Container(
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -771,7 +777,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                             : index == _currentStoryIndex
                             ? _progressController.value
                             : 0.0,
-                    backgroundColor: Colors.white.withOpacity(0.3),
+                    backgroundColor: Colors.white.withValues(alpha: 0.3),
                     valueColor: const AlwaysStoppedAnimation<Color>(
                       Colors.white,
                     ),
@@ -789,7 +795,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+              colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent],
             ),
           ),
           child: Row(
@@ -847,19 +853,48 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                         ],
                       ),
                     ),
-                    Text(
-                      _formatTimestamp(currentStory.createdAt),
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 12,
-                        shadows: const [
-                          Shadow(
-                            offset: Offset(1, 1),
-                            blurRadius: 3,
-                            color: Colors.black54,
+                    Row(
+                      children: [
+                        Text(
+                          _formatTimestamp(currentStory.createdAt),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 12,
+                            shadows: const [
+                              Shadow(
+                                offset: Offset(1, 1),
+                                blurRadius: 3,
+                                color: Colors.black54,
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Show view count only for story owner
+                        if (_isCurrentUserStoryOwner(currentStory)) ...[
+                          const SizedBox(width: 12),
+                          Row(
+                            children: [
+                              const Text('👁️', style: TextStyle(fontSize: 12)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${currentStory.viewCount}',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  shadows: const [
+                                    Shadow(
+                                      offset: Offset(1, 1),
+                                      blurRadius: 3,
+                                      color: Colors.black54,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
-                      ),
+                      ],
                     ),
                   ],
                 ),

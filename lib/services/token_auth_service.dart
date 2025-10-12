@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'connectivity_service.dart';
 
 /// Token-based authentication service that replaces Riverpod/Provider
 /// Uses JWT tokens from backend for authentication state management
@@ -31,7 +32,6 @@ class TokenAuthService {
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userDataKey = 'user_data';
-  static const String _rememberMeKey = 'remember_me';
   static const String _onboardingCompletedKey = 'onboarding_completed';
   static const String _firstLaunchKey = 'first_launch';
 
@@ -58,6 +58,86 @@ class TokenAuthService {
 
   /// Check if user is loading
   static bool get isLoading => _currentState == AuthState.loading;
+
+  /// Refresh current user data from backend
+  static Future<void> refreshCurrentUser() async {
+    try {
+      print('🔐 TokenAuthService: Refreshing current user data...');
+
+      if (_accessToken == null) {
+        print('🔐 TokenAuthService: No access token, cannot refresh user');
+        return;
+      }
+
+      // Get fresh user data from backend
+      final response = await http
+          .get(
+            Uri.parse('$_baseUrl/api/users/profile'),
+            headers: {
+              'Authorization': 'Bearer $_accessToken',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(_timeoutDuration);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true && data['data'] != null) {
+          final userData = data['data']['user'];
+          final updatedUser = TokenUser.fromBackendData(userData);
+
+          // Update current user
+          _currentUser = updatedUser;
+
+          // Save to storage
+          await _saveUserDataToStorage(updatedUser);
+
+          // Notify listeners
+          _notifyListeners();
+
+          print('🔐 TokenAuthService: User data refreshed successfully');
+          print(
+            '🔐 TokenAuthService: Updated photoURL: ${updatedUser.photoURL}',
+          );
+        }
+      } else {
+        print(
+          '🔐 TokenAuthService: Failed to refresh user data: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      developer.log(
+        'Failed to refresh user data: $e',
+        name: 'TokenAuthService',
+      );
+    }
+  }
+
+  /// Handle connectivity changes - refresh data when coming back online
+  static Future<void> handleConnectivityChange(bool isOnline) async {
+    if (isOnline && isAuthenticated) {
+      print('🔐 TokenAuthService: Back online - refreshing user data...');
+
+      try {
+        // Refresh current user data
+        await refreshCurrentUser();
+
+        // Validate token
+        final isValid = await _validateToken();
+        if (!isValid) {
+          print('🔐 TokenAuthService: Token expired - attempting refresh...');
+          final refreshed = await _refreshAccessToken();
+          if (refreshed) {
+            print('🔐 TokenAuthService: Token refreshed successfully');
+          } else {
+            print('⚠️ TokenAuthService: Token refresh failed');
+          }
+        }
+      } catch (e) {
+        print('❌ TokenAuthService: Error handling connectivity change: $e');
+      }
+    }
+  }
 
   /// Add listener for auth state changes
   static void addListener(Function(AuthState, TokenUser?) listener) {
@@ -157,6 +237,11 @@ class TokenAuthService {
     } catch (e) {
       developer.log('Auth initialization error: $e', name: 'TokenAuthService');
       _updateState(AuthState.error);
+    } finally {
+      // Listen for connectivity changes (always set up, even if initialization fails)
+      ConnectivityService().addListener((isOnline) {
+        handleConnectivityChange(isOnline);
+      });
     }
   }
 
@@ -220,7 +305,6 @@ class TokenAuthService {
   /// Exchange Firebase token for JWT tokens
   static Future<TokenExchangeResult> _exchangeFirebaseToken(
     User firebaseUser, {
-    bool rememberMe = false,
     bool isSignup = false,
   }) async {
     try {
@@ -229,7 +313,6 @@ class TokenAuthService {
 
       print('🔐 TokenAuthService: Exchanging Firebase token...');
       print('🔐 TokenAuthService: Device info: $deviceInfo');
-      print('🔐 TokenAuthService: Remember me: $rememberMe');
       print('🔐 TokenAuthService: Is signup: $isSignup');
 
       final response = await http
@@ -239,11 +322,7 @@ class TokenAuthService {
               'Authorization': 'Bearer $firebaseToken',
               'Content-Type': 'application/json',
             },
-            body: jsonEncode({
-              'deviceInfo': deviceInfo,
-              'rememberMe': rememberMe,
-              'isSignup': isSignup,
-            }),
+            body: jsonEncode({'deviceInfo': deviceInfo, 'isSignup': isSignup}),
           )
           .timeout(_timeoutDuration);
 
@@ -266,10 +345,6 @@ class TokenAuthService {
         await Future.wait([
           _secureStorage.write(key: _accessTokenKey, value: _accessToken),
           _secureStorage.write(key: _refreshTokenKey, value: _refreshToken),
-          _secureStorage.write(
-            key: _rememberMeKey,
-            value: rememberMe.toString(),
-          ),
         ]);
 
         print('🔐 TokenAuthService: Tokens saved successfully!');
@@ -320,7 +395,6 @@ class TokenAuthService {
   static Future<AuthResult> signInWithEmailAndPassword({
     required String email,
     required String password,
-    bool rememberMe = false,
   }) async {
     try {
       _updateState(AuthState.loading);
@@ -333,10 +407,7 @@ class TokenAuthService {
 
       if (credential.user != null) {
         // Exchange Firebase token for JWT
-        final exchangeResult = await _exchangeFirebaseToken(
-          credential.user!,
-          rememberMe: rememberMe,
-        );
+        final exchangeResult = await _exchangeFirebaseToken(credential.user!);
 
         if (exchangeResult.success && exchangeResult.user != null) {
           _updateState(AuthState.authenticated, user: exchangeResult.user);
@@ -581,7 +652,6 @@ class TokenAuthService {
       await Future.wait([
         _secureStorage.delete(key: _accessTokenKey),
         _secureStorage.delete(key: _refreshTokenKey),
-        _secureStorage.delete(key: _rememberMeKey),
         _clearUserDataFromStorage(),
       ]);
 
@@ -676,26 +746,15 @@ class TokenAuthService {
   static bool get isGuestMode =>
       _currentState == AuthState.unauthenticated && _currentUser == null;
 
-  /// Check if Remember Me is enabled for current session
-  static Future<bool> get isRememberMeEnabled async {
-    try {
-      final rememberMeValue = await _secureStorage.read(key: _rememberMeKey);
-      return rememberMeValue == 'true';
-    } catch (e) {
-      return false;
-    }
-  }
-
   /// Get current session info for debugging
   static Future<Map<String, dynamic>> getSessionInfo() async {
     try {
-      final rememberMe = await isRememberMeEnabled;
       return {
         'isAuthenticated': isAuthenticated,
-        'rememberMe': rememberMe,
         'hasAccessToken': _accessToken != null,
         'hasRefreshToken': _refreshToken != null,
         'currentUser': _currentUser?.toJson(),
+        'sessionPersistence': '90 days',
       };
     } catch (e) {
       return {'error': e.toString()};

@@ -25,6 +25,7 @@ import 'create_video_story_screen.dart';
 import 'create_audio_story_screen.dart';
 import 'screens/message_list_screen.dart';
 import 'services/app_lifecycle_manager.dart';
+import 'services/connectivity_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +35,9 @@ void main() async {
 
   // Initialize App Lifecycle Manager for background handling
   await AppLifecycleManager.instance.initialize();
+
+  // Initialize Connectivity Service
+  await ConnectivityService().initialize();
 
   runApp(const ProviderScope(child: AncientFlipApp()));
 }

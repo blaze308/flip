@@ -5,12 +5,17 @@ import '../models/message_model.dart';
 import '../services/audio_service.dart';
 import '../screens/image_viewer_screen.dart';
 import '../screens/video_player_screen.dart';
+import 'waveform_animation.dart';
+import 'swipeable_message_bubble.dart';
 
 class ModernMessageBubble extends StatefulWidget {
   final MessageModel message;
   final bool isFromCurrentUser;
   final VoidCallback? onLongPress;
   final Function(String)? onReactionTap;
+  final VoidCallback? onReply;
+  final VoidCallback? onForward;
+  final VoidCallback? onDelete;
 
   const ModernMessageBubble({
     super.key,
@@ -18,6 +23,9 @@ class ModernMessageBubble extends StatefulWidget {
     required this.isFromCurrentUser,
     this.onLongPress,
     this.onReactionTap,
+    this.onReply,
+    this.onForward,
+    this.onDelete,
   });
 
   @override
@@ -48,144 +56,145 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
     super.dispose();
   }
 
-  void _onTapDown(TapDownDetails details) {
-    _scaleController.forward();
-  }
-
-  void _onTapUp(TapUpDetails details) {
-    _scaleController.reverse();
-  }
-
-  void _onTapCancel() {
-    _scaleController.reverse();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-      child: Column(
-        crossAxisAlignment:
-            widget.isFromCurrentUser
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-        children: [
-          // Sender name (for group chats)
-          if (!widget.isFromCurrentUser)
-            Padding(
-              padding: const EdgeInsets.only(left: 48, bottom: 4),
-              child: Text(
-                widget.message.senderName,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+    return SwipeableMessageBubble(
+      onReply: widget.onReply,
+      onMore: _showMessageOptions,
+      onArchive: widget.onForward, // Using forward callback for archive
+      isFromCurrentUser: widget.isFromCurrentUser,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+        child: Row(
+          mainAxisAlignment:
+              widget.isFromCurrentUser
+                  ? MainAxisAlignment.end
+                  : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // Message bubble - simplified without avatar
+            Flexible(
+              child: AnimatedBuilder(
+                animation: _scaleAnimation,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _scaleAnimation.value,
+                    child: _buildMessageContent(),
+                  );
+                },
               ),
             ),
-
-          // Message bubble
-          Row(
-            mainAxisAlignment:
-                widget.isFromCurrentUser
-                    ? MainAxisAlignment.end
-                    : MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (!widget.isFromCurrentUser) ...[
-                _buildAvatar(),
-                const SizedBox(width: 8),
-              ],
-
-              Flexible(
-                child: AnimatedBuilder(
-                  animation: _scaleAnimation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _scaleAnimation.value,
-                      child: GestureDetector(
-                        onTapDown: _onTapDown,
-                        onTapUp: _onTapUp,
-                        onTapCancel: _onTapCancel,
-                        onLongPress: widget.onLongPress,
-                        child: _buildMessageContent(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
-              if (widget.isFromCurrentUser) ...[
-                const SizedBox(width: 8),
-                _buildAvatar(),
-              ],
-            ],
-          ),
-
-          // Message time and status
-          Padding(
-            padding: EdgeInsets.only(
-              top: 4,
-              left: widget.isFromCurrentUser ? 0 : 48,
-              right: widget.isFromCurrentUser ? 48 : 0,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  widget.message.formattedTime,
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
-                ),
-                if (widget.isFromCurrentUser) ...[
-                  const SizedBox(width: 4),
-                  _buildMessageStatus(),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
+          ],
         ),
       ),
-      child:
-          widget.message.senderAvatar != null
-              ? ClipOval(
-                child: Image.network(
-                  widget.message.senderAvatar!,
-                  fit: BoxFit.cover,
-                  errorBuilder:
-                      (context, error, stackTrace) => _buildDefaultAvatar(),
-                ),
-              )
-              : _buildDefaultAvatar(),
     );
   }
 
-  Widget _buildDefaultAvatar() {
-    // Get first letter from senderName - it MUST exist
-    final firstLetter =
-        widget.message.senderName.isNotEmpty
-            ? widget.message.senderName[0].toUpperCase()
-            : '?';
+  void _showMessageOptions() {
+    // Show WhatsApp-style bottom sheet with options
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder:
+          (context) => Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.6,
+            ),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1F2C34),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[600],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
 
-    return Center(
-      child: Text(
-        firstLetter,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
+                  // Options
+                  _buildOptionItem(Icons.reply_rounded, 'Reply', () {
+                    Navigator.pop(context);
+                    widget.onReply?.call();
+                  }),
+                  _buildOptionItem(Icons.forward_rounded, 'Forward', () {
+                    Navigator.pop(context);
+                    widget.onForward?.call();
+                  }),
+                  _buildOptionItem(Icons.star_outline_rounded, 'Star', () {
+                    Navigator.pop(context);
+                    // TODO: Implement star
+                  }),
+                  _buildOptionItem(Icons.copy_rounded, 'Copy', () {
+                    Navigator.pop(context);
+                    if (widget.message.content != null) {
+                      Clipboard.setData(
+                        ClipboardData(text: widget.message.content!),
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Copied to clipboard'),
+                          duration: Duration(seconds: 1),
+                          backgroundColor: Color(0xFF128C7E),
+                        ),
+                      );
+                    }
+                  }),
+                  _buildOptionItem(Icons.info_outline_rounded, 'Info', () {
+                    Navigator.pop(context);
+                    // TODO: Implement info
+                  }),
+                  _buildOptionItem(Icons.delete_outline_rounded, 'Delete', () {
+                    Navigator.pop(context);
+                    widget.onDelete?.call();
+                  }, isDestructive: true),
+
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
+  Widget _buildOptionItem(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    bool isDestructive = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: isDestructive ? Colors.red : const Color(0xFFE9EDEF),
+              size: 24,
+            ),
+            const SizedBox(width: 20),
+            Text(
+              label,
+              style: TextStyle(
+                color: isDestructive ? Colors.red : const Color(0xFFE9EDEF),
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -213,27 +222,56 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width * 0.75,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        gradient:
+        color:
             widget.isFromCurrentUser
-                ? const LinearGradient(
-                  colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
-                )
-                : null,
-        color: widget.isFromCurrentUser ? null : const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(20),
+                ? const Color(0xFF005C4B)
+                : const Color(0xFF1F2C34),
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(8),
+          topRight: const Radius.circular(8),
+          bottomLeft: Radius.circular(widget.isFromCurrentUser ? 8 : 0),
+          bottomRight: Radius.circular(widget.isFromCurrentUser ? 0 : 8),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
-      child: Text(
-        widget.message.content ?? '',
-        style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.message.content ?? '',
+            style: const TextStyle(
+              color: Color(0xFFE9EDEF),
+              fontSize: 14.5,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                widget.message.formattedTime,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 11,
+                ),
+              ),
+              if (widget.isFromCurrentUser) ...[
+                const SizedBox(width: 4),
+                _buildMessageStatus(),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -246,7 +284,12 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
     if (!hasLocalFile && widget.message.media?.url == null)
       return _buildTextMessage();
 
-    final heroTag = 'image_${widget.message.id}';
+    // Use media URL or local path for unique Hero tag to avoid duplicates
+    final mediaIdentifier =
+        widget.message.media?.url ??
+        widget.message.localFilePath ??
+        widget.message.id;
+    final heroTag = 'image_$mediaIdentifier';
 
     return GestureDetector(
       onTap:
@@ -352,29 +395,17 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
                       );
                     },
                   ),
-                // Uploading overlay for optimistic UI
+                // Sending overlay for optimistic UI (no text, just visual indicator)
                 if (isSending)
                   Positioned.fill(
                     child: Container(
-                      color: Colors.black45,
+                      color: Colors.black26,
                       child: const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF4ECDC4),
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Uploading...',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF4ECDC4),
+                          ),
+                          strokeWidth: 2,
                         ),
                       ),
                     ),
@@ -413,7 +444,12 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
     if (!hasLocalFile && widget.message.media?.url == null)
       return _buildTextMessage();
 
-    final heroTag = 'video_${widget.message.id}';
+    // Use media URL or local path for unique Hero tag to avoid duplicates
+    final mediaIdentifier =
+        widget.message.media?.url ??
+        widget.message.localFilePath ??
+        widget.message.id;
+    final heroTag = 'video_$mediaIdentifier';
 
     return GestureDetector(
       onTap:
@@ -524,11 +560,7 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
                             valueColor: AlwaysStoppedAnimation<Color>(
                               Color(0xFF4ECDC4),
                             ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Uploading video...',
-                            style: TextStyle(color: Colors.white, fontSize: 12),
+                            strokeWidth: 2,
                           ),
                         ],
                       ),
@@ -585,75 +617,126 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width * 0.7,
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        gradient:
+        color:
             widget.isFromCurrentUser
-                ? const LinearGradient(
-                  colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
-                )
-                : null,
-        color: widget.isFromCurrentUser ? null : const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(20),
+                ? const Color(0xFF005C4B)
+                : const Color(0xFF1F2C34),
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(8),
+          topRight: const Radius.circular(8),
+          bottomLeft: Radius.circular(widget.isFromCurrentUser ? 8 : 0),
+          bottomRight: Radius.circular(widget.isFromCurrentUser ? 0 : 8),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 3,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Play/Pause button with modern design
           GestureDetector(
             onTap: _toggleAudioPlayback,
-            child: Container(
-              width: 40,
-              height: 40,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
+                color: Colors.white.withOpacity(_isPlayingAudio ? 0.3 : 0.2),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 2,
+                ),
               ),
-              child: Icon(
-                _isPlayingAudio ? Icons.pause : Icons.play_arrow,
-                color: Colors.white,
-                size: 24,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  _isPlayingAudio
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  key: ValueKey(_isPlayingAudio),
+                  color: Colors.white,
+                  size: 26,
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
+          // Animated waveform or static bars
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Audio waveform placeholder
-                Container(
-                  height: 20,
-                  child: Row(
-                    children: List.generate(20, (index) {
-                      return Container(
-                        width: 2,
-                        height: (index % 4 + 1) * 5.0,
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(1),
-                        ),
-                      );
-                    }),
-                  ),
+                // Use animated waveform during playback
+                SizedBox(
+                  height: 32,
+                  child:
+                      _isPlayingAudio
+                          ? WaveformAnimation(
+                            isRecording: true,
+                            color: Colors.white,
+                            height: 32,
+                            barCount: 25,
+                          )
+                          : _buildStaticWaveform(),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.message.media?.formattedDuration ?? '0:00',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                const SizedBox(height: 6),
+                // Duration with modern styling
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time_rounded,
+                      size: 12,
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      widget.message.media?.formattedDuration ?? '0:00',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
         ],
       ),
+    );
+  }
+
+  Widget _buildStaticWaveform() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: List.generate(25, (index) {
+        // Create varied heights for visual interest
+        final heights = [0.3, 0.5, 0.7, 0.9, 0.6, 0.4, 0.8, 0.5];
+        final heightFactor = heights[index % heights.length];
+
+        return Container(
+          width: 3,
+          height: 32 * heightFactor,
+          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        );
+      }),
     );
   }
 
@@ -727,47 +810,89 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
   Widget _buildMessageStatus() {
     switch (widget.message.status) {
       case MessageStatus.sent:
-        return const Icon(Icons.check, color: Colors.white54, size: 16);
+        return Icon(Icons.done, color: Colors.white.withOpacity(0.5), size: 14);
       case MessageStatus.delivered:
-        return const Icon(Icons.done_all, color: Colors.white54, size: 16);
+        return Icon(
+          Icons.done_all,
+          color: Colors.white.withOpacity(0.5),
+          size: 14,
+        );
       case MessageStatus.read:
-        return const Icon(Icons.done_all, color: Color(0xFF4ECDC4), size: 16);
+        return const Icon(Icons.done_all, color: Color(0xFF53BDEB), size: 14);
       case MessageStatus.failed:
-        return const Icon(Icons.error_outline, color: Colors.red, size: 16);
+        return const Icon(Icons.error_outline, color: Colors.red, size: 14);
       case MessageStatus.sending:
-        // Show single check (optimistic UI) - like WhatsApp/Instagram
-        return const Icon(Icons.access_time, color: Colors.white38, size: 14);
+        return Icon(
+          Icons.access_time,
+          color: Colors.white.withOpacity(0.5),
+          size: 13,
+        );
     }
   }
 
   Future<void> _toggleAudioPlayback() async {
-    if (widget.message.media?.url == null) return;
+    if (widget.message.media?.url == null) {
+      print('❌ Audio playback: No media URL');
+      return;
+    }
 
     try {
+      print(
+        '🔊 Audio playback: Toggling playback for ${widget.message.media!.url}',
+      );
+
       if (_isPlayingAudio) {
+        print('🔊 Audio playback: Stopping audio');
         await AudioService.stopAudio();
-        setState(() {
-          _isPlayingAudio = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isPlayingAudio = false;
+          });
+        }
       } else {
+        print('🔊 Audio playback: Starting audio');
         final success = await AudioService.playAudio(widget.message.media!.url);
-        if (success) {
+        print('🔊 Audio playback: Play result: $success');
+
+        if (success && mounted) {
           setState(() {
             _isPlayingAudio = true;
           });
 
           // Listen for audio completion
           AudioService.player.onPlayerComplete.listen((_) {
+            print('🔊 Audio playback: Audio completed');
             if (mounted) {
               setState(() {
                 _isPlayingAudio = false;
               });
             }
           });
+        } else if (!success) {
+          print('❌ Audio playback: Failed to play audio');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to play audio'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
         }
       }
-    } catch (e) {
-      print('Error playing audio: $e');
+    } catch (e, stackTrace) {
+      print('❌ Error playing audio: $e');
+      print('Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error playing audio: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 }

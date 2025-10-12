@@ -9,8 +9,10 @@ import 'widgets/loading_button.dart';
 import 'services/optimistic_ui_service.dart';
 import 'services/post_service.dart';
 import 'services/contextual_auth_service.dart';
+import 'services/video_downloader_service.dart';
 import 'widgets/custom_toaster.dart';
 import 'widgets/comments_bottom_sheet.dart';
+import 'widgets/video_download_progress.dart';
 
 class ImmersiveViewerScreen extends StatefulWidget {
   final List<PostModel> posts;
@@ -273,6 +275,73 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
             },
           ),
     );
+  }
+
+  Future<void> _downloadReel(PostModel post) async {
+    HapticFeedback.lightImpact();
+
+    double downloadProgress = 0.0;
+    OverlayEntry? progressOverlay;
+
+    try {
+      // Show download progress overlay
+      progressOverlay = OverlayEntry(
+        builder:
+            (context) => Positioned(
+              bottom: 100,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: CompactDownloadProgress(progress: downloadProgress),
+              ),
+            ),
+      );
+      Overlay.of(context).insert(progressOverlay);
+
+      if (post.videoUrl != null) {
+        // Download video
+        final fileName =
+            'flip_reel_${DateTime.now().millisecondsSinceEpoch}.mp4';
+        final result = await VideoDownloaderService.downloadVideo(
+          videoUrl: post.videoUrl!,
+          fileName: fileName,
+          onProgress: (progress) {
+            downloadProgress = progress;
+            progressOverlay?.markNeedsBuild();
+          },
+        );
+
+        progressOverlay?.remove();
+
+        if (mounted) {
+          if (result.success) {
+            // Show success indicator
+            final successOverlay = OverlayEntry(
+              builder:
+                  (context) => const Positioned(
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(child: DownloadSuccessIndicator()),
+                  ),
+            );
+            Overlay.of(context).insert(successOverlay);
+            await Future.delayed(const Duration(seconds: 2));
+            successOverlay.remove();
+
+            context.showSuccessToaster('Reel saved to gallery!');
+          } else {
+            context.showErrorToaster(result.message);
+          }
+        }
+      }
+    } catch (e) {
+      progressOverlay?.remove();
+      if (mounted) {
+        context.showErrorToaster('Failed to download. Please try again.');
+      }
+      print('❌ Error downloading reel: $e');
+    }
   }
 
   @override
@@ -789,6 +858,19 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(width: 24),
+                    // Download button
+                    GestureDetector(
+                      onTap: () => _downloadReel(currentPost),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(
+                          Icons.download,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
                     ),
                     const Spacer(),
 

@@ -329,16 +329,30 @@ class PostModel {
     if (json['userId'] is String) {
       // userId is a string ID
       userId = json['userId'];
+      // Backend sends username as top-level field
+      username = json['username'] ?? 'Unknown User';
+      userAvatar = json['userAvatar'];
     } else if (json['userId'] is Map<String, dynamic>) {
       // userId is a populated user object
       final userObj = json['userId'] as Map<String, dynamic>;
       userId = userObj['_id'] ?? userObj['id'] ?? json['firebaseUid'];
+      // Check top-level username first (backend sends it here), then fall back to user object
       username =
-          userObj['displayName'] ?? userObj['username'] ?? 'Unknown User';
-      userAvatar = userObj['photoURL'] ?? userObj['profileImageUrl'];
+          json['username'] ??
+          userObj['profile']?['username'] ??
+          userObj['username'] ??
+          userObj['displayName'] ??
+          'Unknown User';
+      userAvatar =
+          json['userAvatar'] ??
+          userObj['photoURL'] ??
+          userObj['profileImageUrl'];
     } else {
       // Fallback to firebaseUid
       userId = json['firebaseUid'] ?? '';
+      // Backend sends username as top-level field
+      username = json['username'] ?? 'Unknown User';
+      userAvatar = json['userAvatar'];
     }
 
     return PostModel(
