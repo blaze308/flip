@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/gift_model.dart';
+import 'svga_player_widget.dart';
 
 class ModernSvgaPreview extends StatefulWidget {
   final GiftModel gift;
@@ -20,30 +21,12 @@ class ModernSvgaPreview extends StatefulWidget {
   State<ModernSvgaPreview> createState() => _ModernSvgaPreviewState();
 }
 
-class _ModernSvgaPreviewState extends State<ModernSvgaPreview>
-    with SingleTickerProviderStateMixin {
+class _ModernSvgaPreviewState extends State<ModernSvgaPreview> {
   final TextEditingController _captionController = TextEditingController();
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    // Create a pulse animation for the gift icon
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-    _pulseAnimation = Tween<double>(begin: 0.9, end: 1.1).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-    _pulseController.repeat(reverse: true);
-  }
 
   @override
   void dispose() {
     _captionController.dispose();
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -69,56 +52,44 @@ class _ModernSvgaPreviewState extends State<ModernSvgaPreview>
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Animated gift icon
+                    // SVGA Player - plays the actual animation
                     Center(
-                      child: AnimatedBuilder(
-                        animation: _pulseAnimation,
-                        builder: (context, child) {
-                          return Transform.scale(
-                            scale: _pulseAnimation.value,
-                            child: child,
-                          );
-                        },
-                        child: Container(
-                          width: 280,
-                          height: 280,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF4ECDC4).withOpacity(0.3),
-                                blurRadius: 40,
-                                spreadRadius: 10,
+                      child: Container(
+                        width: MediaQuery.of(context).size.width * 0.8,
+                        height: MediaQuery.of(context).size.width * 0.8,
+                        child: SvgaPlayerWidget(
+                          svgaUrl: widget.gift.svgaUrl,
+                          fit: BoxFit.contain,
+                          autoPlay: true,
+                          loop: true,
+                          placeholder:
+                              (context) => Center(
+                                child: CachedNetworkImage(
+                                  imageUrl: widget.gift.iconUrl,
+                                  fit: BoxFit.contain,
+                                  placeholder:
+                                      (context, url) =>
+                                          const CircularProgressIndicator(
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Color(0xFF4ECDC4),
+                                                ),
+                                          ),
+                                ),
                               ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: CachedNetworkImage(
-                              imageUrl: widget.gift.iconUrl,
-                              fit: BoxFit.cover,
-                              placeholder:
-                                  (context, url) => Container(
-                                    color: const Color(0xFF2A2A2A),
-                                    child: const Center(
-                                      child: CircularProgressIndicator(
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                              Color(0xFF4ECDC4),
-                                            ),
+                          errorWidget:
+                              (context, error) => Center(
+                                child: CachedNetworkImage(
+                                  imageUrl: widget.gift.iconUrl,
+                                  fit: BoxFit.contain,
+                                  errorWidget:
+                                      (context, url, error) => const Icon(
+                                        Icons.card_giftcard,
+                                        size: 120,
+                                        color: Color(0xFF4ECDC4),
                                       ),
-                                    ),
-                                  ),
-                              errorWidget:
-                                  (context, url, error) => Container(
-                                    color: const Color(0xFF2A2A2A),
-                                    child: const Icon(
-                                      Icons.card_giftcard,
-                                      size: 120,
-                                      color: Color(0xFF4ECDC4),
-                                    ),
-                                  ),
-                            ),
-                          ),
+                                ),
+                              ),
                         ),
                       ),
                     ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 /// Widget to play SVGA animations with caching using svgaplayer_flutter
 class SvgaPlayerWidget extends StatefulWidget {
@@ -147,8 +146,6 @@ class SvgaViewerScreen extends StatelessWidget {
             Center(
               child: SvgaPlayerWidget(
                 svgaUrl: svgaUrl,
-                width: MediaQuery.of(context).size.width,
-                height: MediaQuery.of(context).size.height * 0.7,
                 fit: BoxFit.contain,
                 autoPlay: true,
                 loop: true,

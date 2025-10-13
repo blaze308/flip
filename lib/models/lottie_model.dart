@@ -172,7 +172,7 @@ class LottieList {
     LottieModel(
       id: 'vip',
       name: 'VIP',
-      lottieUrl: 'lotties/VIP.json',
+      lottieUrl: 'assets/lotties/VIP.json',
       weight: 100000,
       category: LottieCategory.vip,
       description: 'Exclusive VIP animation',
@@ -180,7 +180,7 @@ class LottieList {
     LottieModel(
       id: 'mvp',
       name: 'MVP',
-      lottieUrl: 'lotties/MVP.json',
+      lottieUrl: 'assets/lotties/MVP.json',
       weight: 85000,
       category: LottieCategory.vip,
       description: 'Most Valuable Player badge',
@@ -188,7 +188,7 @@ class LottieList {
     LottieModel(
       id: 'diamond',
       name: 'Diamond',
-      lottieUrl: 'lotties/Diamond.json',
+      lottieUrl: 'assets/lotties/Diamond.json',
       weight: 75000,
       category: LottieCategory.vip,
       description: 'Premium diamond effect',
@@ -196,7 +196,7 @@ class LottieList {
     LottieModel(
       id: 'gold',
       name: 'Gold',
-      lottieUrl: 'lotties/Gold.json',
+      lottieUrl: 'assets/lotties/Gold.json',
       weight: 60000,
       category: LottieCategory.vip,
       description: 'Gold tier animation',
@@ -206,7 +206,7 @@ class LottieList {
     LottieModel(
       id: 'rewards',
       name: 'Rewards',
-      lottieUrl: 'lotties/Rewards.json',
+      lottieUrl: 'assets/lotties/Rewards.json',
       weight: 45000,
       category: LottieCategory.rewards,
       description: 'Achievement unlocked',
@@ -214,7 +214,7 @@ class LottieList {
     LottieModel(
       id: 'badges',
       name: 'Badges',
-      lottieUrl: 'lotties/Badges.json',
+      lottieUrl: 'assets/lotties/Badges.json',
       weight: 40000,
       category: LottieCategory.rewards,
       description: 'Badge collection',
@@ -222,7 +222,7 @@ class LottieList {
     LottieModel(
       id: 'guardians',
       name: 'Guardians',
-      lottieUrl: 'lotties/Guardians.json',
+      lottieUrl: 'assets/lotties/Guardians.json',
       weight: 38000,
       category: LottieCategory.rewards,
       description: 'Guardian status',
@@ -230,7 +230,7 @@ class LottieList {
     LottieModel(
       id: 'fan_club',
       name: 'Fan Club',
-      lottieUrl: 'lotties/FanClub.json',
+      lottieUrl: 'assets/lotties/FanClub.json',
       weight: 35000,
       category: LottieCategory.rewards,
       description: 'Fan club member',
@@ -238,7 +238,7 @@ class LottieList {
     LottieModel(
       id: 'silver',
       name: 'Silver',
-      lottieUrl: 'lotties/Silver.json',
+      lottieUrl: 'assets/lotties/Silver.json',
       weight: 35000,
       category: LottieCategory.rewards,
       description: 'Silver tier',
@@ -246,7 +246,7 @@ class LottieList {
     LottieModel(
       id: 'bronze',
       name: 'Bronze',
-      lottieUrl: 'lotties/Bronze.json',
+      lottieUrl: 'assets/lotties/Bronze.json',
       weight: 30000,
       category: LottieCategory.rewards,
       description: 'Bronze tier',
@@ -256,7 +256,7 @@ class LottieList {
     LottieModel(
       id: 'running_horse',
       name: 'Running Horse',
-      lottieUrl: 'lotties/running_horse.json',
+      lottieUrl: 'assets/lotties/running_horse.json',
       weight: 25000,
       category: LottieCategory.animals,
       description: 'Majestic running horse',
@@ -264,7 +264,7 @@ class LottieList {
     LottieModel(
       id: 'running_fox',
       name: 'Running Fox',
-      lottieUrl: 'lotties/running_fox.json',
+      lottieUrl: 'assets/lotties/running_fox.json',
       weight: 22000,
       category: LottieCategory.animals,
       description: 'Swift running fox',
@@ -274,7 +274,7 @@ class LottieList {
     LottieModel(
       id: 'fire',
       name: 'Fire',
-      lottieUrl: 'lotties/fire.json',
+      lottieUrl: 'assets/lotties/fire.json',
       weight: 20000,
       category: LottieCategory.effects,
       description: 'Blazing fire effect',
@@ -282,7 +282,7 @@ class LottieList {
     LottieModel(
       id: 'audio_spectrum',
       name: 'Audio Spectrum',
-      lottieUrl: 'lotties/61928-circular-audio-spectrum.json',
+      lottieUrl: 'assets/lotties/61928-circular-audio-spectrum.json',
       weight: 18000,
       category: LottieCategory.effects,
       description: 'Circular audio visualizer',
@@ -290,7 +290,7 @@ class LottieList {
     LottieModel(
       id: 'sound_animation',
       name: 'Sound Animation',
-      lottieUrl: 'lotties/sound_animation.json',
+      lottieUrl: 'assets/lotties/sound_animation.json',
       weight: 15000,
       category: LottieCategory.effects,
       description: 'Sound wave animation',
@@ -300,7 +300,7 @@ class LottieList {
     LottieModel(
       id: 'megaphone',
       name: 'Megaphone',
-      lottieUrl: 'lotties/megaphone.json',
+      lottieUrl: 'assets/lotties/megaphone.json',
       weight: 15000,
       category: LottieCategory.social,
       description: 'Announcement megaphone',
@@ -308,7 +308,7 @@ class LottieList {
     LottieModel(
       id: 'live_start',
       name: 'Live Start',
-      lottieUrl: 'lotties/ic_live_start.json',
+      lottieUrl: 'assets/lotties/ic_live_start.json',
       weight: 12000,
       category: LottieCategory.social,
       description: 'Go live animation',
@@ -316,7 +316,7 @@ class LottieList {
     LottieModel(
       id: 'live_animation',
       name: 'Live',
-      lottieUrl: 'lotties/ic_live_animation.json',
+      lottieUrl: 'assets/lotties/ic_live_animation.json',
       weight: 10000,
       category: LottieCategory.social,
       description: 'Live streaming',
@@ -324,7 +324,7 @@ class LottieList {
     LottieModel(
       id: 'share_live',
       name: 'Share Live',
-      lottieUrl: 'lotties/ic_share_live.json',
+      lottieUrl: 'assets/lotties/ic_share_live.json',
       weight: 10000,
       category: LottieCategory.social,
       description: 'Share live stream',
@@ -332,7 +332,7 @@ class LottieList {
     LottieModel(
       id: 'video_call',
       name: 'Video Call',
-      lottieUrl: 'lotties/ic_video_call.json',
+      lottieUrl: 'assets/lotties/ic_video_call.json',
       weight: 9000,
       category: LottieCategory.social,
       description: 'Video call icon',
@@ -342,7 +342,7 @@ class LottieList {
     LottieModel(
       id: 'gift',
       name: 'Gift',
-      lottieUrl: 'lotties/ic_gift.json',
+      lottieUrl: 'assets/lotties/ic_gift.json',
       weight: 10000,
       category: LottieCategory.fun,
       description: 'Gift box animation',
@@ -350,7 +350,7 @@ class LottieList {
     LottieModel(
       id: 'strawberry',
       name: 'Strawberry',
-      lottieUrl: 'lotties/strawberry.json',
+      lottieUrl: 'assets/lotties/strawberry.json',
       weight: 8000,
       category: LottieCategory.fun,
       description: 'Sweet strawberry',
@@ -358,7 +358,7 @@ class LottieList {
     LottieModel(
       id: 'check_in',
       name: 'Check In',
-      lottieUrl: 'lotties/CheckIn.json',
+      lottieUrl: 'assets/lotties/CheckIn.json',
       weight: 7000,
       category: LottieCategory.fun,
       description: 'Daily check-in',
@@ -366,7 +366,7 @@ class LottieList {
     LottieModel(
       id: 'party',
       name: 'Party',
-      lottieUrl: 'lotties/tab_party.json',
+      lottieUrl: 'assets/lotties/tab_party.json',
       weight: 6000,
       category: LottieCategory.fun,
       description: 'Party time',
@@ -376,7 +376,7 @@ class LottieList {
     LottieModel(
       id: 'backpacks',
       name: 'Backpacks',
-      lottieUrl: 'lotties/Backpacks.json',
+      lottieUrl: 'assets/lotties/Backpacks.json',
       weight: 8000,
       category: LottieCategory.classic,
       description: 'Backpack collection',
@@ -384,7 +384,7 @@ class LottieList {
     LottieModel(
       id: 'level',
       name: 'Level Up',
-      lottieUrl: 'lotties/Level.json',
+      lottieUrl: 'assets/lotties/Level.json',
       weight: 7000,
       category: LottieCategory.classic,
       description: 'Level up badge',
@@ -392,7 +392,7 @@ class LottieList {
     LottieModel(
       id: 'shop',
       name: 'Shop',
-      lottieUrl: 'lotties/Shop.json',
+      lottieUrl: 'assets/lotties/Shop.json',
       weight: 6000,
       category: LottieCategory.classic,
       description: 'Shopping cart',
@@ -400,7 +400,7 @@ class LottieList {
     LottieModel(
       id: 'family',
       name: 'Family',
-      lottieUrl: 'lotties/Family.json',
+      lottieUrl: 'assets/lotties/Family.json',
       weight: 5000,
       category: LottieCategory.classic,
       description: 'Family members',
@@ -408,7 +408,7 @@ class LottieList {
     LottieModel(
       id: 'farm',
       name: 'Farm',
-      lottieUrl: 'lotties/Farm.json',
+      lottieUrl: 'assets/lotties/Farm.json',
       weight: 5000,
       category: LottieCategory.classic,
       description: 'Farm animals',
@@ -416,7 +416,7 @@ class LottieList {
     LottieModel(
       id: 'reels',
       name: 'Reels',
-      lottieUrl: 'lotties/reels.json',
+      lottieUrl: 'assets/lotties/reels.json',
       weight: 4000,
       category: LottieCategory.classic,
       description: 'Video reels',
@@ -426,7 +426,7 @@ class LottieList {
     LottieModel(
       id: 'account',
       name: 'Account',
-      lottieUrl: 'lotties/account.json',
+      lottieUrl: 'assets/lotties/account.json',
       weight: 3000,
       category: LottieCategory.tech,
       description: 'User account',
@@ -434,7 +434,7 @@ class LottieList {
     LottieModel(
       id: 'setting',
       name: 'Settings',
-      lottieUrl: 'lotties/setting.json',
+      lottieUrl: 'assets/lotties/setting.json',
       weight: 3000,
       category: LottieCategory.tech,
       description: 'Settings gear',
@@ -442,7 +442,7 @@ class LottieList {
     LottieModel(
       id: 'chat',
       name: 'Chat',
-      lottieUrl: 'lotties/chat.json',
+      lottieUrl: 'assets/lotties/chat.json',
       weight: 2500,
       category: LottieCategory.tech,
       description: 'Chat bubble',
@@ -450,7 +450,7 @@ class LottieList {
     LottieModel(
       id: 'feed',
       name: 'Feed',
-      lottieUrl: 'lotties/feed.json',
+      lottieUrl: 'assets/lotties/feed.json',
       weight: 2500,
       category: LottieCategory.tech,
       description: 'News feed',
@@ -458,7 +458,7 @@ class LottieList {
     LottieModel(
       id: 'live',
       name: 'Live',
-      lottieUrl: 'lotties/live.json',
+      lottieUrl: 'assets/lotties/live.json',
       weight: 2000,
       category: LottieCategory.tech,
       description: 'Live indicator',
@@ -466,7 +466,7 @@ class LottieList {
     LottieModel(
       id: 'comment',
       name: 'Comment',
-      lottieUrl: 'lotties/ic_comment.json',
+      lottieUrl: 'assets/lotties/ic_comment.json',
       weight: 2000,
       category: LottieCategory.tech,
       description: 'Comment icon',
@@ -474,7 +474,7 @@ class LottieList {
     LottieModel(
       id: 'viewer',
       name: 'Viewer',
-      lottieUrl: 'lotties/ic_viewer.json',
+      lottieUrl: 'assets/lotties/ic_viewer.json',
       weight: 2000,
       category: LottieCategory.tech,
       description: 'Viewer count',
@@ -482,7 +482,7 @@ class LottieList {
     LottieModel(
       id: 'online',
       name: 'Online',
-      lottieUrl: 'lotties/ic_online.json',
+      lottieUrl: 'assets/lotties/ic_online.json',
       weight: 1500,
       category: LottieCategory.tech,
       description: 'Online status',
@@ -490,7 +490,7 @@ class LottieList {
     LottieModel(
       id: 'offline',
       name: 'Offline',
-      lottieUrl: 'lotties/ic_offline.json',
+      lottieUrl: 'assets/lotties/ic_offline.json',
       weight: 1500,
       category: LottieCategory.tech,
       description: 'Offline status',
@@ -498,7 +498,7 @@ class LottieList {
     LottieModel(
       id: 'activated_mic',
       name: 'Mic On',
-      lottieUrl: 'lotties/ic_activated_mic.json',
+      lottieUrl: 'assets/lotties/ic_activated_mic.json',
       weight: 1000,
       category: LottieCategory.tech,
       description: 'Microphone on',
@@ -506,7 +506,7 @@ class LottieList {
     LottieModel(
       id: 'disabled_mic',
       name: 'Mic Off',
-      lottieUrl: 'lotties/ic_disabled_mic.json',
+      lottieUrl: 'assets/lotties/ic_disabled_mic.json',
       weight: 1000,
       category: LottieCategory.tech,
       description: 'Microphone off',
@@ -514,7 +514,7 @@ class LottieList {
     LottieModel(
       id: 'enabled_video',
       name: 'Camera On',
-      lottieUrl: 'lotties/ic_enabled_video.json',
+      lottieUrl: 'assets/lotties/ic_enabled_video.json',
       weight: 1000,
       category: LottieCategory.tech,
       description: 'Camera on',
@@ -522,7 +522,7 @@ class LottieList {
     LottieModel(
       id: 'disabled_video',
       name: 'Camera Off',
-      lottieUrl: 'lotties/ic_disabled_video.json',
+      lottieUrl: 'assets/lotties/ic_disabled_video.json',
       weight: 1000,
       category: LottieCategory.tech,
       description: 'Camera off',
@@ -530,7 +530,7 @@ class LottieList {
     LottieModel(
       id: 'switch_camera',
       name: 'Switch Camera',
-      lottieUrl: 'lotties/ic_switch_camera.json',
+      lottieUrl: 'assets/lotties/ic_switch_camera.json',
       weight: 1000,
       category: LottieCategory.tech,
       description: 'Switch camera',
@@ -538,7 +538,7 @@ class LottieList {
     LottieModel(
       id: 'message_mic',
       name: 'Voice Message',
-      lottieUrl: 'lotties/ic_message_mic.json',
+      lottieUrl: 'assets/lotties/ic_message_mic.json',
       weight: 1000,
       category: LottieCategory.tech,
       description: 'Voice message',
@@ -546,7 +546,7 @@ class LottieList {
     LottieModel(
       id: 'menu',
       name: 'Menu',
-      lottieUrl: 'lotties/ic_menu.json',
+      lottieUrl: 'assets/lotties/ic_menu.json',
       weight: 500,
       category: LottieCategory.tech,
       description: 'Menu icon',
@@ -554,7 +554,7 @@ class LottieList {
     LottieModel(
       id: 'menu_grid',
       name: 'Grid Menu',
-      lottieUrl: 'lotties/ic_menu_grid.json',
+      lottieUrl: 'assets/lotties/ic_menu_grid.json',
       weight: 500,
       category: LottieCategory.tech,
       description: 'Grid menu',
@@ -562,7 +562,7 @@ class LottieList {
     LottieModel(
       id: 'menu_plus',
       name: 'Add Menu',
-      lottieUrl: 'lotties/ic_menu_plus.json',
+      lottieUrl: 'assets/lotties/ic_menu_plus.json',
       weight: 500,
       category: LottieCategory.tech,
       description: 'Add menu',
@@ -570,7 +570,7 @@ class LottieList {
     LottieModel(
       id: 'empty_box',
       name: 'Empty Box',
-      lottieUrl: 'lotties/empty_box.json',
+      lottieUrl: 'assets/lotties/empty_box.json',
       weight: 500,
       category: LottieCategory.tech,
       description: 'Empty state',
@@ -578,7 +578,7 @@ class LottieList {
     LottieModel(
       id: 'empty',
       name: 'Empty',
-      lottieUrl: 'lotties/empty.json',
+      lottieUrl: 'assets/lotties/empty.json',
       weight: 500,
       category: LottieCategory.tech,
       description: 'No content',

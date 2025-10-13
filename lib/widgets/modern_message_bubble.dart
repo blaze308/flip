@@ -865,106 +865,59 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
       },
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-          minHeight: 100,
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // SVGA Player - plays the actual animation (no background)
-            AspectRatio(
-              aspectRatio: 16 / 10, // Wider than tall (like 16:10)
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SvgaPlayerWidget(
-                  svgaUrl: svgaUrl,
-                  width: double.infinity,
-                  height: double.infinity,
-                  placeholder:
-                      (context) => Center(
-                        child:
-                            gift != null
-                                ? CachedNetworkImage(
-                                  imageUrl: gift.iconUrl,
-                                  fit: BoxFit.contain,
-                                  placeholder:
-                                      (context, url) =>
-                                          const CircularProgressIndicator(
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                  Color(0xFF4ECDC4),
-                                                ),
-                                          ),
-                                )
-                                : const CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF4ECDC4),
-                                  ),
-                                ),
-                      ),
-                  errorWidget:
-                      (context, error) => Center(
-                        child:
-                            gift != null
-                                ? CachedNetworkImage(
-                                  imageUrl: gift.iconUrl,
-                                  fit: BoxFit.contain,
-                                  errorWidget:
-                                      (context, url, error) => const Icon(
-                                        Icons.card_giftcard,
-                                        size: 64,
-                                        color: Color(0xFF4ECDC4),
+        child: AspectRatio(
+          aspectRatio: 1.6, // 16:10 ratio - wider than tall
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SvgaPlayerWidget(
+              svgaUrl: svgaUrl,
+              fit: BoxFit.cover,
+              placeholder:
+                  (context) => Center(
+                    child:
+                        gift != null
+                            ? CachedNetworkImage(
+                              imageUrl: gift.iconUrl,
+                              fit: BoxFit.contain,
+                              placeholder:
+                                  (context, url) =>
+                                      const CircularProgressIndicator(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Color(0xFF4ECDC4),
+                                            ),
                                       ),
-                                )
-                                : const Icon(
-                                  Icons.card_giftcard,
-                                  size: 64,
-                                  color: Color(0xFF4ECDC4),
-                                ),
-                      ),
-                ),
-              ),
+                            )
+                            : const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF4ECDC4),
+                              ),
+                            ),
+                  ),
+              errorWidget:
+                  (context, error) => Center(
+                    child:
+                        gift != null
+                            ? CachedNetworkImage(
+                              imageUrl: gift.iconUrl,
+                              fit: BoxFit.contain,
+                              errorWidget:
+                                  (context, url, error) => const Icon(
+                                    Icons.card_giftcard,
+                                    size: 64,
+                                    color: Color(0xFF4ECDC4),
+                                  ),
+                            )
+                            : const Icon(
+                              Icons.card_giftcard,
+                              size: 64,
+                              color: Color(0xFF4ECDC4),
+                            ),
+                  ),
             ),
-            if (gift != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.card_giftcard,
-                    color: Color(0xFFFFD700),
-                    size: 14,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    gift.name,
-                    style: TextStyle(
-                      color:
-                          widget.isFromCurrentUser
-                              ? Colors.white
-                              : Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const Spacer(),
-                  const Icon(
-                    Icons.monetization_on,
-                    color: Color(0xFFFFD700),
-                    size: 12,
-                  ),
-                  const SizedBox(width: 2),
-                  Text(
-                    '${gift.weight}',
-                    style: const TextStyle(
-                      color: Color(0xFFFFD700),
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

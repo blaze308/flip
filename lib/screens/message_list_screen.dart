@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:lottie/lottie.dart';
 import 'dart:async';
 import '../models/chat_model.dart';
+import '../models/gift_model.dart';
 import '../services/chat_service.dart';
 import '../services/socket_service.dart';
 import '../services/user_service.dart';
@@ -816,17 +819,7 @@ class _MessageListScreenState extends ConsumerState<MessageListScreen> {
                       const SizedBox(height: 3),
                       Row(
                         children: [
-                          Expanded(
-                            child: Text(
-                              chat.getLastMessagePreview(),
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                          Expanded(child: _buildLastMessagePreview(chat)),
                           if (chat.unreadCount > 0) ...[
                             const SizedBox(width: 8),
                             Container(
@@ -1086,6 +1079,113 @@ class _MessageListScreenState extends ConsumerState<MessageListScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Build last message preview with icon thumbnails for SVGA/Lottie
+  Widget _buildLastMessagePreview(ChatModel chat) {
+    if (chat.lastMessage == null) {
+      return Text(
+        'No messages yet',
+        style: TextStyle(color: Colors.grey[500], fontSize: 14),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    final messageType = chat.lastMessage!.type;
+    final content = chat.lastMessage!.content;
+
+    // Check if it's SVGA (from URL or type)
+    if (messageType == 'svga' ||
+        (content.contains('.svga') && content.contains('http'))) {
+      // Try to find the gift icon
+      GiftModel? gift;
+      for (final g in GiftList.gifts) {
+        if (g.svgaUrl == content) {
+          gift = g;
+          break;
+        }
+      }
+
+      return Row(
+        children: [
+          if (gift != null)
+            Container(
+              width: 24,
+              height: 24,
+              margin: const EdgeInsets.only(right: 6),
+              child: CachedNetworkImage(
+                imageUrl: gift.iconUrl,
+                fit: BoxFit.cover,
+                errorWidget:
+                    (context, url, error) => const Icon(
+                      Icons.card_giftcard,
+                      size: 16,
+                      color: Color(0xFF4ECDC4),
+                    ),
+              ),
+            )
+          else
+            Container(
+              margin: const EdgeInsets.only(right: 6),
+              child: const Icon(
+                Icons.card_giftcard,
+                size: 16,
+                color: Color(0xFF4ECDC4),
+              ),
+            ),
+          Expanded(
+            child: Text(
+              '🎬 Animation',
+              style: TextStyle(color: Colors.grey[500], fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Check if it's Lottie (from asset path or type)
+    if (messageType == 'lottie' ||
+        content.contains('lotties/') ||
+        content.contains('assets/lotties/')) {
+      return Row(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            margin: const EdgeInsets.only(right: 6),
+            child: Lottie.asset(
+              content,
+              fit: BoxFit.cover,
+              errorBuilder:
+                  (context, error, stackTrace) => const Icon(
+                    Icons.animation,
+                    size: 16,
+                    color: Color(0xFF4ECDC4),
+                  ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              '✨ Animation',
+              style: TextStyle(color: Colors.grey[500], fontSize: 14),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Default text preview for other message types
+    return Text(
+      chat.getLastMessagePreview(),
+      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
