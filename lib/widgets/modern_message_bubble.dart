@@ -56,6 +56,20 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
     super.dispose();
   }
 
+  /// Check if text contains only emojis (for larger display)
+  bool _isEmojiOnly(String text) {
+    if (text.isEmpty) return false;
+
+    // Remove all emojis and check if anything remains
+    final emojiRegex = RegExp(
+      r'(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])',
+    );
+    final textWithoutEmoji = text.replaceAll(emojiRegex, '').trim();
+
+    // If nothing remains, it's emoji-only
+    return textWithoutEmoji.isEmpty && text.trim().isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SwipeableMessageBubble(
@@ -218,9 +232,14 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
   }
 
   Widget _buildTextMessage() {
+    // Check if message is emoji-only (for larger display)
+    final content = widget.message.content ?? '';
+    final isEmojiOnly = _isEmojiOnly(content);
+
     return Container(
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width * 0.75,
+        minHeight: 40, // Ensure minimum height for visibility
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
@@ -246,10 +265,10 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            widget.message.content ?? '',
-            style: const TextStyle(
-              color: Color(0xFFE9EDEF),
-              fontSize: 14.5,
+            content,
+            style: TextStyle(
+              color: const Color(0xFFE9EDEF),
+              fontSize: isEmojiOnly ? 32.0 : 14.5, // Larger size for emoji-only
               height: 1.35,
             ),
           ),

@@ -54,12 +54,46 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
     if (chatIndex != -1) {
       // Move chat to top and update last message
       final chat = _chats.removeAt(chatIndex);
+      
+      // Don't increment unread count if it's from current user
+      final currentUserId = TokenAuthService.currentUser?.id ?? '';
+      final isFromCurrentUser = message.senderId == currentUserId;
+      
       final updatedChat = chat.copyWith(
-        unreadCount: chat.unreadCount + 1,
-        // Update last message info here if needed
+        unreadCount: isFromCurrentUser ? chat.unreadCount : chat.unreadCount + 1,
+        lastMessage: LastMessage(
+          messageId: message.id,
+          content: message.content ?? _getMessageTypeLabel(message.type),
+          type: message.type.name,
+          senderId: message.senderId,
+          sender: message.sender,
+          timestamp: message.createdAt,
+        ),
       );
       _chats.insert(0, updatedChat);
       state = AsyncValue.data([..._chats]);
+    } else {
+      // Chat not in list, refresh to get it
+      refresh();
+    }
+  }
+  
+  String _getMessageTypeLabel(MessageType type) {
+    switch (type) {
+      case MessageType.image:
+        return '📷 Photo';
+      case MessageType.video:
+        return '🎥 Video';
+      case MessageType.audio:
+        return '🎤 Voice message';
+      case MessageType.file:
+        return '📎 File';
+      case MessageType.lottie:
+        return '🎭 Sticker';
+      case MessageType.svga:
+        return '🎨 Animation';
+      default:
+        return '';
     }
   }
 

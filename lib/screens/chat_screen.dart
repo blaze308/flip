@@ -19,6 +19,9 @@ import '../widgets/modern_message_bubble.dart';
 import '../widgets/message_input.dart';
 import '../widgets/shimmer_loading.dart';
 import '../widgets/waveform_animation.dart';
+import '../providers/messages_cache_provider.dart';
+import '../widgets/modern_image_preview.dart';
+import '../widgets/modern_video_preview.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final ChatModel chat;
@@ -131,7 +134,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         if (existingIndex == -1) {
           final isUserAtBottom = _isUserAtBottom();
 
-          // Clear cache when new message arrives
+          // Clear old cache when new message arrives
           ChatService.clearMessageCache(widget.chat.id);
 
           setState(() {
@@ -139,6 +142,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               message,
             ); // Add to end since newest should be at bottom
           });
+
+          // Update provider cache with new message
+          ref
+              .read(messagesCacheProvider.notifier)
+              .addMessage(widget.chat.id, message);
 
           // Auto-scroll to bottom if user is already at bottom
           if (isUserAtBottom) {
@@ -239,10 +247,69 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _loadMessages() async {
     if (!mounted) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    // INDUSTRY STANDARD: Check cache first
+    final cachedMessages = ref
+        .read(messagesCacheProvider.notifier)
+        .getCachedMessages(widget.chat.id);
 
+    if (cachedMessages != null && cachedMessages.isNotEmpty) {
+      // Show cached data immediately - NO SHIMMER!
+      setState(() {
+        _messages.clear();
+        _messages.addAll(cachedMessages);
+        _isLoading = false; // Already have data, no loading state
+      });
+
+      // Scroll to bottom immediately
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom();
+      });
+
+      // Fetch fresh data in background
+      _refreshMessagesInBackground();
+    } else {
+      // No cache - show loading state
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        final result = await ChatService.getMessages(
+          widget.chat.id,
+          page: 1,
+          limit: 50,
+        );
+
+        if (mounted) {
+          setState(() {
+            _messages.clear();
+            _messages.addAll(result.messages);
+            _isLoading = false;
+          });
+
+          // Cache the messages
+          ref
+              .read(messagesCacheProvider.notifier)
+              .cacheMessages(widget.chat.id, result.messages);
+
+          // Scroll to bottom after loading
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToBottom();
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          ToasterService.showError(context, 'Failed to load messages');
+        }
+      }
+    }
+  }
+
+  /// Background refresh - updates cache silently
+  Future<void> _refreshMessagesInBackground() async {
     try {
       final result = await ChatService.getMessages(
         widget.chat.id,
@@ -251,26 +318,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       );
 
       if (mounted) {
-        setState(() {
-          _messages.clear();
-          _messages.addAll(
-            result.messages,
-          ); // Don't reverse - backend should send in correct order
-          _isLoading = false;
-        });
+        // Update cache
+        ref
+            .read(messagesCacheProvider.notifier)
+            .cacheMessages(widget.chat.id, result.messages);
 
-        // Scroll to bottom after loading
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToBottom();
-        });
+        // Only update UI if there are new messages
+        if (result.messages.length != _messages.length) {
+          setState(() {
+            _messages.clear();
+            _messages.addAll(result.messages);
+          });
+        }
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ToasterService.showError(context, 'Failed to load messages');
-      }
+      // Silent fail - already showing cached data
+      print('Background refresh failed: $e');
     }
   }
 
@@ -461,7 +524,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  Future<void> _sendMediaMessage(MessageType type, File file) async {
+  Future<void> _sendMediaMessage(
+    MessageType type,
+    File file, {
+    String? caption,
+  }) async {
     try {
       print('🎵 ChatScreen: Sending ${type.name} message...');
 
@@ -485,7 +552,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           likesCount: 0,
         ),
         type: type,
-        content: null,
+        content: caption, // Include caption with media
         media: null, // Will be populated after upload
         localFilePath: file.path, // For immediate UI display
         status: MessageStatus.sending,
@@ -505,6 +572,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       setState(() {
         _messages.add(optimisticMessage);
       });
+
+      // Update cache with optimistic message
+      ref
+          .read(messagesCacheProvider.notifier)
+          .addMessage(widget.chat.id, optimisticMessage);
+
       _scrollToBottom();
 
       // Upload media in background
@@ -512,6 +585,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         widget.chat.id,
         type,
         file,
+        content: caption, // Pass caption to backend
         replyToMessageId: _replyToMessage?.id,
       );
 
@@ -524,11 +598,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           (m) => m.id == optimisticMessage.id,
         );
         if (messageIndex != -1) {
+          final sentMessage = result.message!.copyWith(
+            status: MessageStatus.sent,
+          );
           setState(() {
-            _messages[messageIndex] = result.message!.copyWith(
-              status: MessageStatus.sent,
-            );
+            _messages[messageIndex] = sentMessage;
           });
+
+          // Update cache with sent message
+          ref
+              .read(messagesCacheProvider.notifier)
+              .updateMessage(widget.chat.id, sentMessage);
         }
       } else {
         print(
@@ -1069,249 +1149,329 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  /// Show media preview before sending
+  /// Show media preview before sending (Modern WhatsApp-style)
   Future<void> _showMediaPreview(File file, MessageType type) async {
-    final shouldSend = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder:
-          (context) => Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.all(16),
-            child: Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.8,
-                maxWidth: MediaQuery.of(context).size.width,
+    // Get recipient username (not email)
+    final recipientName =
+        widget.chat.type == ChatType.direct
+            ? (widget.chat.members
+                    .firstWhere(
+                      (m) => m.userId != TokenAuthService.currentUser?.id,
+                      orElse: () => widget.chat.members.first,
+                    )
+                    .user
+                    ?.username ??
+                widget.chat.members
+                    .firstWhere(
+                      (m) => m.userId != TokenAuthService.currentUser?.id,
+                      orElse: () => widget.chat.members.first,
+                    )
+                    .user
+                    ?.displayName ??
+                'User')
+            : widget.chat.name ?? 'Group';
+
+    if (type == MessageType.image) {
+      // Show modern image preview
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder:
+              (context) => ModernImagePreview(
+                imageFile: file,
+                recipientName: recipientName,
+                onSend: (imageFile, caption) async {
+                  Navigator.pop(context);
+                  await _sendMediaMessage(
+                    MessageType.image,
+                    imageFile,
+                    caption: caption,
+                  );
+                },
+                onCancel: () {
+                  Navigator.pop(context);
+                },
               ),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF1E1E1E), Color(0xFF2A2A2A)],
+        ),
+      );
+    } else if (type == MessageType.video) {
+      // Show modern video preview
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder:
+              (context) => ModernVideoPreview(
+                videoFile: file,
+                recipientName: recipientName,
+                onSend: (videoFile, caption) async {
+                  Navigator.pop(context);
+                  await _sendMediaMessage(
+                    MessageType.video,
+                    videoFile,
+                    caption: caption,
+                  );
+                },
+                onCancel: () {
+                  Navigator.pop(context);
+                },
+              ),
+        ),
+      );
+    } else {
+      // Fallback to old dialog for other types
+      final shouldSend = await showDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        builder:
+            (context) => Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(16),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                  maxWidth: MediaQuery.of(context).size.width,
                 ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1E1E1E), Color(0xFF2A2A2A)],
                   ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header with close button
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.5),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header with close button
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF4ECDC4,
+                                  ).withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  type == MessageType.image
+                                      ? Icons.image
+                                      : type == MessageType.video
+                                      ? Icons.videocam
+                                      : Icons.audiotrack,
+                                  color: const Color(0xFF4ECDC4),
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                type == MessageType.image
+                                    ? 'Send Image'
+                                    : type == MessageType.video
+                                    ? 'Send Video'
+                                    : 'Send Audio',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            icon: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF4ECDC4).withOpacity(0.2),
+                                color: Colors.white.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Icon(
-                                type == MessageType.image
-                                    ? Icons.image
-                                    : type == MessageType.video
-                                    ? Icons.videocam
-                                    : Icons.audiotrack,
-                                color: const Color(0xFF4ECDC4),
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              type == MessageType.image
-                                  ? 'Send Image'
-                                  : type == MessageType.video
-                                  ? 'Send Video'
-                                  : 'Send Audio',
-                              style: const TextStyle(
+                              child: const Icon(
+                                Icons.close,
                                 color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                                size: 20,
                               ),
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          icon: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: 20,
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                  // Media Preview with modern styling
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child:
-                            type == MessageType.image
-                                ? Hero(
-                                  tag: 'preview_${file.path}',
-                                  child: Image.file(file, fit: BoxFit.contain),
-                                )
-                                : type == MessageType.video
-                                ? Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.black,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      // Video thumbnail would go here
-                                      const Center(
-                                        child: Icon(
-                                          Icons.videocam,
-                                          size: 80,
-                                          color: Colors.white24,
-                                        ),
-                                      ),
-                                      // Play button overlay
-                                      Container(
-                                        padding: const EdgeInsets.all(20),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF4ECDC4),
-                                          shape: BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: const Color(
-                                                0xFF4ECDC4,
-                                              ).withOpacity(0.4),
-                                              blurRadius: 20,
-                                              spreadRadius: 5,
-                                            ),
-                                          ],
-                                        ),
-                                        child: const Icon(
-                                          Icons.play_arrow,
-                                          size: 40,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                                : Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF2A2A2A),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: const Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
+                    // Media Preview with modern styling
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child:
+                              type == MessageType.image
+                                  ? Hero(
+                                    tag: 'preview_${file.path}',
+                                    child: Image.file(
+                                      file,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  )
+                                  : type == MessageType.video
+                                  ? Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Stack(
+                                      alignment: Alignment.center,
                                       children: [
-                                        Icon(
-                                          Icons.audiotrack,
-                                          size: 80,
-                                          color: Color(0xFF4ECDC4),
+                                        // Video thumbnail would go here
+                                        const Center(
+                                          child: Icon(
+                                            Icons.videocam,
+                                            size: 80,
+                                            color: Colors.white24,
+                                          ),
                                         ),
-                                        SizedBox(height: 20),
-                                        Text(
-                                          'Audio Ready to Send',
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w500,
+                                        // Play button overlay
+                                        Container(
+                                          padding: const EdgeInsets.all(20),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF4ECDC4),
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: const Color(
+                                                  0xFF4ECDC4,
+                                                ).withOpacity(0.4),
+                                                blurRadius: 20,
+                                                spreadRadius: 5,
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Icon(
+                                            Icons.play_arrow,
+                                            size: 40,
+                                            color: Colors.white,
                                           ),
                                         ),
                                       ],
                                     ),
+                                  )
+                                  : Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2A2A2A),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.audiotrack,
+                                            size: 80,
+                                            color: Color(0xFF4ECDC4),
+                                          ),
+                                          SizedBox(height: 20),
+                                          Text(
+                                            'Audio Ready to Send',
+                                            style: TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
+                        ),
                       ),
                     ),
-                  ),
 
-                  // Action Buttons
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        // Cancel button
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white70,
-                              side: BorderSide(
-                                color: Colors.white.withOpacity(0.2),
+                    // Action Buttons
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          // Cancel button
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white70,
+                                side: BorderSide(
+                                  color: Colors.white.withOpacity(0.2),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                               ),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Send button
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton.icon(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4ECDC4),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              elevation: 0,
-                              shadowColor: const Color(
-                                0xFF4ECDC4,
-                              ).withOpacity(0.5),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            icon: const Icon(Icons.send_rounded, size: 20),
-                            label: const Text(
-                              'Send',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 12),
+                          // Send button
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4ECDC4),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                elevation: 0,
+                                shadowColor: const Color(
+                                  0xFF4ECDC4,
+                                ).withOpacity(0.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              icon: const Icon(Icons.send_rounded, size: 20),
+                              label: const Text(
+                                'Send',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-    );
+      );
 
-    // If user confirmed, send the media
-    if (shouldSend == true && mounted) {
-      await _sendMediaMessage(type, file);
+      // If user confirmed, send the media
+      if (shouldSend == true && mounted) {
+        await _sendMediaMessage(type, file);
+      }
     }
   }
 
@@ -1540,23 +1700,85 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Delete a message
   Future<void> _deleteMessage(MessageModel message) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: const Color(0xFF2A2A2A),
+            title: const Text(
+              'Delete Message',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: const Text(
+              'Are you sure you want to delete this message? This action cannot be undone.',
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey[400]),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed != true) return;
+
     // Optimistically remove from UI
     setState(() {
       _messages.removeWhere((m) => m.id == message.id);
     });
 
+    // Update cache immediately
+    ref
+        .read(messagesCacheProvider.notifier)
+        .removeMessage(widget.chat.id, message.id);
+
     // Delete from backend
     final success = await ChatService.deleteMessage(widget.chat.id, message.id);
 
     if (success) {
-      ToasterService.showSuccess(context, 'Message deleted');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message deleted'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } else {
       // Restore message if deletion failed
       setState(() {
         _messages.add(message);
         _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       });
-      ToasterService.showError(context, 'Failed to delete message');
+
+      // Restore to cache
+      ref
+          .read(messagesCacheProvider.notifier)
+          .cacheMessages(widget.chat.id, _messages);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete message'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

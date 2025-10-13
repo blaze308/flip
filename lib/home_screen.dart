@@ -238,7 +238,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           },
         );
 
-        progressOverlay?.remove();
+        progressOverlay.remove();
 
         if (mounted) {
           if (result.success) {
@@ -277,7 +277,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           },
         );
 
-        progressOverlay?.remove();
+        progressOverlay.remove();
 
         if (mounted) {
           if (result.success) {

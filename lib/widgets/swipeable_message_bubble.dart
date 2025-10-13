@@ -65,33 +65,66 @@ class _SwipeableMessageBubbleState extends State<SwipeableMessageBubble>
   void _handleDragUpdate(DragUpdateDetails details) {
     setState(() {
       _dragExtent += details.primaryDelta!;
-      // Allow both directions but with elastic effect
-      if (_dragExtent > 0) {
-        // Right swipe - elastic resistance
-        _dragExtent = _dragExtent * 0.3;
-        _dragExtent = _dragExtent.clamp(0.0, 30.0);
+
+      // CORRECT LOGIC:
+      // Incoming messages (on LEFT) → swipe RIGHT (positive drag)
+      // Sent messages (on RIGHT) → swipe LEFT (negative drag)
+      if (!widget.isFromCurrentUser) {
+        // Incoming message (on LEFT side) - swipe RIGHT to reveal actions
+        if (_dragExtent < 0) {
+          // Left swipe - elastic resistance
+          _dragExtent = _dragExtent * 0.3;
+          _dragExtent = _dragExtent.clamp(-30.0, 0.0);
+        } else {
+          // Right swipe - normal
+          _dragExtent = _dragExtent.clamp(0.0, 160.0);
+        }
       } else {
-        // Left swipe - normal
-        _dragExtent = _dragExtent.clamp(-160.0, 0.0);
+        // Sent message (on RIGHT side) - swipe LEFT to reveal actions
+        if (_dragExtent > 0) {
+          // Right swipe - elastic resistance
+          _dragExtent = _dragExtent * 0.3;
+          _dragExtent = _dragExtent.clamp(0.0, 30.0);
+        } else {
+          // Left swipe - normal
+          _dragExtent = _dragExtent.clamp(-160.0, 0.0);
+        }
       }
     });
   }
 
   void _handleDragEnd(DragEndDetails details) {
-    // If swiped left enough, snap to show actions (only extend to button width)
-    if (_dragExtent < -widget.threshold) {
-      _animateToPosition(-160);
-      setState(() {
-        _isRevealed = true;
-      });
-      _startAutoCloseTimer(); // Auto-close after 2 seconds
-    }
-    // Always return to zero (elastic bounce back)
-    else {
-      _animateToZero();
-      setState(() {
-        _isRevealed = false;
-      });
+    // CORRECT LOGIC:
+    // Incoming messages (on LEFT) → swipe RIGHT reveals actions on LEFT
+    // Sent messages (on RIGHT) → swipe LEFT reveals actions on RIGHT
+    if (!widget.isFromCurrentUser) {
+      // Incoming message - swipe RIGHT
+      if (_dragExtent > widget.threshold) {
+        _animateToPosition(160);
+        setState(() {
+          _isRevealed = true;
+        });
+        _startAutoCloseTimer();
+      } else {
+        _animateToZero();
+        setState(() {
+          _isRevealed = false;
+        });
+      }
+    } else {
+      // Sent message - swipe LEFT
+      if (_dragExtent < -widget.threshold) {
+        _animateToPosition(-160);
+        setState(() {
+          _isRevealed = true;
+        });
+        _startAutoCloseTimer();
+      } else {
+        _animateToZero();
+        setState(() {
+          _isRevealed = false;
+        });
+      }
     }
   }
 
@@ -134,8 +167,15 @@ class _SwipeableMessageBubbleState extends State<SwipeableMessageBubble>
 
   @override
   Widget build(BuildContext context) {
-    // Only show actions when swiped left significantly
-    final showActions = _dragExtent < -40;
+    // Show actions based on swipe direction and message type
+    // CORRECT LOGIC:
+    // Incoming (LEFT side): swipe RIGHT (+drag) shows actions on LEFT
+    // Sent (RIGHT side): swipe LEFT (-drag) shows actions on RIGHT
+    final showActions =
+        !widget.isFromCurrentUser
+            ? _dragExtent >
+                40 // Incoming: right swipe (positive)
+            : _dragExtent < -40; // Sent: left swipe (negative)
 
     return GestureDetector(
       onHorizontalDragStart: _handleDragStart,
@@ -149,13 +189,17 @@ class _SwipeableMessageBubbleState extends State<SwipeableMessageBubble>
       },
       child: Stack(
         children: [
-          // Background actions (only visible when swiped left enough)
+          // Background actions (position based on message type)
           if (showActions)
             Positioned.fill(
               child: Container(
                 color: Colors.transparent,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment:
+                      !widget.isFromCurrentUser
+                          ? MainAxisAlignment
+                              .start // Incoming: buttons on LEFT
+                          : MainAxisAlignment.end, // Sent: buttons on RIGHT
                   children: [
                     // More button
                     GestureDetector(
