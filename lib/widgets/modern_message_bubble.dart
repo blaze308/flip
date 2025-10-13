@@ -1,12 +1,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/message_model.dart';
+import '../models/gift_model.dart';
 import '../services/audio_service.dart';
 import '../screens/image_viewer_screen.dart';
 import '../screens/video_player_screen.dart';
 import 'waveform_animation.dart';
 import 'swipeable_message_bubble.dart';
+import 'svga_player_widget.dart';
 
 class ModernMessageBubble extends StatefulWidget {
   final MessageModel message;
@@ -226,6 +230,10 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
         return _buildAudioMessage();
       case MessageType.file:
         return _buildFileMessage();
+      case MessageType.svga:
+        return _buildSvgaMessage();
+      case MessageType.lottie:
+        return _buildLottieMessage();
       default:
         return _buildTextMessage();
     }
@@ -234,6 +242,17 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
   Widget _buildTextMessage() {
     // Check if message is emoji-only (for larger display)
     final content = widget.message.content ?? '';
+
+    // Auto-detect SVGA URLs
+    if (content.contains('.svga') && content.contains('http')) {
+      return _buildSvgaMessage();
+    }
+
+    // Auto-detect Lottie asset paths
+    if (content.contains('assets/lotties/') || content.startsWith('lotties/')) {
+      return _buildLottieMessage();
+    }
+
     final isEmojiOnly = _isEmojiOnly(content);
 
     return Container(
@@ -822,6 +841,179 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Build SVGA message (gift animation)
+  Widget _buildSvgaMessage() {
+    final svgaUrl = widget.message.content ?? '';
+
+    // Try to find the gift from the URL
+    GiftModel? gift;
+    for (final g in GiftList.gifts) {
+      if (g.svgaUrl == svgaUrl) {
+        gift = g;
+        break;
+      }
+    }
+
+    return GestureDetector(
+      onTap: () {
+        // Open fullscreen SVGA viewer
+        _showSvgaViewer(svgaUrl, gift);
+      },
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          minHeight: 100,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // SVGA Player - plays the actual animation (no background)
+            AspectRatio(
+              aspectRatio: 16 / 10, // Wider than tall (like 16:10)
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SvgaPlayerWidget(
+                  svgaUrl: svgaUrl,
+                  width: double.infinity,
+                  height: double.infinity,
+                  placeholder:
+                      (context) => Center(
+                        child:
+                            gift != null
+                                ? CachedNetworkImage(
+                                  imageUrl: gift.iconUrl,
+                                  fit: BoxFit.contain,
+                                  placeholder:
+                                      (context, url) =>
+                                          const CircularProgressIndicator(
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Color(0xFF4ECDC4),
+                                                ),
+                                          ),
+                                )
+                                : const CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF4ECDC4),
+                                  ),
+                                ),
+                      ),
+                  errorWidget:
+                      (context, error) => Center(
+                        child:
+                            gift != null
+                                ? CachedNetworkImage(
+                                  imageUrl: gift.iconUrl,
+                                  fit: BoxFit.contain,
+                                  errorWidget:
+                                      (context, url, error) => const Icon(
+                                        Icons.card_giftcard,
+                                        size: 64,
+                                        color: Color(0xFF4ECDC4),
+                                      ),
+                                )
+                                : const Icon(
+                                  Icons.card_giftcard,
+                                  size: 64,
+                                  color: Color(0xFF4ECDC4),
+                                ),
+                      ),
+                ),
+              ),
+            ),
+            if (gift != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.card_giftcard,
+                    color: Color(0xFFFFD700),
+                    size: 14,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    gift.name,
+                    style: TextStyle(
+                      color:
+                          widget.isFromCurrentUser
+                              ? Colors.white
+                              : Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.monetization_on,
+                    color: Color(0xFFFFD700),
+                    size: 12,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    '${gift.weight}',
+                    style: const TextStyle(
+                      color: Color(0xFFFFD700),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build Lottie message
+  Widget _buildLottieMessage() {
+    final lottieUrl = widget.message.content ?? '';
+
+    return GestureDetector(
+      onTap: () {
+        // Could open fullscreen lottie viewer if needed
+      },
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.65,
+          minHeight: 100,
+        ),
+        child: AspectRatio(
+          aspectRatio: 16 / 10, // Wider than tall
+          child: Lottie.asset(
+            lottieUrl,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return const Center(
+                child: Icon(
+                  Icons.animation,
+                  size: 48,
+                  color: Color(0xFF4ECDC4),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show SVGA viewer with caching
+  void _showSvgaViewer(String svgaUrl, GiftModel? gift) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (context) => SvgaViewerScreen(
+              svgaUrl: svgaUrl,
+              giftName: gift?.name,
+              giftWeight: gift?.weight,
+            ),
       ),
     );
   }

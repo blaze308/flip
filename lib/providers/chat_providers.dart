@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
@@ -5,10 +6,13 @@ import '../services/chat_service.dart';
 import '../services/socket_service.dart';
 import '../services/token_auth_service.dart';
 
-// Chat list provider with caching
-final chatListProvider = StateNotifierProvider<ChatListNotifier, AsyncValue<List<ChatModel>>>((ref) {
-  return ChatListNotifier(ref);
-});
+// Chat list provider with caching (kept alive to maintain socket listeners)
+final chatListProvider =
+    StateNotifierProvider<ChatListNotifier, AsyncValue<List<ChatModel>>>((ref) {
+      // Keep the provider alive even when not being watched
+      ref.keepAlive();
+      return ChatListNotifier(ref);
+    });
 
 class ChatListNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
   ChatListNotifier(this.ref) : super(const AsyncValue.loading()) {
@@ -18,49 +22,87 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
 
   final Ref ref;
   List<ChatModel> _chats = [];
+  StreamSubscription? _newMessageSubscription;
+  StreamSubscription? _chatUpdateSubscription;
 
   Future<void> _loadChats() async {
     try {
-      state = const AsyncValue.loading();
+      // Show data from previous state if available (no loading spinner on refresh)
+      if (_chats.isNotEmpty) {
+        // Keep showing current data while refreshing
+        print('💬 ChatListNotifier: Refreshing with ${_chats.length} existing chats');
+      } else {
+        // First load - show loading
+        state = const AsyncValue.loading();
+      }
+
       final result = await ChatService.getChats(page: 1, limit: 50);
-      
+
       if (result.success) {
         _chats = result.chats;
         state = AsyncValue.data(_chats);
+        print('💬 ChatListNotifier: Loaded ${_chats.length} chats');
       } else {
-        state = AsyncValue.error(result.message, StackTrace.current);
+        // Only show error if we don't have data
+        if (_chats.isEmpty) {
+          state = AsyncValue.error(result.message, StackTrace.current);
+        }
       }
     } catch (e, stackTrace) {
-      state = AsyncValue.error(e, stackTrace);
+      // Only show error if we don't have data
+      if (_chats.isEmpty) {
+        state = AsyncValue.error(e, stackTrace);
+      }
+      print('💬 ChatListNotifier: Error loading chats: $e');
     }
   }
 
   void _setupSocketListeners() {
     final socketService = SocketService.instance;
-    
+
+    print('💬 ChatListNotifier: Setting up socket listeners');
+
+    // Cancel existing subscriptions if any
+    _newMessageSubscription?.cancel();
+    _chatUpdateSubscription?.cancel();
+
     // Listen for new messages to update chat list
-    socketService.onNewMessage.listen((message) {
-      _updateChatWithNewMessage(message.chatId, message);
+    _newMessageSubscription = socketService.onNewMessage.listen((message) {
+      print(
+        '💬 ChatListNotifier: Received new message for chat ${message.chatId}',
+      );
+      updateChatWithNewMessage(message.chatId, message);
     });
-    
+
     // Listen for chat updates
-    socketService.onChatUpdate.listen((event) {
+    _chatUpdateSubscription = socketService.onChatUpdate.listen((event) {
+      print('💬 ChatListNotifier: Received chat update');
       _handleChatUpdate(event);
     });
   }
 
-  void _updateChatWithNewMessage(String chatId, MessageModel message) {
+  @override
+  void dispose() {
+    _newMessageSubscription?.cancel();
+    _chatUpdateSubscription?.cancel();
+    super.dispose();
+  }
+
+  void updateChatWithNewMessage(String chatId, MessageModel message) {
+    print('💬 ChatListNotifier: Updating chat $chatId with new message');
+
     final chatIndex = _chats.indexWhere((chat) => chat.id == chatId);
     if (chatIndex != -1) {
       // Move chat to top and update last message
       final chat = _chats.removeAt(chatIndex);
-      
+
       // Don't increment unread count if it's from current user
       final currentUserId = TokenAuthService.currentUser?.id ?? '';
       final isFromCurrentUser = message.senderId == currentUserId;
-      
+
       final updatedChat = chat.copyWith(
-        unreadCount: isFromCurrentUser ? chat.unreadCount : chat.unreadCount + 1,
+        unreadCount:
+            isFromCurrentUser ? chat.unreadCount : chat.unreadCount + 1,
         lastMessage: LastMessage(
           messageId: message.id,
           content: message.content ?? _getMessageTypeLabel(message.type),
@@ -72,12 +114,15 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
       );
       _chats.insert(0, updatedChat);
       state = AsyncValue.data([..._chats]);
+
+      print('💬 ChatListNotifier: Chat updated and moved to top');
     } else {
+      print('💬 ChatListNotifier: Chat not found in list, refreshing...');
       // Chat not in list, refresh to get it
       refresh();
     }
   }
-  
+
   String _getMessageTypeLabel(MessageType type) {
     switch (type) {
       case MessageType.image:
@@ -98,8 +143,37 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
   }
 
   void _handleChatUpdate(ChatUpdateEvent event) {
-    // Handle various chat updates
-    refresh();
+    print(
+      '💬 ChatListNotifier: Handling chat update type: ${event.updateType}',
+    );
+
+    switch (event.updateType) {
+      case ChatUpdateType.messagesRead:
+        // Reset unread count for this chat
+        _resetUnreadCount(event.chatId);
+        break;
+      case ChatUpdateType.memberAdded:
+      case ChatUpdateType.memberRemoved:
+      case ChatUpdateType.infoUpdated:
+      case ChatUpdateType.settingsChanged:
+        // For other updates, refresh the list
+        refresh();
+        break;
+    }
+  }
+
+  void _resetUnreadCount(String chatId) {
+    final chatIndex = _chats.indexWhere((chat) => chat.id == chatId);
+    if (chatIndex != -1) {
+      final chat = _chats[chatIndex];
+      if (chat.unreadCount > 0) {
+        final updatedChat = chat.copyWith(unreadCount: 0);
+        _chats[chatIndex] = updatedChat;
+        state = AsyncValue.data([..._chats]);
+
+        print('💬 ChatListNotifier: Reset unread count for chat $chatId');
+      }
+    }
   }
 
   Future<void> refresh() async {
@@ -113,7 +187,7 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
         page: (_chats.length ~/ 20) + 1,
         limit: 20,
       );
-      
+
       if (result.success && result.chats.isNotEmpty) {
         _chats.addAll(result.chats);
         state = AsyncValue.data([..._chats]);
@@ -125,7 +199,11 @@ class ChatListNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
 }
 
 // Messages provider for a specific chat with caching
-final messagesProvider = StateNotifierProvider.family<MessagesNotifier, AsyncValue<List<MessageModel>>, String>((ref, chatId) {
+final messagesProvider = StateNotifierProvider.family<
+  MessagesNotifier,
+  AsyncValue<List<MessageModel>>,
+  String
+>((ref, chatId) {
   return MessagesNotifier(ref, chatId);
 });
 
@@ -144,7 +222,7 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
     try {
       state = const AsyncValue.loading();
       final result = await ChatService.getMessages(chatId, page: 1, limit: 50);
-      
+
       if (result.success) {
         _messages = result.messages;
         state = AsyncValue.data(_messages);
@@ -158,14 +236,14 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
 
   void _setupSocketListeners() {
     final socketService = SocketService.instance;
-    
+
     // Listen for new messages in this chat
     socketService.onNewMessage.listen((message) {
       if (message.chatId == chatId) {
         addMessage(message);
       }
     });
-    
+
     // Listen for message updates
     socketService.onMessageUpdate.listen((event) {
       if (_messages.any((m) => m.id == event.messageId)) {
@@ -180,7 +258,7 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
     if (existingIndex == -1) {
       _messages.add(message);
       state = AsyncValue.data([..._messages]);
-      
+
       // Clear cache when new message arrives
       ChatService.clearMessageCache(chatId);
     }
@@ -213,7 +291,7 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
 
   Future<void> loadMore() async {
     if (_isLoadingMore || _messages.isEmpty) return;
-    
+
     _isLoadingMore = true;
     try {
       final result = await ChatService.getMessages(
@@ -222,7 +300,7 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
         limit: 50,
         before: _messages.first.createdAt,
       );
-      
+
       if (result.success && result.messages.isNotEmpty) {
         _messages.insertAll(0, result.messages);
         state = AsyncValue.data([..._messages]);
@@ -234,14 +312,17 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
     }
   }
 
-  Future<void> sendTextMessage(String content, {String? replyToMessageId}) async {
+  Future<void> sendTextMessage(
+    String content, {
+    String? replyToMessageId,
+  }) async {
     try {
       final result = await ChatService.sendTextMessage(
         chatId,
         content,
         replyToMessageId: replyToMessageId,
       );
-      
+
       if (!result.success) {
         throw Exception(result.resultMessage);
       }
@@ -250,7 +331,11 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
     }
   }
 
-  Future<void> sendMediaMessage(MessageType type, dynamic file, {String? replyToMessageId}) async {
+  Future<void> sendMediaMessage(
+    MessageType type,
+    dynamic file, {
+    String? replyToMessageId,
+  }) async {
     try {
       final result = await ChatService.sendMediaMessage(
         chatId,
@@ -258,7 +343,7 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
         file,
         replyToMessageId: replyToMessageId,
       );
-      
+
       if (!result.success) {
         throw Exception(result.resultMessage);
       }
@@ -274,9 +359,13 @@ class MessagesNotifier extends StateNotifier<AsyncValue<List<MessageModel>>> {
 final currentChatProvider = StateProvider<ChatModel?>((ref) => null);
 
 // Typing users provider for a specific chat
-final typingUsersProvider = StateNotifierProvider.family<TypingUsersNotifier, Set<String>, String>((ref, chatId) {
-  return TypingUsersNotifier(ref, chatId);
-});
+final typingUsersProvider =
+    StateNotifierProvider.family<TypingUsersNotifier, Set<String>, String>((
+      ref,
+      chatId,
+    ) {
+      return TypingUsersNotifier(ref, chatId);
+    });
 
 class TypingUsersNotifier extends StateNotifier<Set<String>> {
   TypingUsersNotifier(this.ref, this.chatId) : super({}) {
@@ -288,18 +377,18 @@ class TypingUsersNotifier extends StateNotifier<Set<String>> {
 
   void _setupSocketListeners() {
     final socketService = SocketService.instance;
-    
+
     socketService.onTyping.listen((event) {
       if (event.chatId == chatId) {
         final currentUserId = TokenAuthService.currentUser?.id ?? '';
         if (event.userId == currentUserId) return; // Ignore own typing
-        
+
         if (event.isTyping) {
           state = {...state, event.username};
         } else {
           state = {...state}..remove(event.username);
         }
-        
+
         // Auto-remove typing indicator after 3 seconds
         Future.delayed(const Duration(seconds: 3), () {
           state = {...state}..remove(event.username);
@@ -310,12 +399,16 @@ class TypingUsersNotifier extends StateNotifier<Set<String>> {
 }
 
 // Socket connection provider
-final socketConnectionProvider = StateNotifierProvider<SocketConnectionNotifier, SocketConnectionState>((ref) {
-  return SocketConnectionNotifier(ref);
-});
+final socketConnectionProvider =
+    StateNotifierProvider<SocketConnectionNotifier, SocketConnectionState>((
+      ref,
+    ) {
+      return SocketConnectionNotifier(ref);
+    });
 
 class SocketConnectionNotifier extends StateNotifier<SocketConnectionState> {
-  SocketConnectionNotifier(this.ref) : super(SocketConnectionState.disconnected) {
+  SocketConnectionNotifier(this.ref)
+    : super(SocketConnectionState.disconnected) {
     _setupSocketConnection();
   }
 
@@ -323,7 +416,7 @@ class SocketConnectionNotifier extends StateNotifier<SocketConnectionState> {
 
   void _setupSocketConnection() {
     final socketService = SocketService.instance;
-    
+
     socketService.onConnection.listen((event) {
       switch (event.type) {
         case ConnectionEventType.connected:
@@ -353,17 +446,15 @@ class SocketConnectionNotifier extends StateNotifier<SocketConnectionState> {
   }
 }
 
-enum SocketConnectionState {
-  connected,
-  disconnected,
-  reconnecting,
-  error,
-}
+enum SocketConnectionState { connected, disconnected, reconnecting, error }
 
 // Chat search provider
-final chatSearchProvider = StateNotifierProvider<ChatSearchNotifier, AsyncValue<List<ChatModel>>>((ref) {
-  return ChatSearchNotifier(ref);
-});
+final chatSearchProvider =
+    StateNotifierProvider<ChatSearchNotifier, AsyncValue<List<ChatModel>>>((
+      ref,
+    ) {
+      return ChatSearchNotifier(ref);
+    });
 
 class ChatSearchNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
   ChatSearchNotifier(this.ref) : super(const AsyncValue.data([]));
@@ -382,8 +473,12 @@ class ChatSearchNotifier extends StateNotifier<AsyncValue<List<ChatModel>>> {
 
     try {
       state = const AsyncValue.loading();
-      final result = await ChatService.getChats(page: 1, limit: 20, search: query);
-      
+      final result = await ChatService.getChats(
+        page: 1,
+        limit: 20,
+        search: query,
+      );
+
       if (result.success) {
         state = AsyncValue.data(result.chats);
       } else {

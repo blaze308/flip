@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:lottie/lottie.dart';
 import 'dart:async';
 import 'dart:io';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
 import '../models/user_model.dart';
+import '../models/gift_model.dart';
+import '../models/lottie_model.dart';
 import '../services/chat_service.dart';
 import '../services/socket_service.dart';
 import '../services/token_auth_service.dart';
@@ -22,6 +25,8 @@ import '../widgets/waveform_animation.dart';
 import '../providers/messages_cache_provider.dart';
 import '../widgets/modern_image_preview.dart';
 import '../widgets/modern_video_preview.dart';
+import '../widgets/modern_file_preview.dart';
+import '../widgets/modern_svga_preview.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final ChatModel chat;
@@ -57,6 +62,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   StreamSubscription? _newMessageSubscription;
   StreamSubscription? _messageUpdateSubscription;
   StreamSubscription? _typingSubscription;
+  StreamSubscription? _connectionSubscription;
+
+  // Connection state
+  bool _isConnected = true;
+  final List<Map<String, dynamic>> _messageQueue = [];
 
   // Typing indicator
   Timer? _typingTimer;
@@ -75,6 +85,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _setupAnimations();
     _loadMessages();
     _setupSocketListeners();
+    _setupConnectionListener(); // Add connection state monitoring
     _scrollController.addListener(_onScroll);
 
     // Join chat room for real-time updates
@@ -92,6 +103,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     _newMessageSubscription?.cancel();
     _messageUpdateSubscription?.cancel();
     _typingSubscription?.cancel();
+    _connectionSubscription?.cancel(); // Cancel connection listener
     _typingTimer?.cancel();
 
     // Leave chat room
@@ -121,11 +133,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       if (message.chatId == widget.chat.id) {
         final currentUserId = TokenAuthService.currentUser?.id ?? '';
 
-        // Skip messages sent by current user (already handled by optimistic updates)
+        // For own messages, we only need to update status (already in UI optimistically)
         if (message.senderId == currentUserId) {
           print(
-            '📨 ChatScreen: Skipping own message from socket (already added optimistically)',
+            '📨 ChatScreen: Received own message from socket - updating status',
           );
+
+          // Find and update the optimistic message with the real one
+          final optimisticIndex = _messages.indexWhere(
+            (m) => m.id.startsWith('temp_') && m.content == message.content,
+          );
+
+          if (optimisticIndex != -1) {
+            setState(() {
+              _messages[optimisticIndex] = message;
+            });
+
+            // Update cache
+            ref
+                .read(messagesCacheProvider.notifier)
+                .updateMessage(widget.chat.id, message);
+          }
+
+          // Don't add duplicate message to list
           return;
         }
 
@@ -225,10 +255,84 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     // Auto-remove typing indicator after 3 seconds
     Timer(const Duration(seconds: 3), () {
-      setState(() {
-        _typingUsers.remove(event.username);
-      });
+      if (mounted) {
+        setState(() {
+          _typingUsers.remove(event.username);
+        });
+      }
     });
+  }
+
+  void _setupConnectionListener() {
+    final socketService = SocketService.instance;
+
+    _connectionSubscription = socketService.onConnection.listen((event) {
+      if (!mounted) return;
+
+      switch (event.type) {
+        case ConnectionEventType.connected:
+          print('🔌 ChatScreen: Connected to socket');
+          setState(() {
+            _isConnected = true;
+          });
+
+          // Sync missed messages on reconnect
+          _syncMissedMessages();
+
+          // Send queued messages
+          _sendQueuedMessages();
+          break;
+
+        case ConnectionEventType.disconnected:
+          print('🔌 ChatScreen: Disconnected from socket');
+          setState(() {
+            _isConnected = false;
+          });
+          break;
+
+        case ConnectionEventType.error:
+          print('🔌 ChatScreen: Socket connection error');
+          setState(() {
+            _isConnected = false;
+          });
+          break;
+      }
+    });
+  }
+
+  Future<void> _syncMissedMessages() async {
+    print('🔄 ChatScreen: Syncing missed messages...');
+    try {
+      await _refreshMessagesInBackground();
+      print('✅ ChatScreen: Sync complete');
+    } catch (e) {
+      print('❌ ChatScreen: Sync failed: $e');
+    }
+  }
+
+  Future<void> _sendQueuedMessages() async {
+    if (_messageQueue.isEmpty) return;
+
+    print('📤 ChatScreen: Sending ${_messageQueue.length} queued messages...');
+
+    final queue = List<Map<String, dynamic>>.from(_messageQueue);
+    _messageQueue.clear();
+
+    for (final queuedMsg in queue) {
+      try {
+        final type = queuedMsg['type'] as String;
+        final content = queuedMsg['content'] as String?;
+
+        if (type == 'text' && content != null) {
+          await ChatService.sendTextMessage(widget.chat.id, content);
+        }
+
+        print('✅ ChatScreen: Queued message sent');
+      } catch (e) {
+        print('❌ ChatScreen: Failed to send queued message: $e');
+        _messageQueue.add(queuedMsg);
+      }
+    }
   }
 
   Future<void> _refreshMessage(String messageId) async {
@@ -323,11 +427,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             .read(messagesCacheProvider.notifier)
             .cacheMessages(widget.chat.id, result.messages);
 
-        // Only update UI if there are new messages
-        if (result.messages.length != _messages.length) {
+        // Check if there are messages we don't have yet
+        final newMessages =
+            result.messages.where((serverMsg) {
+              return !_messages.any((localMsg) => localMsg.id == serverMsg.id);
+            }).toList();
+
+        if (newMessages.isNotEmpty) {
+          print(
+            '💬 ChatScreen: Found ${newMessages.length} new messages from server',
+          );
           setState(() {
-            _messages.clear();
-            _messages.addAll(result.messages);
+            // Add new messages to existing list (maintaining socket updates)
+            _messages.addAll(newMessages);
+            // Sort by timestamp to maintain order
+            _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           });
         }
       }
@@ -478,6 +592,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     });
 
     try {
+      // Check if offline - queue the message
+      if (!_isConnected) {
+        print('📴 ChatScreen: Offline - queueing message');
+        _messageQueue.add({
+          'type': 'text',
+          'content': text,
+          'replyTo': _replyToMessage?.id,
+        });
+        return;
+      }
+
       final result = await ChatService.sendTextMessage(
         widget.chat.id,
         text,
@@ -490,11 +615,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           (m) => m.id == optimisticMessage.id,
         );
         if (messageIndex != -1) {
+          final sentMessage = result.message!.copyWith(
+            status: MessageStatus.sent,
+          );
           setState(() {
-            _messages[messageIndex] = result.message!.copyWith(
-              status: MessageStatus.sent,
-            );
+            _messages[messageIndex] = sentMessage;
           });
+
+          // Note: Chat list will be updated via socket event (onNewMessage)
+          // No need to manually update here to avoid double updates
         }
       } else {
         // Mark optimistic message as failed
@@ -609,6 +738,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ref
               .read(messagesCacheProvider.notifier)
               .updateMessage(widget.chat.id, sentMessage);
+
+          // Note: Chat list will be updated via socket event (onNewMessage)
+          // No need to manually update here to avoid double updates
         }
       } else {
         print(
@@ -796,34 +928,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
-  /// Show Lottie selection modal
+  /// Show Lottie selection modal with categories
   void _showLottieModal() {
+    final lotties = LottieList.getLottiesByWeight();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder:
           (context) => Container(
-            height: MediaQuery.of(context).size.height * 0.6,
+            height: MediaQuery.of(context).size.height * 0.7,
             decoration: const BoxDecoration(
               color: Color(0xFF1A1A1A),
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(
               children: [
-                const SizedBox(height: 20),
-                const Text(
-                  'Choose Lottie Animation',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Send Animation',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Color(0xFF2A2A2A), thickness: 1),
+                const SizedBox(height: 8),
+                // Grid of lotties
                 Expanded(
                   child:
-                      CloudinaryService.getMockLottieFiles().isEmpty
+                      lotties.isEmpty
                           ? const Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -835,39 +994,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                                 ),
                                 SizedBox(height: 16),
                                 Text(
-                                  'No Lottie animations available',
+                                  'No animations available',
                                   style: TextStyle(
                                     color: Colors.grey,
                                     fontSize: 16,
                                   ),
                                 ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Add Lottie files to Cloudinary lotties folder',
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 12,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
                               ],
                             ),
                           )
                           : GridView.builder(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio: 1,
+                                  crossAxisCount: 4,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 0.75,
                                 ),
-                            itemCount:
-                                CloudinaryService.getMockLottieFiles().length,
+                            itemCount: lotties.length,
                             itemBuilder: (context, index) {
-                              final lottie =
-                                  CloudinaryService.getMockLottieFiles()[index];
-                              return _buildLottieItem(lottie);
+                              final lottie = lotties[index];
+                              return _buildLottieItemNew(lottie);
                             },
                           ),
                 ),
@@ -879,76 +1030,95 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   /// Show SVGA selection modal
   void _showSvgaModal() {
+    final gifts = GiftList.getGiftsByWeight(); // Get gifts sorted by weight
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder:
           (context) => Container(
-            height: MediaQuery.of(context).size.height * 0.6,
+            height: MediaQuery.of(context).size.height * 0.7,
             decoration: const BoxDecoration(
               color: Color(0xFF1A1A1A),
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(
               children: [
-                const SizedBox(height: 20),
-                const Text(
-                  'Choose SVGA Animation',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Send Gift',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Color(0xFF2A2A2A), thickness: 1),
+                const SizedBox(height: 8),
+                // Grid of gifts
                 Expanded(
                   child:
-                      CloudinaryService.getMockSvgaFiles().isEmpty
+                      gifts.isEmpty
                           ? const Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(
-                                  Icons.play_circle_outline,
+                                  Icons.card_giftcard,
                                   size: 64,
                                   color: Colors.grey,
                                 ),
                                 SizedBox(height: 16),
                                 Text(
-                                  'No SVGA animations available',
+                                  'No gifts available',
                                   style: TextStyle(
                                     color: Colors.grey,
                                     fontSize: 16,
                                   ),
                                 ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Add SVGA files to Cloudinary svga folder',
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 12,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
                               ],
                             ),
                           )
                           : GridView.builder(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio: 1,
+                                  crossAxisCount: 4,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 0.75,
                                 ),
-                            itemCount:
-                                CloudinaryService.getMockSvgaFiles().length,
+                            itemCount: gifts.length,
                             itemBuilder: (context, index) {
-                              final svga =
-                                  CloudinaryService.getMockSvgaFiles()[index];
-                              return _buildSvgaItem(svga);
+                              final gift = gifts[index];
+                              return _buildGiftItem(gift);
                             },
                           ),
                 ),
@@ -1041,6 +1211,328 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     );
   }
 
+  /// Build Gift item widget
+  Widget _buildGiftItem(GiftModel gift) {
+    // Format weight/price
+    String formatWeight(int weight) {
+      if (weight >= 1000) {
+        return '${(weight / 1000).toStringAsFixed(weight % 1000 == 0 ? 0 : 1)}K';
+      }
+      return weight.toString();
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(context);
+        _showSvgaPreview(gift);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF4ECDC4).withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Gift icon/image
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(12),
+                ),
+                child: Image.network(
+                  gift.iconUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(
+                      Icons.card_giftcard,
+                      color: Color(0xFF4ECDC4),
+                      size: 32,
+                    );
+                  },
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF4ECDC4),
+                          ),
+                          value:
+                              loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            // Gift name and price
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(12),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    gift.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.monetization_on,
+                        color: Color(0xFFFFD700),
+                        size: 10,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        formatWeight(gift.weight),
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build Lottie item widget (new model)
+  Widget _buildLottieItemNew(LottieModel lottie) {
+    // Format weight/price
+    String formatWeight(int weight) {
+      if (weight >= 1000) {
+        return '${(weight / 1000).toStringAsFixed(weight % 1000 == 0 ? 0 : 1)}K';
+      }
+      return weight.toString();
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(context);
+        _sendLottieMessageNew(lottie);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color:
+                lottie.category == LottieCategory.vip
+                    ? const Color(0xFFFFD700).withOpacity(0.5)
+                    : const Color(0xFF4ECDC4).withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Lottie animation preview
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Lottie.asset(
+                  lottie.lottieUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Icon(
+                      Icons.animation,
+                      color:
+                          lottie.category == LottieCategory.vip
+                              ? const Color(0xFFFFD700)
+                              : const Color(0xFF4ECDC4),
+                      size: 32,
+                    );
+                  },
+                ),
+              ),
+            ),
+            // Lottie name and price
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              decoration: const BoxDecoration(
+                color: Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(12),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        lottie.category.emoji,
+                        style: const TextStyle(fontSize: 8),
+                      ),
+                      const SizedBox(width: 2),
+                      Expanded(
+                        child: Text(
+                          lottie.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.monetization_on,
+                        color: Color(0xFFFFD700),
+                        size: 10,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        formatWeight(lottie.weight),
+                        style: const TextStyle(
+                          color: Color(0xFFFFD700),
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Send Lottie message (new model)
+  Future<void> _sendLottieMessageNew(LottieModel lottie) async {
+    try {
+      print('🎭 ChatScreen: Sending lottie: ${lottie.name}');
+
+      // Get current user
+      final currentUser = TokenAuthService.currentUser;
+      if (currentUser == null) return;
+
+      // Create optimistic message
+      final optimisticMessage = MessageModel(
+        id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+        chatId: widget.chat.id,
+        senderId: currentUser.id,
+        sender: UserModel(
+          id: currentUser.id,
+          displayName: currentUser.displayName ?? '',
+          username: '',
+          profileImageUrl: currentUser.photoURL,
+          bio: '',
+          postsCount: 0,
+          followersCount: 0,
+          followingCount: 0,
+          likesCount: 0,
+        ),
+        type: MessageType.lottie,
+        content: lottie.lottieUrl,
+        status: MessageStatus.sending,
+        reactions: [],
+        mentions: [],
+        readBy: [],
+        deliveredTo: [],
+        isEdited: false,
+        isDeleted: false,
+        deletedFor: [],
+        priority: MessagePriority.normal,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Add optimistic message to UI
+      if (mounted) {
+        setState(() {
+          _messages.add(optimisticMessage);
+        });
+        ref
+            .read(messagesCacheProvider.notifier)
+            .addMessage(widget.chat.id, optimisticMessage);
+        _scrollToBottom();
+      }
+
+      // Send via API as text message (backend will detect Lottie asset path)
+      final result = await ChatService.sendTextMessage(
+        widget.chat.id,
+        lottie.lottieUrl,
+      );
+
+      if (result.success && mounted) {
+        print('🎭 ChatScreen: Lottie sent successfully: ${lottie.name}');
+
+        // Replace optimistic message with real message
+        final messageIndex = _messages.indexWhere(
+          (m) => m.id == optimisticMessage.id,
+        );
+        if (messageIndex != -1) {
+          final sentMessage = result.message!.copyWith(
+            status: MessageStatus.sent,
+          );
+          setState(() {
+            _messages[messageIndex] = sentMessage;
+          });
+          // Update cache
+          ref
+              .read(messagesCacheProvider.notifier)
+              .addMessage(widget.chat.id, sentMessage);
+        }
+      }
+    } catch (e) {
+      print('❌ ChatScreen: Error sending lottie: $e');
+      // Remove failed message
+      if (mounted) {
+        setState(() {
+          _messages.removeWhere((m) => m.id.startsWith('temp_'));
+        });
+      }
+    }
+  }
+
   /// Send Lottie message
   Future<void> _sendLottieMessage(CloudinaryAsset lottie) async {
     try {
@@ -1066,6 +1558,133 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       );
     } catch (e) {
       print('Error sending SVGA: $e');
+    }
+  }
+
+  /// Show SVGA gift preview
+  void _showSvgaPreview(GiftModel gift) {
+    // Calculate recipient name
+    String recipientName = 'User';
+    if (widget.chat.type == ChatType.direct) {
+      final otherMember = widget.chat.members.firstWhere(
+        (m) => m.userId != TokenAuthService.currentUser?.id,
+        orElse: () => widget.chat.members.first,
+      );
+      recipientName =
+          otherMember.username.isNotEmpty
+              ? otherMember.username
+              : (otherMember.displayName.isNotEmpty
+                  ? otherMember.displayName
+                  : 'User');
+    } else {
+      recipientName = widget.chat.name ?? 'Group';
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder:
+            (context) => ModernSvgaPreview(
+              gift: gift,
+              recipientName: recipientName,
+              onCancel: () {
+                Navigator.pop(context);
+              },
+              onSend: (caption) {
+                Navigator.pop(context);
+                _sendGiftMessage(gift, caption: caption);
+              },
+            ),
+      ),
+    );
+  }
+
+  /// Send Gift message (SVGA gift)
+  Future<void> _sendGiftMessage(GiftModel gift, {String? caption}) async {
+    try {
+      print('🎁 ChatScreen: Sending gift: ${gift.name}');
+
+      // Get current user
+      final currentUser = TokenAuthService.currentUser;
+      if (currentUser == null) return;
+
+      // Create optimistic message
+      final optimisticMessage = MessageModel(
+        id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+        chatId: widget.chat.id,
+        senderId: currentUser.id,
+        sender: UserModel(
+          id: currentUser.id,
+          displayName: currentUser.displayName ?? '',
+          username: '', // TokenUser doesn't have username
+          profileImageUrl: currentUser.photoURL,
+          bio: '',
+          postsCount: 0,
+          followersCount: 0,
+          followingCount: 0,
+          likesCount: 0,
+        ),
+        type: MessageType.svga,
+        content: gift.svgaUrl,
+        status: MessageStatus.sending,
+        reactions: [],
+        mentions: [],
+        readBy: [],
+        deliveredTo: [],
+        isEdited: false,
+        isDeleted: false,
+        deletedFor: [],
+        priority: MessagePriority.normal,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Add optimistic message to UI
+      if (mounted) {
+        setState(() {
+          _messages.add(optimisticMessage);
+        });
+        // Cache the new message
+        ref
+            .read(messagesCacheProvider.notifier)
+            .addMessage(widget.chat.id, optimisticMessage);
+        _scrollToBottom();
+      }
+
+      // Send via API as text message (backend will detect SVGA URL)
+      final result = await ChatService.sendTextMessage(
+        widget.chat.id,
+        gift.svgaUrl,
+      );
+
+      if (result.success && mounted) {
+        print('🎁 ChatScreen: Gift sent successfully: ${gift.name}');
+
+        // Replace optimistic message with real message
+        final messageIndex = _messages.indexWhere(
+          (m) => m.id == optimisticMessage.id,
+        );
+        if (messageIndex != -1) {
+          final sentMessage = result.message!.copyWith(
+            status: MessageStatus.sent,
+          );
+          setState(() {
+            _messages[messageIndex] = sentMessage;
+          });
+          // Update cache
+          ref
+              .read(messagesCacheProvider.notifier)
+              .addMessage(widget.chat.id, sentMessage);
+        }
+      }
+    } catch (e) {
+      print('❌ ChatScreen: Error sending gift: $e');
+      // Remove failed message
+      if (mounted) {
+        setState(() {
+          _messages.removeWhere((m) => m.id.startsWith('temp_'));
+        });
+      }
     }
   }
 
@@ -1142,7 +1761,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           type = MessageType.svga;
         }
 
-        await _sendMediaMessage(type, file);
+        // Show preview before sending
+        await _showMediaPreview(file, type);
       }
     } catch (e) {
       ToasterService.showError(context, 'Failed to pick file');
@@ -1219,259 +1839,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               ),
         ),
       );
-    } else {
-      // Fallback to old dialog for other types
-      final shouldSend = await showDialog<bool>(
-        context: context,
-        barrierDismissible: true,
-        builder:
-            (context) => Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.all(16),
-              child: Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.8,
-                  maxWidth: MediaQuery.of(context).size.width,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF1E1E1E), Color(0xFF2A2A2A)],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.5),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header with close button
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF4ECDC4,
-                                  ).withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  type == MessageType.image
-                                      ? Icons.image
-                                      : type == MessageType.video
-                                      ? Icons.videocam
-                                      : Icons.audiotrack,
-                                  color: const Color(0xFF4ECDC4),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                type == MessageType.image
-                                    ? 'Send Image'
-                                    : type == MessageType.video
-                                    ? 'Send Video'
-                                    : 'Send Audio',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(context, false),
-                            icon: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Media Preview with modern styling
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child:
-                              type == MessageType.image
-                                  ? Hero(
-                                    tag: 'preview_${file.path}',
-                                    child: Image.file(
-                                      file,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  )
-                                  : type == MessageType.video
-                                  ? Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        // Video thumbnail would go here
-                                        const Center(
-                                          child: Icon(
-                                            Icons.videocam,
-                                            size: 80,
-                                            color: Colors.white24,
-                                          ),
-                                        ),
-                                        // Play button overlay
-                                        Container(
-                                          padding: const EdgeInsets.all(20),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF4ECDC4),
-                                            shape: BoxShape.circle,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: const Color(
-                                                  0xFF4ECDC4,
-                                                ).withOpacity(0.4),
-                                                blurRadius: 20,
-                                                spreadRadius: 5,
-                                              ),
-                                            ],
-                                          ),
-                                          child: const Icon(
-                                            Icons.play_arrow,
-                                            size: 40,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                  : Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF2A2A2A),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: const Center(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.audiotrack,
-                                            size: 80,
-                                            color: Color(0xFF4ECDC4),
-                                          ),
-                                          SizedBox(height: 20),
-                                          Text(
-                                            'Audio Ready to Send',
-                                            style: TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                        ),
-                      ),
-                    ),
-
-                    // Action Buttons
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
-                        children: [
-                          // Cancel button
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white70,
-                                side: BorderSide(
-                                  color: Colors.white.withOpacity(0.2),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Send button
-                          Expanded(
-                            flex: 2,
-                            child: ElevatedButton.icon(
-                              onPressed: () => Navigator.pop(context, true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF4ECDC4),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                elevation: 0,
-                                shadowColor: const Color(
-                                  0xFF4ECDC4,
-                                ).withOpacity(0.5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              icon: const Icon(Icons.send_rounded, size: 20),
-                              label: const Text(
-                                'Send',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+    } else if (type == MessageType.file ||
+        type == MessageType.lottie ||
+        type == MessageType.svga) {
+      // Show modern file preview
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder:
+              (context) => ModernFilePreview(
+                file: file,
+                recipientName: recipientName,
+                onSend: (caption) async {
+                  Navigator.pop(context);
+                  await _sendMediaMessage(type, file, caption: caption);
+                },
+                onCancel: () {
+                  Navigator.pop(context);
+                },
               ),
-            ),
+        ),
       );
-
-      // If user confirmed, send the media
-      if (shouldSend == true && mounted) {
-        await _sendMediaMessage(type, file);
-      }
+    } else {
+      // Fallback for audio or other types (directly send without preview)
+      await _sendMediaMessage(type, file);
     }
   }
 
@@ -2140,6 +2532,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         appBar: _buildAppBar(),
         body: Column(
           children: [
+            // Connection status banner
+            if (!_isConnected) _buildConnectionBanner(),
             Expanded(child: _buildMessageList()),
             _buildReplyPreview(),
             _buildTypingIndicator(),
@@ -2378,6 +2772,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildConnectionBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      color: const Color(0xFFFF9800),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Connecting...',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

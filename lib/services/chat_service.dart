@@ -391,15 +391,17 @@ class ChatService {
     String chatId,
     String content, {
     String? replyToMessageId,
+    MessageType? messageType,
   }) async {
     try {
-      print('💬 ChatService: Sending text message to chat $chatId');
+      final type = messageType ?? MessageType.text;
+      print('💬 ChatService: Sending $type message to chat $chatId');
 
       final headers = await _getAuthHeaders();
       final uri = Uri.parse('$baseUrl/api/chats/$chatId/messages');
 
       final body = {
-        'type': 'text',
+        'type': type.toString().split('.').last,
         'content': content,
         if (replyToMessageId != null) 'replyToMessageId': replyToMessageId,
       };

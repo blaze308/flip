@@ -21,12 +21,12 @@ class ImmersiveViewerScreen extends StatefulWidget {
   final VoidCallback? onPostUpdated;
 
   const ImmersiveViewerScreen({
-    Key? key,
+    super.key,
     required this.posts,
     required this.initialIndex,
     this.onLikeToggle,
     this.onPostUpdated,
-  }) : super(key: key);
+  });
 
   @override
   State<ImmersiveViewerScreen> createState() => _ImmersiveViewerScreenState();
@@ -311,7 +311,7 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
           },
         );
 
-        progressOverlay?.remove();
+        progressOverlay.remove();
 
         if (mounted) {
           if (result.success) {
@@ -336,7 +336,7 @@ class _ImmersiveViewerScreenState extends State<ImmersiveViewerScreen>
         }
       }
     } catch (e) {
-      progressOverlay?.remove();
+      progressOverlay!.remove();
       if (mounted) {
         context.showErrorToaster('Failed to download. Please try again.');
       }
