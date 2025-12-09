@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:async';
 import 'socket_service.dart';
-import '../screens/incoming_call_screen.dart';
+import '../screens/live/incoming_call_screen.dart';
 
 /// Global manager for handling incoming call notifications
 class IncomingCallManager {

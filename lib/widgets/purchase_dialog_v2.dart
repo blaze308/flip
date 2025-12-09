@@ -5,8 +5,8 @@ import '../services/wallet_service.dart';
 import '../services/paystack_service.dart';
 import '../services/ancient_coin_service.dart';
 import '../services/token_auth_service.dart';
-import '../screens/paystack_webview_screen.dart';
-import '../screens/ancient_coin_webview_screen.dart';
+import '../screens/premium/paystack_webview_screen.dart';
+import '../screens/premium/ancient_coin_webview_screen.dart';
 import '../widgets/custom_toaster.dart';
 
 /// Purchase Dialog V2
@@ -74,7 +74,7 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
     try {
       // Check if user is authenticated with AncientCoin
       final isAuthenticated = await AncientCoinService.isAuthenticated();
-      
+
       if (!isAuthenticated) {
         // Show OAuth webview to connect AncientCoin
         final connected = await Navigator.push<bool>(
@@ -87,7 +87,10 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
         if (connected != true) {
           if (mounted) {
             setState(() => _isPurchasing = false);
-            ToasterService.showError(context, 'AncientCoin connection cancelled');
+            ToasterService.showError(
+              context,
+              'AncientCoin connection cancelled',
+            );
           }
           return;
         }
@@ -100,11 +103,12 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
         final success = await Navigator.push<bool>(
           context,
           MaterialPageRoute(
-            builder: (context) => AncientCoinPaymentScreen(
-              amount: _selectedPackage!.priceUSD,
-              currency: 'USD', // Default to USD for AncientCoin
-              coins: _selectedPackage!.coins + _selectedPackage!.bonusCoins,
-            ),
+            builder:
+                (context) => AncientCoinPaymentScreen(
+                  amount: _selectedPackage!.priceUSD,
+                  currency: 'USD', // Default to USD for AncientCoin
+                  coins: _selectedPackage!.coins + _selectedPackage!.bonusCoins,
+                ),
           ),
         );
 
@@ -123,38 +127,39 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
   Future<String?> _showPaymentMethodDialog() async {
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1D1E33),
-        title: const Text(
-          'Select Payment Method',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildPaymentMethodTile(
-              icon: Icons.credit_card,
-              title: 'Paystack',
-              subtitle: 'Card payment (GHS, NGN, ZAR, KES)',
-              value: 'paystack',
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: const Color(0xFF1D1E33),
+            title: const Text(
+              'Select Payment Method',
+              style: TextStyle(color: Colors.white),
             ),
-            const SizedBox(height: 12),
-            _buildPaymentMethodTile(
-              icon: Icons.account_balance_wallet,
-              title: 'AncientCoin',
-              subtitle: 'Pay with AncientCoin wallet',
-              value: 'ancientcoin',
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildPaymentMethodTile(
+                  icon: Icons.credit_card,
+                  title: 'Paystack',
+                  subtitle: 'Card payment (GHS, NGN, ZAR, KES)',
+                  value: 'paystack',
+                ),
+                const SizedBox(height: 12),
+                _buildPaymentMethodTile(
+                  icon: Icons.account_balance_wallet,
+                  title: 'AncientCoin',
+                  subtitle: 'Pay with AncientCoin wallet',
+                  value: 'ancientcoin',
+                ),
+                const SizedBox(height: 12),
+                _buildPaymentMethodTile(
+                  icon: Icons.phone_android,
+                  title: 'In-App Purchase',
+                  subtitle: 'Google Pay / Apple Pay',
+                  value: 'iap',
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            _buildPaymentMethodTile(
-              icon: Icons.phone_android,
-              title: 'In-App Purchase',
-              subtitle: 'Google Pay / Apple Pay',
-              value: 'iap',
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
@@ -199,10 +204,7 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],
               ),
@@ -224,7 +226,7 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
       }
 
       final email = user.email ?? 'user@example.com';
-      
+
       // Convert price to kobo (multiply by 100)
       final amountInKobo = (_selectedPackage!.priceUSD * 100).toInt();
 
@@ -244,12 +246,14 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
           final success = await Navigator.push<bool>(
             context,
             MaterialPageRoute(
-              builder: (context) => PaystackWebviewScreen(
-                authorizationUrl: result['authorizationUrl'],
-                reference: result['reference'],
-                coins: _selectedPackage!.coins + _selectedPackage!.bonusCoins,
-                diamonds: 0, // No diamonds in current model
-              ),
+              builder:
+                  (context) => PaystackWebviewScreen(
+                    authorizationUrl: result['authorizationUrl'],
+                    reference: result['reference'],
+                    coins:
+                        _selectedPackage!.coins + _selectedPackage!.bonusCoins,
+                    diamonds: 0, // No diamonds in current model
+                  ),
             ),
           );
 
@@ -270,9 +274,7 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: const Color(0xFF1D1E33),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 500, maxHeight: 700),
         padding: const EdgeInsets.all(24),
@@ -349,24 +351,25 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
                   ),
                   disabledBackgroundColor: Colors.grey,
                 ),
-                child: _isPurchasing
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
+                child:
+                    _isPurchasing
+                        ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                        : Text(
+                          _selectedPackage != null
+                              ? 'Purchase for \$${_selectedPackage!.priceUSD.toStringAsFixed(2)}'
+                              : 'Select a package',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      )
-                    : Text(
-                        _selectedPackage != null
-                            ? 'Purchase for \$${_selectedPackage!.priceUSD.toStringAsFixed(2)}'
-                            : 'Select a package',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
               ),
             ),
 
@@ -412,7 +415,10 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
                 top: 0,
                 right: 0,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Color(package.badgeColor!),
                     borderRadius: BorderRadius.circular(4),
@@ -432,10 +438,7 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text(
-                  '🪙',
-                  style: TextStyle(fontSize: 40),
-                ),
+                const Text('🪙', style: TextStyle(fontSize: 40)),
                 const SizedBox(height: 8),
                 Text(
                   NumberFormat('#,###').format(package.coins),
@@ -448,7 +451,10 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
                 if (package.hasBonus) ...[
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.green.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
@@ -491,4 +497,3 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
     );
   }
 }
-

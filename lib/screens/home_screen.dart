@@ -23,9 +23,9 @@ import 'create/create_story_type_screen.dart';
 import 'create/create_post_type_screen.dart';
 import 'viewer/story_viewer_screen.dart';
 import 'viewer/immersive_viewer_screen.dart';
-import 'message_list_screen.dart';
-import 'live_list_screen.dart' as screens;
-import 'profile_screen.dart';
+import 'chat/message_list_screen.dart';
+import 'live/live_list_screen.dart' as screens;
+import 'profile/profile_screen.dart';
 import '../providers/app_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
