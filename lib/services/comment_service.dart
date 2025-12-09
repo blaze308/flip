@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:firebase_auth/firebase_auth.dart';
 import 'token_auth_service.dart';
 
 class CommentService {
@@ -18,25 +17,15 @@ class CommentService {
     _cacheTimestamps.remove(postId);
   }
 
-  /// Get authentication headers (JWT first, Firebase fallback, null for guests)
+  /// Get authentication headers (JWT token system only, null for guests)
   static Future<Map<String, String>?> _getHeaders() async {
-    // Check if user is authenticated with JWT
+    // Use JWT token system - the primary authentication system
     if (TokenAuthService.isAuthenticated) {
       final headers = await TokenAuthService.getAuthHeaders();
       if (headers != null) {
         print('💬 CommentService: Using JWT token for authenticated user');
         return headers;
       }
-    }
-
-    // Fallback to Firebase auth
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final token = await user.getIdToken();
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
     }
 
     // Guest user - no authentication headers

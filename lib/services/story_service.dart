@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/story_model.dart';
 import 'token_auth_service.dart';
 
@@ -16,24 +15,13 @@ class StoryService {
 
   /// Get authentication headers (returns null for guest users)
   static Future<Map<String, String>?> _getHeaders() async {
-    // Check if user is authenticated
+    // Use JWT token system - the primary authentication system
     if (TokenAuthService.isAuthenticated) {
       final headers = await TokenAuthService.getAuthHeaders();
       if (headers != null) {
         print('📖 StoryService: Using JWT token for authenticated user');
         return headers;
       }
-    }
-
-    // For guest users, try Firebase auth as fallback
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final token = await user.getIdToken();
-      print('📖 StoryService: Firebase user: ${user.email}, UID: ${user.uid}');
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
     }
 
     // Guest user - no authentication headers

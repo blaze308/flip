@@ -9,6 +9,7 @@ import 'services/event_bus.dart';
 import 'services/optimistic_ui_service.dart';
 import 'services/contextual_auth_service.dart';
 import 'services/video_downloader_service.dart';
+import 'services/incoming_call_manager.dart';
 import 'widgets/custom_toaster.dart';
 import 'widgets/post_menu_widget.dart';
 import 'widgets/loading_button.dart';
@@ -23,7 +24,8 @@ import 'create_post_type_screen.dart';
 import 'story_viewer_screen.dart';
 import 'immersive_viewer_screen.dart';
 import 'screens/message_list_screen.dart';
-import 'complete_profile_screen.dart';
+import 'screens/live_list_screen.dart' as screens;
+import 'screens/profile_screen.dart';
 import 'providers/app_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -66,6 +68,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         '🔄 Post created event received: ${event.postType} post ${event.postId}',
       );
       _refreshAfterPostCreation();
+    });
+
+    // Initialize incoming call manager after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        IncomingCallManager().initialize(context);
+      }
     });
   }
 
@@ -1449,173 +1458,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildLiveTab() {
-    // TODO: Implement live streams when feature is developed
-    // This will show all active live streams
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: BorderRadius.circular(60),
-            ),
-            child: const Icon(
-              Icons.videocam_outlined,
-              color: Color(0xFF4ECDC4),
-              size: 60,
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Live Streams',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 48),
-            child: Text(
-              'Live streaming feature coming soon!\nWatch and interact with creators in real-time.',
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 14,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF4ECDC4),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'In Development',
-                  style: TextStyle(
-                    color: Color(0xFF4ECDC4),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return const screens.LiveListScreen();
   }
 
   Widget _buildProfileTab() {
-    final currentUser = ref.watch(currentUserProvider);
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.grey[800],
-                image:
-                    currentUser?.photoURL != null
-                        ? DecorationImage(
-                          image: NetworkImage(currentUser!.photoURL!),
-                          fit: BoxFit.cover,
-                        )
-                        : null,
-              ),
-              child:
-                  currentUser?.photoURL == null
-                      ? const Icon(Icons.person, color: Colors.white, size: 50)
-                      : null,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              currentUser?.displayName ?? 'User',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              currentUser?.email ?? currentUser?.phoneNumber ?? '',
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-            const SizedBox(height: 32),
-
-            // Complete Profile Button
-            OutlinedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => const CompleteProfileScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.edit, color: Color(0xFF4ECDC4)),
-              label: const Text(
-                'Complete Profile',
-                style: TextStyle(color: Color(0xFF4ECDC4)),
-              ),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF4ECDC4), width: 2),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Logout Button
-            ElevatedButton(
-              onPressed: _handleLogout,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
-                ),
-              ),
-              child: const Text('Logout'),
-            ),
-          ],
-        ),
-      ),
-    );
+    // Use the new comprehensive ProfileScreen
+    return const ProfileScreen();
   }
 
   void _showCreateOptions(

@@ -75,5 +75,11 @@
 	<string>Save videos to your photo library</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Access your photo library to save videos</string>
+	<!-- Camera Permission for Video Calls -->
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required for video calls</string>
+	<!-- Microphone Permission for Audio/Video Calls -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access is required for calls</string>
 </dict>
 </plist>

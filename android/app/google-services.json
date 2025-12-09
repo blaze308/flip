@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "490623785866-hqt2nol889puqfurrr8cean85i929o9r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ancientplustech.ancient.flip",
+            "certificate_hash": "58946405819bb7f2e306c9319ef11b30a5d67429"
+          }
+        },
+        {
           "client_id": "490623785866-rk0njq8oj8njtniqt9m9v96snuae1tve.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -57,6 +65,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "490623785866-79i1gfecfc6jidi63mrt5smkdi3apnua.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.ancientplus.flip",
+            "certificate_hash": "58946405819bb7f2e306c9319ef11b30a5d67429"
+          }
+        },
         {
           "client_id": "490623785866-cvqojh7o0esk5ub51mqp9e02o0t4ddt6.apps.googleusercontent.com",
           "client_type": 1,

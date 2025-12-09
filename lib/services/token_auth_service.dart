@@ -50,6 +50,15 @@ class TokenAuthService {
   /// Get current user
   static TokenUser? get currentUser => _currentUser;
 
+  /// Get current access token
+  static Future<String?> getToken() async {
+    if (_accessToken == null) {
+      // Try to load from secure storage
+      _accessToken = await _secureStorage.read(key: _accessTokenKey);
+    }
+    return _accessToken;
+  }
+
   /// Check if user is authenticated
   static bool get isAuthenticated =>
       _currentState == AuthState.authenticated &&
@@ -64,8 +73,10 @@ class TokenAuthService {
     try {
       print('🔐 TokenAuthService: Refreshing current user data...');
 
-      if (_accessToken == null) {
-        print('🔐 TokenAuthService: No access token, cannot refresh user');
+      // Use getAuthHeaders to ensure token is valid and refreshed if needed
+      final headers = await getAuthHeaders();
+      if (headers == null) {
+        print('🔐 TokenAuthService: No valid token, cannot refresh user');
         return;
       }
 
@@ -73,10 +84,7 @@ class TokenAuthService {
       final response = await http
           .get(
             Uri.parse('$_baseUrl/api/users/profile'),
-            headers: {
-              'Authorization': 'Bearer $_accessToken',
-              'Content-Type': 'application/json',
-            },
+            headers: headers,
           )
           .timeout(_timeoutDuration);
 
@@ -205,7 +213,16 @@ class TokenAuthService {
             );
             return;
           } else {
-            print('🔐 TokenAuthService: Token valid but no user data found');
+            print('🔐 TokenAuthService: Token valid but no user data found, fetching from backend...');
+            // Fetch user data from backend since token is valid
+            await refreshCurrentUser();
+            if (_currentUser != null) {
+              _updateState(AuthState.authenticated, user: _currentUser);
+              print(
+                '🔐 TokenAuthService: User authenticated from backend - ${_currentUser!.displayName}',
+              );
+              return;
+            }
           }
         } else {
           print(
@@ -222,6 +239,17 @@ class TokenAuthService {
                 '🔐 TokenAuthService: User authenticated after token refresh - ${userData.displayName}',
               );
               return;
+            } else {
+              // Token refreshed but no user data in storage, fetch from backend
+              print('🔐 TokenAuthService: Token refreshed but no user data found, fetching from backend...');
+              await refreshCurrentUser();
+              if (_currentUser != null) {
+                _updateState(AuthState.authenticated, user: _currentUser);
+                print(
+                  '🔐 TokenAuthService: User authenticated from backend after refresh - ${_currentUser!.displayName}',
+                );
+                return;
+              }
             }
           }
         }

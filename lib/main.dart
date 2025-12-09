@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 
 import 'onboarding_screen.dart';
@@ -14,10 +15,10 @@ import 'new_password_screen.dart';
 import 'phone_registration_screen.dart';
 import 'otp_verification_screen.dart';
 import 'home_screen.dart';
-import 'biometric_setup_screen.dart';
+import 'biometric_setup_screen.dart'; 
 import 'biometric_login_screen.dart';
 import 'complete_profile_screen.dart';
-import 'token_app_router.dart';
+import 'token_app_router.dart ';
 import 'create_story_type_screen.dart';
 import 'create_text_story_screen.dart';
 import 'create_image_story_screen.dart';
@@ -29,6 +30,13 @@ import 'services/connectivity_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    print('⚠️ Warning: Could not load .env file: $e');
+  }
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);

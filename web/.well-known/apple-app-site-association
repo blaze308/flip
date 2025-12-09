@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAM_ID.ancientplustech.ancient.flip",
+        "paths": [
+          "/post/*",
+          "/reel/*",
+          "/user/*",
+          "/profile/*"
+        ]
+      }
+    ]
+  }
+}
+

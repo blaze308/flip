@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 class ShareService {
   static const String appName = 'Flip';
   static const String appUrl =
-      'https://flip.app'; // Replace with your actual domain
+      'https://flip-backend-mnpg.onrender.com'; // Your backend domain for deep links
   static const String appStoreUrl =
-      'https://apps.apple.com/app/flip'; // Replace with actual
+      'https://apps.apple.com/app/flip'; // Replace with actual App Store URL when published
   static const String playStoreUrl =
-      'https://play.google.com/store/apps/details?id=com.flip.app'; // Replace with actual
+      'https://play.google.com/store/apps/details?id=ancientplustech.ancient.flip'; // Your actual package name
 
   /// Share a post with deep link (HTTPS URL for rich preview)
   static Future<void> sharePost({

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/message_model.dart';
 import 'token_auth_service.dart';
 
@@ -28,6 +27,10 @@ class SocketService {
       StreamController.broadcast();
   final StreamController<ConnectionEvent> _connectionController =
       StreamController.broadcast();
+  final StreamController<CallInvitationEvent> _callInvitationController =
+      StreamController.broadcast();
+  final StreamController<CallEndedEvent> _callEndedController =
+      StreamController.broadcast();
 
   // Streams for listening to events
   Stream<MessageModel> get onNewMessage => _newMessageController.stream;
@@ -37,10 +40,14 @@ class SocketService {
   Stream<UserStatusEvent> get onUserStatus => _userStatusController.stream;
   Stream<TypingEvent> get onTyping => _typingController.stream;
   Stream<ConnectionEvent> get onConnection => _connectionController.stream;
+  Stream<CallInvitationEvent> get onCallInvitation =>
+      _callInvitationController.stream;
+  Stream<CallEndedEvent> get onCallEnded => _callEndedController.stream;
 
   // Getters
   bool get isConnected => _isConnected;
   String? get currentUserId => _currentUserId;
+  IO.Socket? get socket => _socket; // Expose socket for live streaming events
 
   /// Initialize and connect to Socket.IO server
   Future<void> connect() async {
@@ -50,36 +57,19 @@ class SocketService {
     }
 
     try {
-      // Get authentication token (prefer JWT over Firebase)
+      // Get authentication token using JWT token system
       String? token;
 
       if (TokenAuthService.isAuthenticated) {
-        try {
-          // Try JWT token first (more reliable)
-          final headers = await TokenAuthService.getAuthHeaders();
-          if (headers != null && headers.containsKey('Authorization')) {
-            token = headers['Authorization']!.replaceFirst('Bearer ', '');
-            final currentUser = TokenAuthService.currentUser;
-            if (currentUser != null) {
-              _currentUserId = currentUser.id;
-            }
-            print('🔌 SocketService: Using JWT token for authentication');
-          } else {
-            throw Exception('No JWT headers available');
+        // Use JWT token system - the primary authentication system
+        final headers = await TokenAuthService.getAuthHeaders();
+        if (headers != null && headers.containsKey('Authorization')) {
+          token = headers['Authorization']!.replaceFirst('Bearer ', '');
+          final currentUser = TokenAuthService.currentUser;
+          if (currentUser != null) {
+            _currentUserId = currentUser.id;
           }
-        } catch (e) {
-          print(
-            '🔌 SocketService: JWT token failed, falling back to Firebase: $e',
-          );
-          // Fallback to Firebase token with forced refresh
-          final user = FirebaseAuth.instance.currentUser;
-          if (user != null) {
-            token = await user.getIdToken(
-              true,
-            ); // Force refresh to get new token
-            _currentUserId = user.uid;
-            print('🔌 SocketService: Using refreshed Firebase token');
-          }
+          print('🔌 SocketService: Using JWT token for authentication');
         }
       }
 
@@ -358,6 +348,31 @@ class SocketService {
         '🔌 SocketService: Chat marked as read: ${data['messageCount']} messages',
       );
     });
+
+    // Call invitation events
+    _socket!.on('call_invitation', (data) {
+      try {
+        print('📞 SocketService: Received call invitation');
+        final invitationEvent = CallInvitationEvent.fromJson(
+          data as Map<String, dynamic>,
+        );
+        _callInvitationController.add(invitationEvent);
+      } catch (e) {
+        print('📞 SocketService: Error parsing call invitation: $e');
+      }
+    });
+
+    _socket!.on('call_ended', (data) {
+      try {
+        print('📞 SocketService: Call ended notification received');
+        final callEndedEvent = CallEndedEvent.fromJson(
+          data as Map<String, dynamic>,
+        );
+        _callEndedController.add(callEndedEvent);
+      } catch (e) {
+        print('📞 SocketService: Error parsing call ended: $e');
+      }
+    });
   }
 
   /// Join a chat room
@@ -437,6 +452,30 @@ class SocketService {
     }
   }
 
+  /// Generic emit method for custom events
+  void emit(String event, dynamic data) {
+    if (_socket != null && _isConnected) {
+      print('🔌 SocketService: Emitting event: $event');
+      _socket!.emit(event, data);
+    } else {
+      print('🔌 SocketService: Cannot emit $event - not connected');
+    }
+  }
+
+  /// Generic on method for custom events
+  void on(String event, Function(dynamic) callback) {
+    if (_socket != null) {
+      _socket!.on(event, callback);
+    }
+  }
+
+  /// Remove event listener
+  void off(String event) {
+    if (_socket != null) {
+      _socket!.off(event);
+    }
+  }
+
   /// Dispose resources
   void dispose() {
     disconnect();
@@ -446,6 +485,8 @@ class SocketService {
     _userStatusController.close();
     _typingController.close();
     _connectionController.close();
+    _callInvitationController.close();
+    _callEndedController.close();
   }
 }
 
@@ -559,6 +600,61 @@ class ChatUpdateEvent {
       ),
       data: json['data'] as Map<String, dynamic>? ?? {},
       timestamp: DateTime.parse(json['timestamp'] as String),
+    );
+  }
+}
+
+class CallInvitationEvent {
+  final String callId;
+  final String roomId;
+  final String chatId;
+  final String callerId;
+  final String callerName;
+  final String? callerAvatar;
+  final String type; // 'audio' or 'video'
+  final DateTime createdAt;
+
+  const CallInvitationEvent({
+    required this.callId,
+    required this.roomId,
+    required this.chatId,
+    required this.callerId,
+    required this.callerName,
+    this.callerAvatar,
+    required this.type,
+    required this.createdAt,
+  });
+
+  factory CallInvitationEvent.fromJson(Map<String, dynamic> json) {
+    return CallInvitationEvent(
+      callId: json['callId'] as String,
+      roomId: json['roomId'] as String,
+      chatId: json['chatId'] as String,
+      callerId: json['callerId'] as String,
+      callerName: json['callerName'] as String,
+      callerAvatar: json['callerAvatar'] as String?,
+      type: json['type'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+}
+
+class CallEndedEvent {
+  final String callId;
+  final String endedBy;
+  final DateTime endedAt;
+
+  const CallEndedEvent({
+    required this.callId,
+    required this.endedBy,
+    required this.endedAt,
+  });
+
+  factory CallEndedEvent.fromJson(Map<String, dynamic> json) {
+    return CallEndedEvent(
+      callId: json['callId'] as String,
+      endedBy: json['endedBy'] as String,
+      endedAt: DateTime.parse(json['endedAt'] as String),
     );
   }
 }

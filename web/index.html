@@ -1,38 +1,283 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Flip - Share your moments">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="flip">
+  <meta name="apple-mobile-web-app-title" content="Flip">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>flip</title>
+  <title>Flip</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      color: white;
+    }
+
+    .container {
+      text-align: center;
+      padding: 40px 20px;
+      max-width: 500px;
+    }
+
+    .logo {
+      font-size: 48px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      animation: fadeIn 0.5s ease-in;
+    }
+
+    .message {
+      font-size: 18px;
+      margin-bottom: 30px;
+      opacity: 0.9;
+    }
+
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 30px auto;
+    }
+
+    .download-buttons {
+      display: none;
+      flex-direction: column;
+      gap: 15px;
+      margin-top: 30px;
+      animation: fadeIn 0.5s ease-in;
+    }
+
+    .download-buttons.show {
+      display: flex;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 15px 30px;
+      background: white;
+      color: #667eea;
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-ios {
+      background: linear-gradient(135deg, #000000 0%, #434343 100%);
+      color: white;
+    }
+
+    .btn-android {
+      background: linear-gradient(135deg, #34A853 0%, #4285F4 100%);
+      color: white;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .content-preview {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+      backdrop-filter: blur(10px);
+    }
+
+    .content-type {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      opacity: 0.8;
+      margin-bottom: 10px;
+    }
+
+    #flutter-app {
+      display: none;
+    }
+  </style>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <div class="container">
+    <div class="logo">🎬 Flip</div>
+    <div class="message" id="message">Opening in app...</div>
+    <div class="spinner" id="spinner"></div>
+    
+    <div class="content-preview" id="contentPreview" style="display: none;">
+      <div class="content-type" id="contentType"></div>
+      <div id="contentInfo"></div>
+    </div>
+
+    <div class="download-buttons" id="downloadButtons">
+      <p style="margin-bottom: 10px;">Don't have the app?</p>
+      <a href="https://apps.apple.com/app/flip" class="btn btn-ios">
+        📱 Download on App Store
+      </a>
+      <a href="https://play.google.com/store/apps/details?id=ancientplustech.ancient.flip" class="btn btn-android">
+        🤖 Get it on Google Play
+      </a>
+    </div>
+  </div>
+
+  <!-- Flutter app container (hidden on web) -->
+  <div id="flutter-app">
+    <script src="flutter_bootstrap.js" async></script>
+  </div>
+
+  <script>
+    // Deep link handling
+    (function() {
+      const urlPath = window.location.pathname;
+      const urlParams = new URLSearchParams(window.location.search);
+      let customSchemeUrl = '';
+      let contentType = '';
+      let contentId = '';
+
+      console.log('🔗 Deep Link Handler: Path:', urlPath);
+
+      // Parse the URL to determine content type and ID
+      if (urlPath.startsWith('/post/')) {
+        contentId = urlPath.replace('/post/', '').split('/')[0];
+        contentType = 'post';
+        customSchemeUrl = `flip://open/post/${contentId}`;
+        document.getElementById('contentType').textContent = 'Post';
+        document.getElementById('contentInfo').textContent = `Post ID: ${contentId}`;
+        document.getElementById('contentPreview').style.display = 'block';
+      } 
+      else if (urlPath.startsWith('/reel/')) {
+        contentId = urlPath.replace('/reel/', '').split('/')[0];
+        contentType = 'reel';
+        customSchemeUrl = `flip://open/reel/${contentId}`;
+        document.getElementById('contentType').textContent = 'Reel';
+        document.getElementById('contentInfo').textContent = `Reel ID: ${contentId}`;
+        document.getElementById('contentPreview').style.display = 'block';
+      }
+      else if (urlPath.startsWith('/user/') || urlPath.startsWith('/profile/')) {
+        contentId = urlPath.replace(/^\/(user|profile)\//, '').split('/')[0];
+        contentType = 'user';
+        customSchemeUrl = `flip://open/user/${contentId}`;
+        document.getElementById('contentType').textContent = 'Profile';
+        document.getElementById('contentInfo').textContent = `User ID: ${contentId}`;
+        document.getElementById('contentPreview').style.display = 'block';
+      }
+
+      console.log('🔗 Content Type:', contentType, 'ID:', contentId);
+      console.log('🔗 Custom Scheme URL:', customSchemeUrl);
+
+      // Attempt to open the app
+      if (customSchemeUrl) {
+        // Try to open the app using custom scheme
+        const startTime = Date.now();
+        
+        // Create an invisible iframe to trigger the custom scheme
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = customSchemeUrl;
+        document.body.appendChild(iframe);
+
+        // Also try direct navigation (works on some platforms)
+        setTimeout(() => {
+          window.location.href = customSchemeUrl;
+        }, 100);
+
+        // Check if app opened (user left the page)
+        let appOpened = false;
+        
+        const checkAppOpened = () => {
+          if (document.hidden || document.webkitHidden) {
+            appOpened = true;
+            console.log('✅ App opened successfully');
+          }
+        };
+
+        document.addEventListener('visibilitychange', checkAppOpened);
+        document.addEventListener('webkitvisibilitychange', checkAppOpened);
+
+        // Show download buttons after timeout
+        setTimeout(() => {
+          const elapsed = Date.now() - startTime;
+          
+          // If user is still on the page after 2.5 seconds, assume app is not installed
+          if (!appOpened && !document.hidden && !document.webkitHidden) {
+            console.log('⚠️ App not installed, showing download options');
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('message').textContent = 'App not installed';
+            document.getElementById('downloadButtons').classList.add('show');
+            
+            // Clean up
+            document.removeEventListener('visibilitychange', checkAppOpened);
+            document.removeEventListener('webkitvisibilitychange', checkAppOpened);
+            if (iframe.parentNode) {
+              iframe.parentNode.removeChild(iframe);
+            }
+          }
+        }, 2500);
+
+        // Fallback: If still here after 5 seconds, definitely show download buttons
+        setTimeout(() => {
+          if (!appOpened) {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('message').textContent = 'Get the Flip app to view this content';
+            document.getElementById('downloadButtons').classList.add('show');
+          }
+        }, 5000);
+      } else {
+        // No valid deep link, show download options immediately
+        console.log('⚠️ No valid deep link found');
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('message').textContent = 'Download Flip to get started';
+        document.getElementById('downloadButtons').classList.add('show');
+      }
+
+      // Handle Android intent fallback
+      if (navigator.userAgent.match(/Android/i) && contentType) {
+        const intentUrl = `intent://open/${contentType}/${contentId}#Intent;scheme=flip;package=ancientplustech.ancient.flip;end`;
+        console.log('🤖 Android Intent URL:', intentUrl);
+        
+        setTimeout(() => {
+          window.location.href = intentUrl;
+        }, 200);
+      }
+    })();
+  </script>
 </body>
 </html>

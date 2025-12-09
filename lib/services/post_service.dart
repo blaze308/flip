@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/post_model.dart';
 import 'optimistic_ui_service.dart';
 import 'token_auth_service.dart';
@@ -17,29 +16,19 @@ class PostService {
   static const bool isDevelopmentMode = false;
 
   /// Get authentication headers (returns null for guest users)
+  /// Uses JWT token system exclusively
   static Future<Map<String, String>?> _getHeaders() async {
-    // Check if user is authenticated
+    // Use JWT token system - the primary authentication system
     if (TokenAuthService.isAuthenticated) {
       final headers = await TokenAuthService.getAuthHeaders();
       if (headers != null) {
-        print('Using JWT token for authenticated user'); // Debug log
+        print('📝 PostService: Using JWT token for authenticated user');
         return headers;
       }
     }
 
-    // For guest users, try Firebase auth as fallback
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final token = await user.getIdToken();
-      print('Firebase user: ${user.email}, UID: ${user.uid}'); // Debug log
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
-    }
-
     // Guest user - no authentication headers
-    print('Guest user - no authentication headers'); // Debug log
+    print('📝 PostService: Guest user - no authentication headers');
     return null;
   }
 

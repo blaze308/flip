@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mime/mime.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
@@ -39,17 +38,6 @@ class ChatService {
         print('💬 ChatService: Using JWT token for authenticated user');
         return headers;
       }
-    }
-
-    // For guest users, try Firebase auth as fallback
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final token = await user.getIdToken();
-      print('💬 ChatService: Firebase user: ${user.email}, UID: ${user.uid}');
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
     }
 
     // Guest user - no authentication headers

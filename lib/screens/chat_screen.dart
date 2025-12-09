@@ -15,7 +15,8 @@ import '../services/chat_service.dart';
 import '../services/socket_service.dart';
 import '../services/token_auth_service.dart';
 import '../services/audio_service.dart';
-import '../services/jitsi_service.dart';
+import '../services/call_service.dart';
+import 'zego_call_screen.dart';
 import '../services/cloudinary_service.dart';
 import '../widgets/custom_toaster.dart';
 import '../widgets/modern_message_bubble.dart';
@@ -27,6 +28,9 @@ import '../widgets/modern_image_preview.dart';
 import '../widgets/modern_video_preview.dart';
 import '../widgets/modern_file_preview.dart';
 import '../widgets/modern_svga_preview.dart';
+
+/// Call types
+enum CallType { audio, video }
 
 class ChatScreen extends ConsumerStatefulWidget {
   final ChatModel chat;
@@ -2448,7 +2452,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     await _sendMediaMessage(MessageType.audio, file);
   }
 
-  /// Start a call (audio or video)
+  /// Start a call (audio or video) with Jitsi Meet
   Future<void> _startCall(CallType type) async {
     try {
       final currentUserId = TokenAuthService.currentUser?.id ?? '';
@@ -2463,51 +2467,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         return;
       }
 
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder:
-            (context) => const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4ECDC4)),
+      // Show loading indicator
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder:
+              (context) => const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF25D366)),
+                ),
               ),
-            ),
-      );
+        );
+      }
 
-      // Create call
-      final result = await JitsiService.createCall(
+      // Create call via backend API
+      final callData = await CallService.createCall(
         chatId: widget.chat.id,
         participants: participants,
-        type: type,
+        type: type == CallType.video ? 'video' : 'audio',
       );
 
-      // Hide loading
-      if (mounted) Navigator.of(context).pop();
-
-      if (result.success && result.roomId != null) {
-        // Join the call
-        final currentUser = TokenAuthService.currentUser;
-        final displayName = currentUser?.displayName ?? 'User';
-
-        final joined = await JitsiService.joinCall(
-          roomId: result.roomId!,
-          displayName: displayName,
-          type: type,
-          avatar: currentUser?.photoURL,
-        );
-
-        if (!joined) {
-          ToasterService.showError(context, 'Failed to join call');
-        }
-      } else {
-        ToasterService.showError(context, result.message);
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
       }
+
+      if (callData == null) {
+        throw Exception('Failed to create call');
+      }
+
+      // Get recipient info
+      final recipient = widget.chat.members.firstWhere(
+        (member) => member.userId != currentUserId,
+      );
+
+      // Navigate to ZegoCloud call screen with backend-provided IDs
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => ZegoCallScreen(
+                callId: callData['callId'] as String,
+                recipientName: recipient.bestChatName,
+                recipientAvatar: recipient.avatar,
+                isAudioOnly: type == CallType.audio,
+                isIncoming: false,
+              ),
+        ),
+      );
     } catch (e) {
-      // Hide loading if still showing
+      // Close loading dialog if still open
       if (mounted && Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
+
       ToasterService.showError(
         context,
         'Failed to start call: ${e.toString()}',

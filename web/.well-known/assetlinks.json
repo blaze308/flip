@@ -1,0 +1,11 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "ancientplustech.ancient.flip",
+    "sha256_cert_fingerprints": [
+      "60:A4:63:12:61:2E:73:53:C5:D9:84:43:B3:38:12:14:2C:F6:F2:0D:0F:CA:60:D7:46:46:C7:C8:95:18:71:91"
+    ]
+  }
+}]
+

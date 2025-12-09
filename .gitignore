@@ -12,6 +12,22 @@
 .swiftpm/
 migrate_working_dir/
 
+# Environment files - DO NOT TRACK
+.env
+.env.*
+!.env.example
+.env.local
+.env.production
+.env.development
+.env.staging
+env.txt
+flip env.txt
+keys.txt
+commands.txt
+ENV_KEYS_QUICK_REFERENCE.md
+ENV_CONFIGURATION.md
+.env.template
+
 # IntelliJ related
 *.iml
 *.ipr
@@ -43,3 +59,17 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Sensitive files - DO NOT TRACK
+*.jks
+*.jks.old
+local.properties
+secrets.json
+firebase.json
+google-services.json
+GoogleService-Info.plist
+*.key
+*.p8
+*.p12
+*.mobileprovision
+credentials.json

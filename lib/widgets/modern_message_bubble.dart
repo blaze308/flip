@@ -11,6 +11,7 @@ import '../screens/video_player_screen.dart';
 import 'waveform_animation.dart';
 import 'swipeable_message_bubble.dart';
 import 'svga_player_widget.dart';
+import 'user_badge_widget.dart';
 
 class ModernMessageBubble extends StatefulWidget {
   final MessageModel message;
@@ -255,6 +256,53 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
 
     final isEmojiOnly = _isEmojiOnly(content);
 
+    // Check if sender is a Guardian
+    final isGuardian = widget.message.sender?.hasGuardian ?? false;
+    final guardianType = widget.message.sender?.guardianType;
+    
+    // Guardian bubble colors
+    Color bubbleColor = widget.isFromCurrentUser
+        ? const Color(0xFF005C4B)
+        : const Color(0xFF1F2C34);
+    
+    BoxBorder? guardianBorder;
+    List<BoxShadow> shadows = [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.08),
+        blurRadius: 3,
+        offset: const Offset(0, 1),
+      ),
+    ];
+    
+    if (!widget.isFromCurrentUser && isGuardian) {
+      // Guardian bubble styling
+      Color guardianColor;
+      switch (guardianType) {
+        case 'king':
+          guardianColor = const Color(0xFFFFD700); // Gold
+          bubbleColor = const Color(0xFF2A2419); // Dark gold tint
+          break;
+        case 'gold':
+          guardianColor = const Color(0xFFFFAA00); // Orange gold
+          bubbleColor = const Color(0xFF2A2219); // Dark orange tint
+          break;
+        case 'silver':
+        default:
+          guardianColor = const Color(0xFFC0C0C0); // Silver
+          bubbleColor = const Color(0xFF252525); // Dark silver tint
+          break;
+      }
+      
+      guardianBorder = Border.all(color: guardianColor, width: 2);
+      shadows = [
+        BoxShadow(
+          color: guardianColor.withOpacity(0.3),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ];
+    }
+
     return Container(
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width * 0.75,
@@ -262,27 +310,41 @@ class _ModernMessageBubbleState extends State<ModernMessageBubble>
       ),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color:
-            widget.isFromCurrentUser
-                ? const Color(0xFF005C4B)
-                : const Color(0xFF1F2C34),
+        color: bubbleColor,
+        border: guardianBorder,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(8),
           topRight: const Radius.circular(8),
           bottomLeft: Radius.circular(widget.isFromCurrentUser ? 8 : 0),
           bottomRight: Radius.circular(widget.isFromCurrentUser ? 0 : 8),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        boxShadow: shadows,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Sender name and badges (for messages from others)
+          if (!widget.isFromCurrentUser && widget.message.sender != null) ...[
+            Row(
+              children: [
+                Text(
+                  widget.message.sender!.displayName,
+                  style: const TextStyle(
+                    color: Color(0xFF4ECDC4),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                UserBadgesRow(
+                  user: widget.message.sender!,
+                  badgeSize: 14.0,
+                  showLabels: false,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
           Text(
             content,
             style: TextStyle(
