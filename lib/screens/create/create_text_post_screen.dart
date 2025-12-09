@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'services/post_service.dart';
-import 'models/post_model.dart';
-import 'widgets/custom_toaster.dart';
+import '../../services/post_service.dart';
+import '../../models/post_model.dart';
+import '../../widgets/custom_toaster.dart';
 
 class CreateTextPostScreen extends StatefulWidget {
   const CreateTextPostScreen({Key? key}) : super(key: key);

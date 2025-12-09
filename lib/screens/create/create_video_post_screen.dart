@@ -4,10 +4,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'dart:io';
-import 'services/post_service.dart';
-import 'services/event_bus.dart';
-import 'models/post_model.dart';
-import 'widgets/custom_toaster.dart';
+import '../../services/post_service.dart';
+import '../../services/event_bus.dart';
+import '../../models/post_model.dart';
+import '../../widgets/custom_toaster.dart';
 
 class CreateVideoPostScreen extends StatefulWidget {
   const CreateVideoPostScreen({Key? key}) : super(key: key);

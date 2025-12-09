@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'services/token_auth_service.dart';
-import 'splash_screen.dart';
-import 'onboarding_screen.dart';
-import 'home_screen.dart';
+import 'screens/splash_screen.dart';
+import 'screens/onboarding/onboarding_screen.dart';
+import 'screens/home_screen.dart';
 
 /// Simple app router that follows TikTok/Instagram pattern
 /// Always routes to homepage after onboarding, no auth-based routing

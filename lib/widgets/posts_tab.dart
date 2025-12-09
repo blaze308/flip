@@ -3,7 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/post_model.dart';
 import '../services/post_service.dart';
 import '../widgets/shimmer_loading.dart';
-import '../immersive_viewer_screen.dart';
+import '../screens/viewer/immersive_viewer_screen.dart';
 
 /// Posts Tab Widget
 /// Displays user's posts in a grid layout

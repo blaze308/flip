@@ -2,38 +2,39 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'services/story_service.dart';
-import 'models/story_model.dart';
-import 'widgets/custom_toaster.dart';
-import 'providers/app_providers.dart';
+import '../../services/story_service.dart';
+import '../../services/video_utils.dart';
+import '../../models/story_model.dart';
+import '../../widgets/custom_toaster.dart';
+import '../../providers/app_providers.dart';
 
-class CreateImageStoryScreen extends ConsumerStatefulWidget {
-  const CreateImageStoryScreen({super.key});
+class CreateVideoStoryScreen extends ConsumerStatefulWidget {
+  const CreateVideoStoryScreen({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<CreateImageStoryScreen> createState() =>
-      _CreateImageStoryScreenState();
+  ConsumerState<CreateVideoStoryScreen> createState() =>
+      _CreateVideoStoryScreenState();
 }
 
-class _CreateImageStoryScreenState
-    extends ConsumerState<CreateImageStoryScreen> {
+class _CreateVideoStoryScreenState
+    extends ConsumerState<CreateVideoStoryScreen> {
   final TextEditingController _captionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
-  File? _selectedImage;
+  File? _selectedVideo;
   bool _isLoading = false;
 
   // Privacy settings
-  final StoryPrivacyType _privacy = StoryPrivacyType.public;
-  final bool _allowReplies = true;
-  final bool _allowReactions = true;
-  final bool _allowScreenshot = true;
+  StoryPrivacyType _privacy = StoryPrivacyType.public;
+  bool _allowReplies = true;
+  bool _allowReactions = true;
+  bool _allowScreenshot = true;
 
   @override
   void initState() {
     super.initState();
     // Show dialog after the widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showImageSourceDialog();
+      _showVideoSourceDialog();
     });
   }
 
@@ -43,7 +44,7 @@ class _CreateImageStoryScreenState
     super.dispose();
   }
 
-  Future<void> _showImageSourceDialog() async {
+  Future<void> _showVideoSourceDialog() async {
     final result = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -72,7 +73,7 @@ class _CreateImageStoryScreenState
                 const SizedBox(height: 20),
 
                 const Text(
-                  'Select Image Source',
+                  'Select Video Source',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -85,8 +86,8 @@ class _CreateImageStoryScreenState
                   children: [
                     Expanded(
                       child: _buildSourceOption(
-                        icon: Icons.camera_alt,
-                        title: 'Camera',
+                        icon: Icons.videocam,
+                        title: 'Record',
                         onTap:
                             () => Navigator.of(context).pop(ImageSource.camera),
                       ),
@@ -94,7 +95,7 @@ class _CreateImageStoryScreenState
                     const SizedBox(width: 16),
                     Expanded(
                       child: _buildSourceOption(
-                        icon: Icons.photo_library,
+                        icon: Icons.video_library,
                         title: 'Gallery',
                         onTap:
                             () =>
@@ -110,45 +111,71 @@ class _CreateImageStoryScreenState
     );
 
     if (result != null) {
-      await _pickImage(result);
+      await _pickVideo(result);
     } else {
       // User cancelled, go back
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+      Navigator.of(context).pop();
     }
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickVideo(ImageSource source) async {
     try {
-      final XFile? image = await _picker.pickImage(
+      final XFile? video = await _picker.pickVideo(
         source: source,
-        maxWidth: 1080,
-        maxHeight: 1920,
-        imageQuality: 85,
+        maxDuration:
+            source == ImageSource.camera
+                ? const Duration(seconds: 30)
+                : null, // Recording limited to 30s, gallery unlimited
       );
 
-      if (image != null) {
-        setState(() {
-          _selectedImage = File(image.path);
-        });
-      } else {
-        // User cancelled image selection
-        if (mounted) {
-          Navigator.of(context).pop();
+      if (video != null) {
+        final videoFile = File(video.path);
+
+        // Auto-trim video to 30 seconds if it's longer
+        context.showInfoToaster('Processing video...');
+
+        // Check duration first
+        final duration = await VideoUtils.getVideoDuration(videoFile.path);
+
+        if (duration != null && duration > 30) {
+          context.showInfoToaster('Trimming video to 30 seconds...');
+
+          // Trim the video
+          final trimmedVideo = await VideoUtils.trimVideo(
+            videoFile.path,
+            maxDurationSeconds: 30,
+          );
+
+          if (trimmedVideo != null) {
+            setState(() {
+              _selectedVideo = trimmedVideo;
+            });
+            context.showSuccessToaster('Video ready! (trimmed to 30s)');
+          } else {
+            context.showErrorToaster('Failed to trim video');
+            Navigator.of(context).pop();
+          }
+        } else {
+          // Video is already 30s or less
+          setState(() {
+            _selectedVideo = videoFile;
+          });
         }
+      } else {
+        // User cancelled video selection
+        Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        context.showErrorToaster('Failed to pick image: $e');
+        context.showErrorToaster('Failed to process video: $e');
         Navigator.of(context).pop();
       }
     }
   }
 
   Future<void> _createStory() async {
-    if (_selectedImage == null) {
-      context.showErrorToaster('Please select an image');
+    if (_selectedVideo == null) {
+      context.showErrorToaster('Please select a video');
       return;
     }
 
@@ -157,9 +184,15 @@ class _CreateImageStoryScreenState
     });
 
     try {
+      print('🎥 Creating video story with file: ${_selectedVideo!.path}');
+      print('🎥 File size: ${await _selectedVideo!.length()} bytes');
+      print('🎥 File exists: ${await _selectedVideo!.exists()}');
+      print('🎥 Media type: ${StoryMediaType.video.name}');
+      print('🎥 Privacy: ${_privacy.name}');
+
       final result = await StoryService.createMediaStory(
-        mediaFile: _selectedImage!,
-        mediaType: StoryMediaType.image,
+        mediaFile: _selectedVideo!,
+        mediaType: StoryMediaType.video,
         caption: _captionController.text.trim(),
         privacy: _privacy,
         allowReplies: _allowReplies,
@@ -167,17 +200,23 @@ class _CreateImageStoryScreenState
         allowScreenshot: _allowScreenshot,
       );
 
+      print('🎥 Video story creation result: ${result.success}');
+      if (!result.success) {
+        print('🎥 Error message: ${result.message}');
+      }
+
       if (result.success && mounted) {
         // Refresh stories to show the new one
         ref.read(storiesProvider.notifier).refresh();
 
-        context.showSuccessToaster('Image story created successfully!');
+        context.showSuccessToaster('Video story created successfully!');
         Navigator.of(context).pop();
         Navigator.of(context).pop(); // Go back to home screen
       } else if (mounted) {
-        context.showErrorToaster(result.message.toString());
+        context.showErrorToaster(result.message);
       }
     } catch (e) {
+      print('🎥 Video story creation exception: $e');
       if (mounted) {
         context.showErrorToaster('Failed to create story: $e');
       }
@@ -202,7 +241,7 @@ class _CreateImageStoryScreenState
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
-          'Image Story',
+          'Video Story',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -213,7 +252,7 @@ class _CreateImageStoryScreenState
         actions: [
           TextButton(
             onPressed:
-                _selectedImage != null && !_isLoading ? _createStory : null,
+                _selectedVideo != null && !_isLoading ? _createStory : null,
             child:
                 _isLoading
                     ? const SizedBox(
@@ -234,7 +273,7 @@ class _CreateImageStoryScreenState
           ),
         ],
       ),
-      body: _selectedImage == null ? _buildEmptyState() : _buildImagePreview(),
+      body: _selectedVideo == null ? _buildEmptyState() : _buildVideoPreview(),
     );
   }
 
@@ -243,22 +282,22 @@ class _CreateImageStoryScreenState
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.photo_camera_outlined, size: 80, color: Colors.grey[600]),
+          Icon(Icons.videocam_outlined, size: 80, color: Colors.grey[600]),
           const SizedBox(height: 16),
           Text(
-            'No image selected',
+            'No video selected',
             style: TextStyle(color: Colors.grey[400], fontSize: 18),
           ),
           const SizedBox(height: 8),
           Text(
-            'Tap to select an image',
+            'Record or select a video',
             style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
-            onPressed: _showImageSourceDialog,
-            icon: const Icon(Icons.add_photo_alternate),
-            label: const Text('Select Image'),
+            onPressed: _showVideoSourceDialog,
+            icon: const Icon(Icons.add_a_photo),
+            label: const Text('Select Video'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4ECDC4),
               foregroundColor: Colors.white,
@@ -270,29 +309,50 @@ class _CreateImageStoryScreenState
     );
   }
 
-  Widget _buildImagePreview() {
+  Widget _buildVideoPreview() {
     return Column(
       children: [
-        // Image preview
+        // Video preview placeholder
         Expanded(
           child: Container(
             width: double.infinity,
             margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              image: DecorationImage(
-                image: FileImage(_selectedImage!),
-                fit: BoxFit.cover,
-              ),
+              color: Colors.grey[900],
             ),
             child: Stack(
               children: [
-                // Change image button
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.play_circle_outline,
+                        size: 80,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Video Preview',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 18),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Video selected: ${_selectedVideo!.path.split('/').last}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Change video button
                 Positioned(
                   top: 16,
                   right: 16,
                   child: GestureDetector(
-                    onTap: _showImageSourceDialog,
+                    onTap: _showVideoSourceDialog,
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -352,6 +412,34 @@ class _CreateImageStoryScreenState
                   ),
                   filled: true,
                   fillColor: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.orange[300],
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Videos are limited to 1 minute for stories',
+                        style: TextStyle(
+                          color: Colors.orange[300],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

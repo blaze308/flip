@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:async';
 
-import 'models/story_model.dart';
-import 'providers/app_providers.dart';
-import 'services/story_service.dart';
-import 'services/token_auth_service.dart';
-import 'widgets/custom_toaster.dart';
+import '../../models/story_model.dart';
+import '../../providers/app_providers.dart';
+import '../../services/story_service.dart';
+import '../../services/token_auth_service.dart';
+import '../../widgets/custom_toaster.dart';
 
 class StoryViewerScreen extends ConsumerStatefulWidget {
   final List<StoryFeedItem> storyFeedItems;

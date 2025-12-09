@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'services/story_service.dart';
-import 'models/story_model.dart';
-import 'widgets/custom_toaster.dart';
-import 'providers/app_providers.dart';
+import '../../services/story_service.dart';
+import '../../models/story_model.dart';
+import '../../widgets/custom_toaster.dart';
+import '../../providers/app_providers.dart';
 
 class CreateTextStoryScreen extends ConsumerStatefulWidget {
   const CreateTextStoryScreen({super.key});

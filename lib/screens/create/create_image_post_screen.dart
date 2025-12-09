@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'services/post_service.dart';
-import 'services/event_bus.dart';
-import 'models/post_model.dart';
-import 'widgets/custom_toaster.dart';
+import '../../services/post_service.dart';
+import '../../services/event_bus.dart';
+import '../../models/post_model.dart';
+import '../../widgets/custom_toaster.dart';
 
 class CreateImagePostScreen extends StatefulWidget {
   const CreateImagePostScreen({Key? key}) : super(key: key);

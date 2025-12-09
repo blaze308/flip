@@ -3,16 +3,16 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:async';
 
-import 'models/post_model.dart';
-import 'widgets/post_menu_widget.dart';
-import 'widgets/loading_button.dart';
-import 'services/optimistic_ui_service.dart';
-import 'services/post_service.dart';
-import 'services/contextual_auth_service.dart';
-import 'services/video_downloader_service.dart';
-import 'widgets/custom_toaster.dart';
-import 'widgets/comments_bottom_sheet.dart';
-import 'widgets/video_download_progress.dart';
+import '../../models/post_model.dart';
+import '../../widgets/post_menu_widget.dart';
+import '../../widgets/loading_button.dart';
+import '../../services/optimistic_ui_service.dart';
+import '../../services/post_service.dart';
+import '../../services/contextual_auth_service.dart';
+import '../../services/video_downloader_service.dart';
+import '../../widgets/custom_toaster.dart';
+import '../../widgets/comments_bottom_sheet.dart';
+import '../../widgets/video_download_progress.dart';
 
 class ImmersiveViewerScreen extends StatefulWidget {
   final List<PostModel> posts;

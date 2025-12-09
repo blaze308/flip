@@ -4,11 +4,11 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'services/story_service.dart';
-import 'services/audio_service.dart';
-import 'models/story_model.dart';
-import 'widgets/custom_toaster.dart';
-import 'providers/app_providers.dart';
+import '../../services/story_service.dart';
+import '../../services/audio_service.dart';
+import '../../models/story_model.dart';
+import '../../widgets/custom_toaster.dart';
+import '../../providers/app_providers.dart';
 
 class CreateAudioStoryScreen extends ConsumerStatefulWidget {
   const CreateAudioStoryScreen({super.key});
