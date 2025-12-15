@@ -31,12 +31,8 @@ import 'services/connectivity_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    print('⚠️ Warning: Could not load .env file: $e');
-  }
+  // Load environment variables (required for Agora, etc.)
+  await dotenv.load(fileName: ".env");
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);

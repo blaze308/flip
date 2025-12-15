@@ -33,12 +33,13 @@ class AgoraPartyScreen extends StatefulWidget {
 
 class _AgoraPartyScreenState extends State<AgoraPartyScreen> {
   late RtcEngine _engine;
+  bool _engineCreated = false;
+  bool _engineInitialized = false;
   List<AudioChatUserModel> _seats = [];
   List<LiveMessageModel> _messages = [];
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _messageScrollController = ScrollController();
 
-  bool _isInitialized = false;
   bool _isJoining = true;
   bool _isMuted = true;
   bool _isVideoEnabled = false;
@@ -52,6 +53,8 @@ class _AgoraPartyScreenState extends State<AgoraPartyScreen> {
   @override
   void initState() {
     super.initState();
+    _engine = createAgoraRtcEngine();
+    _engineCreated = true;
     _initializeAgora();
   }
 
@@ -73,14 +76,19 @@ class _AgoraPartyScreenState extends State<AgoraPartyScreen> {
         throw Exception('Agora App ID not found in .env file');
       }
 
-      // Create Agora engine
-      _engine = createAgoraRtcEngine();
+      // Ensure engine exists
+      if (!_engineCreated) {
+        _engine = createAgoraRtcEngine();
+        _engineCreated = true;
+      }
+
       await _engine.initialize(
         RtcEngineContext(
           appId: appId,
           channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
         ),
       );
+      _engineInitialized = true;
 
       // Set up event handlers
       _engine.registerEventHandler(
@@ -148,11 +156,8 @@ class _AgoraPartyScreenState extends State<AgoraPartyScreen> {
 
       // Start heartbeat
       _startHeartbeat();
-
-      setState(() {
-        _isInitialized = true;
-      });
     } catch (e) {
+      _engineInitialized = false;
       print('❌ Error initializing Agora: $e');
       if (mounted) {
         ToasterService.showError(context, 'Failed to initialize party');
@@ -321,7 +326,7 @@ class _AgoraPartyScreenState extends State<AgoraPartyScreen> {
       final user = TokenAuthService.currentUser;
       if (user == null) return;
 
-      final seat = await LiveStreamingService.joinPartySeat(
+      await LiveStreamingService.joinPartySeat(
         liveStreamId: widget.liveStream.id,
         seatIndex: seatIndex,
         userUid: _localUid ?? 0,
@@ -413,8 +418,16 @@ class _AgoraPartyScreenState extends State<AgoraPartyScreen> {
     _messageController.dispose();
     _messageScrollController.dispose();
     _leaveLive();
-    _engine.leaveChannel();
-    _engine.release();
+    if (_engineCreated) {
+      try {
+        if (_engineInitialized) {
+          _engine.leaveChannel();
+        }
+        _engine.release();
+      } catch (e) {
+        print('⚠️ Error releasing Agora engine: $e');
+      }
+    }
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,

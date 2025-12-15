@@ -6,6 +6,7 @@ class LiveMessageModel {
   final String id;
   final String authorId;
   final UserModel? author;
+  final String? authorName; // fallback name when full author object missing
   final String liveStreamId;
   final String message;
   final String messageType;
@@ -37,6 +38,7 @@ class LiveMessageModel {
     required this.id,
     required this.authorId,
     this.author,
+    this.authorName,
     required this.liveStreamId,
     this.message = '',
     required this.messageType,
@@ -57,6 +59,9 @@ class LiveMessageModel {
       author: json['author'] != null && json['author'] is Map
           ? UserModel.fromJson(json['author'] as Map<String, dynamic>)
           : null,
+      authorName: json['authorName'] as String? ??
+          json['author_name'] as String? ??
+          json['username'] as String?,
       liveStreamId: json['liveStreamId'] as String? ?? '',
       message: json['message'] as String? ?? '',
       messageType: json['messageType'] as String? ?? messageTypeComment,
@@ -79,6 +84,7 @@ class LiveMessageModel {
     return {
       'id': id,
       'authorId': authorId,
+      if (authorName != null) 'authorName': authorName,
       'liveStreamId': liveStreamId,
       'message': message,
       'messageType': messageType,
@@ -108,6 +114,7 @@ class LiveMessageModel {
     String? id,
     String? authorId,
     UserModel? author,
+    String? authorName,
     String? liveStreamId,
     String? message,
     String? messageType,
@@ -123,6 +130,7 @@ class LiveMessageModel {
       id: id ?? this.id,
       authorId: authorId ?? this.authorId,
       author: author ?? this.author,
+      authorName: authorName ?? this.authorName,
       liveStreamId: liveStreamId ?? this.liveStreamId,
       message: message ?? this.message,
       messageType: messageType ?? this.messageType,

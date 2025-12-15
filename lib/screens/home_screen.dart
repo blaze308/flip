@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import 'dart:async';
-import '../services/token_auth_service.dart';
-import '../services/message_service.dart';
 import '../services/post_service.dart';
 import '../services/event_bus.dart';
 import '../services/optimistic_ui_service.dart';
 import '../services/contextual_auth_service.dart';
 import '../services/video_downloader_service.dart';
 import '../services/incoming_call_manager.dart';
+import '../services/deep_link_service.dart';
 import '../widgets/custom_toaster.dart';
 import '../widgets/post_menu_widget.dart';
 import '../widgets/loading_button.dart';
@@ -25,7 +25,7 @@ import 'viewer/story_viewer_screen.dart';
 import 'viewer/immersive_viewer_screen.dart';
 import 'chat/message_list_screen.dart';
 import 'live/live_list_screen.dart' as screens;
-import 'profile/profile_screen.dart';
+import 'profile/profile_tab_screen.dart';
 import '../providers/app_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -70,10 +70,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       _refreshAfterPostCreation();
     });
 
-    // Initialize incoming call manager after first frame
+    // Initialize incoming call manager and deep linking after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         IncomingCallManager().initialize(context);
+        // Initialize deep linking for posts and reels
+        DeepLinkService().initialize(context);
       }
     });
   }
@@ -85,26 +87,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _fabAnimationController.dispose();
     _postCreatedSubscription?.cancel();
     super.dispose();
-  }
-
-  // Removed manual auth state handling - now using Riverpod providers
-
-  // Removed - using Riverpod providers instead
-
-  Future<void> _handleLogout() async {
-    try {
-      await TokenAuthService.signOut();
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/login');
-      }
-    } catch (e) {
-      if (mounted) {
-        context.showErrorToaster(
-          MessageService.getMessage('error'),
-          devMessage: 'Logout failed: ${e.toString()}',
-        );
-      }
-    }
   }
 
   void _onBottomNavTap(int index) {
@@ -189,25 +171,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     HapticFeedback.lightImpact();
 
     try {
-      final result = await PostService.sharePost(postId);
-      if (result.success) {
-        await ref.read(postsProvider.notifier).refresh();
+      // Get the post data first
+      final postsNotifier = ref.read(postsProvider.notifier);
+      final postsAsyncValue = ref.read(postsProvider);
+
+      // Find the post from AsyncValue
+      PostModel? post;
+      postsAsyncValue.whenData((posts) {
+        post = posts.firstWhere((p) => p.id == postId);
+      });
+
+      if (post == null) {
         if (mounted) {
-          ToasterService.showSuccess(context, 'Post shared successfully!');
+          ToasterService.showError(context, 'Post not found');
         }
-      } else {
-        if (mounted) {
-          ToasterService.showError(
-            context,
-            'Failed to share post. Please try again.',
-          );
-        }
+        return;
+      }
+
+      // Generate deep link for the post
+      final deepLink = DeepLinkService().generatePostLink(
+        post!.id,
+        authorName: post!.username,
+      );
+
+      // Create share message (keep it concise so link shows in preview)
+      final message = '$deepLink\n\nCheck this out on AncientFlip!';
+
+      // Open native share dialog (actual sharing, not just incrementing count)
+      await Share.share(message);
+
+      // Also increment share count in the database (in background, non-blocking)
+      try {
+        await PostService.sharePost(postId);
+        await postsNotifier.refresh();
+      } catch (e) {
+        debugPrint('Failed to increment share count: $e');
+      }
+
+      if (mounted) {
+        ToasterService.showSuccess(context, 'Post shared!');
       }
     } catch (e) {
       if (mounted) {
         ToasterService.showError(
           context,
-          'Failed to share post. Please check your connection.',
+          'Failed to share post. Please try again.',
         );
       }
     }
@@ -1462,8 +1470,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildProfileTab() {
-    // Use the new comprehensive ProfileScreen
-    return const ProfileScreen();
+    // Use the new comprehensive tab-style profile
+    return const ProfileTabScreen();
   }
 
   void _showCreateOptions(

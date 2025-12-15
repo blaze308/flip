@@ -133,30 +133,20 @@ class UserModel {
     return '';
   }
 
-  /// Get wealth level badge icon path
-  String get wealthLevelIcon => 'assets/images/rank_level_$wealthLevel.png';
+  /// Get wealth level badge icon path (SVG placeholder)
+  String get wealthLevelIcon => 'assets/svg/wealth_level.svg';
 
-  /// Get live level badge icon path
-  String get liveLevelIcon => 'assets/images/gift_level_$liveLevel.png';
+  /// Get live level badge icon path (SVG placeholder)
+  String get liveLevelIcon => 'assets/svg/live_level.svg';
 
-  /// Get VIP badge icon path
-  String get vipIcon {
-    if (isDiamondVip) return 'assets/images/icon_vip_3.png';
-    if (isSuperVip) return 'assets/images/icon_vip_2.png';
-    if (isNormalVip) return 'assets/images/icon_vip_1.png';
-    return '';
-  }
+  /// Get VIP badge icon path (SVG placeholder)
+  String get vipIcon => 'assets/svg/vip_badge.svg';
 
-  /// Get MVP badge icon path
-  String get mvpIcon => isMVP ? 'assets/images/mvp_badge.png' : '';
+  /// Get MVP badge icon path (SVG placeholder)
+  String get mvpIcon => isMVP ? 'assets/svg/mvp_badge.svg' : '';
 
-  /// Get Guardian badge icon path
-  String get guardianIcon {
-    if (guardianType == 'king') return 'assets/images/icon_sh_3.png';
-    if (guardianType == 'gold') return 'assets/images/icon_sh_2.png';
-    if (guardianType == 'silver') return 'assets/images/icon_sh_1.png';
-    return '';
-  }
+  /// Get Guardian badge icon path (SVG placeholder)
+  String get guardianIcon => hasGuardian ? 'assets/svg/guardian_badge.svg' : '';
 
   /// Factory for creating UserModel from JSON (backend API format)
   factory UserModel.fromJson(Map<String, dynamic> json) {

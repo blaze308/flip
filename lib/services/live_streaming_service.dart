@@ -171,6 +171,92 @@ class LiveStreamingService {
     }
   }
 
+  // ========== HOST CONTROLS (PARTY) ==========
+
+  static Future<void> mutePartyUser({
+    required String liveStreamId,
+    required String targetUserId,
+    required int seatIndex,
+  }) async {
+    final headers = await _getHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/live/$liveStreamId/party/host/mute'),
+      headers: headers,
+      body: json.encode({
+        'targetUserId': targetUserId,
+        'seatIndex': seatIndex,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final error = json.decode(response.body);
+      throw Exception(error['message'] ?? 'Failed to mute user');
+    }
+  }
+
+  static Future<void> unmutePartyUser({
+    required String liveStreamId,
+    required String targetUserId,
+    required int seatIndex,
+  }) async {
+    final headers = await _getHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/live/$liveStreamId/party/host/unmute'),
+      headers: headers,
+      body: json.encode({
+        'targetUserId': targetUserId,
+        'seatIndex': seatIndex,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final error = json.decode(response.body);
+      throw Exception(error['message'] ?? 'Failed to unmute user');
+    }
+  }
+
+  // ========== PLATFORM SPEAKER ==========
+
+  static Future<int> getPlatformSpeakerQuota({
+    required String liveStreamId,
+  }) async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/live/$liveStreamId/party/platform/quota'),
+      headers: headers,
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return (data['data']?['remaining'] as num?)?.toInt() ?? 0;
+    } else {
+      final error = json.decode(response.body);
+      throw Exception(error['message'] ?? 'Failed to fetch platform quota');
+    }
+  }
+
+  static Future<Map<String, dynamic>> sendPlatformSpeakerMessage({
+    required String liveStreamId,
+    required String message,
+  }) async {
+    final headers = await _getHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/live/$liveStreamId/party/platform/message'),
+      headers: headers,
+      body: json.encode({
+        'message': message,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data['data'] as Map<String, dynamic>;
+    } else {
+      final error = json.decode(response.body);
+      throw Exception(error['message'] ?? 'Failed to send platform message');
+    }
+  }
+
   /// End a live stream (host only)
   static Future<Map<String, dynamic>> endLiveStream(String liveStreamId) async {
     try {
@@ -392,6 +478,7 @@ class LiveStreamingService {
     required String liveStreamId,
     required int seatIndex,
     required int userUid,
+    bool? canTalk,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -400,6 +487,7 @@ class LiveStreamingService {
         headers: headers,
         body: json.encode({
           'userUid': userUid,
+          if (canTalk != null) 'canTalk': canTalk,
         }),
       );
 
@@ -462,6 +550,74 @@ class LiveStreamingService {
   }
 
   // ========== UTILITY METHODS ==========
+
+  /// Send heartbeat to keep party alive (prevents ghost lives)
+  /// Host must call this every 30 seconds
+  static Future<Map<String, dynamic>> sendHeartbeat(String liveStreamId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.patch(
+        Uri.parse('$baseUrl/api/live/$liveStreamId/heartbeat'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'heartbeatStatus': data['data']?['heartbeatStatus'] ?? 'active',
+          'isGhost': data['data']?['isGhost'] ?? false,
+          'lastHeartbeat': data['data']?['lastHeartbeat'],
+        };
+      } else {
+        print('⚠️ Heartbeat status code: ${response.statusCode}');
+        return {
+          'success': false,
+          'message': 'Heartbeat failed',
+        };
+      }
+    } catch (e) {
+      print('⚠️ Heartbeat error: $e');
+      // Don't throw - heartbeat failure shouldn't crash the app
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// Get heartbeat status of a live stream
+  static Future<Map<String, dynamic>> getHeartbeatStatus(String liveStreamId) async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/live/$liveStreamId/heartbeat/status'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': true,
+          'heartbeatStatus': data['data']?['heartbeatStatus'] ?? 'active',
+          'isGhost': data['data']?['isGhost'] ?? false,
+          'hostInactivityMinutes': data['data']?['hostInactivityMinutes'] ?? 0,
+          'lastHeartbeat': data['data']?['lastHeartbeat'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to get heartbeat status',
+        };
+      }
+    } catch (e) {
+      print('⚠️ Get heartbeat status error: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
 
   /// Generate a unique channel name for live streaming
   static String generateChannelName(String userId) {

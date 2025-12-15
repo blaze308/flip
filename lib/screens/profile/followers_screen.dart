@@ -3,7 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/user_model.dart';
 import '../../services/profile_service.dart';
 import '../../widgets/custom_toaster.dart';
-import 'profile_screen.dart';
+import 'profile_tab_screen.dart';
 
 /// Followers/Following Screen - Display list of followers or following users
 class FollowersScreen extends StatefulWidget {
@@ -34,9 +34,10 @@ class _FollowersScreenState extends State<FollowersScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final List<UserModel> users = widget.isFollowers
-          ? await ProfileService.getFollowers()
-          : await ProfileService.getFollowing();
+      final List<UserModel> users =
+          widget.isFollowers
+              ? await ProfileService.getFollowers()
+              : await ProfileService.getFollowing();
 
       if (mounted) {
         setState(() {
@@ -67,11 +68,12 @@ class _FollowersScreenState extends State<FollowersScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF4ECDC4)),
-            )
-          : _users.isEmpty
+      body:
+          _isLoading
+              ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFF4ECDC4)),
+              )
+              : _users.isEmpty
               ? _buildEmptyState()
               : _buildUsersList(),
     );
@@ -83,17 +85,18 @@ class _FollowersScreenState extends State<FollowersScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            widget.isFollowers ? Icons.people_outline : Icons.person_add_outlined,
+            widget.isFollowers
+                ? Icons.people_outline
+                : Icons.person_add_outlined,
             size: 64,
             color: Colors.grey.withOpacity(0.5),
           ),
           const SizedBox(height: 16),
           Text(
-            widget.isFollowers ? 'No followers yet' : 'Not following anyone yet',
-            style: TextStyle(
-              color: Colors.grey.withOpacity(0.7),
-              fontSize: 16,
-            ),
+            widget.isFollowers
+                ? 'No followers yet'
+                : 'Not following anyone yet',
+            style: TextStyle(color: Colors.grey.withOpacity(0.7), fontSize: 16),
           ),
         ],
       ),
@@ -123,18 +126,20 @@ class _FollowersScreenState extends State<FollowersScreen> {
         leading: CircleAvatar(
           radius: 28,
           backgroundColor: const Color(0xFF4ECDC4),
-          backgroundImage: user.profileImageUrl != null
-              ? CachedNetworkImageProvider(user.profileImageUrl!)
-              : null,
-          child: user.profileImageUrl == null
-              ? Text(
-                  user.initials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                )
-              : null,
+          backgroundImage:
+              user.profileImageUrl != null
+                  ? CachedNetworkImageProvider(user.profileImageUrl!)
+                  : null,
+          child:
+              user.profileImageUrl == null
+                  ? Text(
+                    user.initials,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                  : null,
         ),
         title: Text(
           user.displayName,
@@ -145,20 +150,14 @@ class _FollowersScreenState extends State<FollowersScreen> {
         ),
         subtitle: Text(
           '@${user.username}',
-          style: const TextStyle(
-            color: Color(0xFF4ECDC4),
-            fontSize: 14,
-          ),
+          style: const TextStyle(color: Color(0xFF4ECDC4), fontSize: 14),
         ),
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: Colors.grey,
-        ),
+        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
         onTap: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ProfileScreen(userId: user.id),
+              builder: (context) => ProfileTabScreen(userId: user.id),
             ),
           );
         },
@@ -166,4 +165,3 @@ class _FollowersScreenState extends State<FollowersScreen> {
     );
   }
 }
-

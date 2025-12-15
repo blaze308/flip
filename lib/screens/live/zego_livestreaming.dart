@@ -64,6 +64,9 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
   String appSign = '';
   bool _credentialsLoaded = false;
   bool _zegoConnected = false; // Track if Zego actually connected
+  bool _liveStreamCreated =
+      false; // Track if live stream was created in backend
+  String? _createdLiveStreamId; // Store the created live stream ID
   Timer? _connectionTimeoutTimer; // Timeout if Zego doesn't connect
   Timer? _heartbeatTimer; // Heartbeat to keep stream alive
   AnimationController? _animationController;
@@ -128,7 +131,8 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
     } catch (e) {
       print('❌ Error loading Zego credentials: $e');
       // Clean up the live stream that was created
-      _cleanupFailedLiveStream();
+      // No live stream is created yet; ensure any pending creation is cleaned up.
+      _endLiveStream();
       // Show error and prevent live stream from starting
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -182,14 +186,12 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
     // QuickHelp.saveCurrentRoute(route: LiveStreamingScreen.route);
 
     liveStreamingModel = widget.mLiveStreamingModel;
+    // Live stream will be created AFTER successful Zego connection (in onConnected callback)
     if (widget.isHost) {
-      createLive(liveStreamingModel);
-
-      // Set a timeout - if Zego doesn't connect within 30 seconds, clean up
+      // Set a timeout - if Zego doesn't connect within 30 seconds, navigate back
       _connectionTimeoutTimer = Timer(const Duration(seconds: 30), () {
         if (!_zegoConnected && mounted) {
-          print('⏱️ Zego connection timeout - cleaning up live stream');
-          _cleanupFailedLiveStream();
+          print('⏱️ Zego connection timeout');
           ToasterService.showError(
             context,
             'Failed to start live stream. Please try again.',
@@ -200,26 +202,43 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
     }
   }
 
-  createLive(LiveStreamModel liveStreamingModel) async {
-    // Live stream is already created via LiveStreamingService before navigation
-    // But it's not actually "started" until Zego connects
-    print(
-      "LiveStreaming Created: ${liveStreamingModel.id} - Waiting for Zego connection...",
-    );
+  /// Create live stream in backend AFTER successful Zego connection
+  Future<void> _createLiveStream() async {
+    if (!widget.isHost || _liveStreamCreated) return;
+
+    try {
+      final user = widget.currentUser;
+      final liveStream = await LiveStreamingService.createLiveStream(
+        liveType: 'live',
+        streamingChannel: widget.liveID,
+        authorUid: int.parse(user.id.hashCode.toString().substring(0, 8)),
+      );
+
+      setState(() {
+        _liveStreamCreated = true;
+        _createdLiveStreamId = liveStream.id;
+        liveStreamingModel = liveStream;
+      });
+
+      print('✅ Live stream created in backend: ${liveStream.id}');
+    } catch (e) {
+      print('❌ Error creating live stream: $e');
+      if (mounted) {
+        ToasterService.showError(context, 'Failed to register live stream');
+        Navigator.pop(context);
+      }
+    }
   }
 
-  /// Clean up live stream if initialization fails
-  Future<void> _cleanupFailedLiveStream() async {
+  /// End live stream in backend
+  Future<void> _endLiveStream() async {
+    if (!_liveStreamCreated || _createdLiveStreamId == null) return;
+
     try {
-      if (widget.mLiveStreamingModel.id.isNotEmpty) {
-        print(
-          '🧹 Cleaning up failed live stream: ${widget.mLiveStreamingModel.id}',
-        );
-        await LiveStreamingService.endLiveStream(widget.mLiveStreamingModel.id);
-        print('✅ Failed live stream cleaned up');
-      }
+      await LiveStreamingService.endLiveStream(_createdLiveStreamId!);
+      print('✅ Live stream ended: $_createdLiveStreamId');
     } catch (e) {
-      print('❌ Error cleaning up failed live stream: $e');
+      print('❌ Error ending live stream: $e');
     }
   }
 
@@ -537,23 +556,9 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
     _connectionTimeoutTimer?.cancel();
     _stopHeartbeat();
 
-    // If Zego never connected and we're the host, clean up the live stream
-    if (!_zegoConnected &&
-        widget.isHost &&
-        widget.mLiveStreamingModel.id.isNotEmpty) {
-      _cleanupFailedLiveStream();
-    }
-
-    // If we're the host and the stream was connected, ensure it's properly ended
-    if (widget.isHost &&
-        _zegoConnected &&
-        widget.mLiveStreamingModel.id.isNotEmpty) {
-      try {
-        LiveStreamingService.endLiveStream(widget.mLiveStreamingModel.id);
-        print("✅ Live stream properly ended on dispose");
-      } catch (e) {
-        print("❌ Failed to end live stream on dispose: $e");
-      }
+    // End live stream if it was created (only for hosts)
+    if (widget.isHost && _liveStreamCreated) {
+      _endLiveStream();
     }
 
     // ZegoGiftManager().service.recvNotifier.removeListener(onGiftReceived);
@@ -707,18 +712,28 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
             ZegoUIKitUser? user,
             Map extraInfo,
           ) {
-            if (user != null) {
-              // TODO: Lookup user by ID if needed
-              // For now, show default avatar
-              return CircleAvatar(
-                radius: size.width / 2,
-                child: Text(
-                  user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+            if (user == null) return const SizedBox();
+
+            final displayName =
+                user.name.trim().isNotEmpty ? user.name.trim() : 'Guest';
+            final initial = displayName[0].toUpperCase();
+            final avatarUrl = (extraInfo['avatar'] ?? '') as String;
+            final double dim = size.width > 0 ? size.width : 36;
+
+            if (avatarUrl.isNotEmpty) {
+              return ClipOval(
+                child: Image.network(
+                  avatarUrl,
+                  width: dim,
+                  height: dim,
+                  fit: BoxFit.cover,
+                  errorBuilder:
+                      (_, __, ___) => _buildAvatarPlaceholder(dim, initial),
                 ),
               );
-            } else {
-              return const SizedBox();
             }
+
+            return _buildAvatarPlaceholder(dim, initial);
           }
           ..inRoomMessage = ZegoLiveStreamingInRoomMessageConfig(
             notifyUserJoin: true,
@@ -811,11 +826,12 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
               ),
               requestCoHostButtonIcon: _buildModernIconButton(Icons.person_add),
             ),
-            maxCount: 5, // Increased to show more buttons
+            maxCount: 3, // allow more buttons to show for guests
             audienceButtons: [
+              // ZegoLiveStreamingMenuBarButtonName.chatButton,
               ZegoLiveStreamingMenuBarButtonName.coHostControlButton,
             ],
-            audienceExtendButtons: [giftButton, translateButton, shareButton],
+            // audienceExtendButtons: [giftButton, translateButton, shareButton],
             hostButtons: [
               ZegoLiveStreamingMenuBarButtonName.toggleMicrophoneButton,
               ZegoLiveStreamingMenuBarButtonName.toggleCameraButton,
@@ -824,14 +840,14 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
               ZegoLiveStreamingMenuBarButtonName.soundEffectButton,
               ZegoLiveStreamingMenuBarButtonName.toggleScreenSharingButton,
             ],
-            hostExtendButtons: [translateButton, shareButton, likeButton],
+            // hostExtendButtons: [translateButton, shareButton],
             coHostButtons: [
               ZegoLiveStreamingMenuBarButtonName.toggleMicrophoneButton,
               ZegoLiveStreamingMenuBarButtonName.beautyEffectButton,
               ZegoLiveStreamingMenuBarButtonName.soundEffectButton,
               ZegoLiveStreamingMenuBarButtonName.toggleScreenSharingButton,
             ],
-            coHostExtendButtons: [translateButton, shareButton],
+            // coHostExtendButtons: [translateButton, shareButton],
           )
           ..memberButton = ZegoLiveStreamingMemberButtonConfig(
             builder: (memberCount) {
@@ -1150,11 +1166,11 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
                                     await LiveStreamingService.endLiveStream(
                                       liveStreamingModel.id,
                                     );
-                                    Navigator.of(context).pop(true);
                                   } catch (e) {
-                                    Navigator.of(context).pop(true);
+                                    debugPrint('Error ending live stream: $e');
                                   }
-                                } else {
+                                }
+                                if (mounted && context.mounted) {
                                   Navigator.of(context).pop(true);
                                 }
                               },
@@ -1210,9 +1226,9 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
                 events: ZegoUIKitPrebuiltLiveStreamingEvents(
                   onError: (error) {
                     print('❌ Zego error: $error');
-                    // If Zego fails to connect, clean up the live stream
-                    if (!_zegoConnected && widget.isHost) {
-                      _cleanupFailedLiveStream();
+                    // If live stream was created, end it
+                    if (_liveStreamCreated) {
+                      _endLiveStream();
                     }
                     // TODO: Implement LiveEndReportScreen navigation
                     Navigator.pop(context);
@@ -1382,6 +1398,11 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
                       _zegoConnected = true;
                       // Cancel timeout since we connected successfully
                       _connectionTimeoutTimer?.cancel();
+
+                      // Create live stream in backend AFTER successful connection
+                      if (widget.isHost) {
+                        await _createLiveStream();
+                      }
 
                       // Start heartbeat to keep stream alive
                       _startHeartbeat();
@@ -1874,30 +1895,31 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
     return Container();
   }
 
-  Widget _buildModernIconButton(IconData icon, {double size = 32}) {
+  Widget _buildModernIconButton(IconData icon, {double size = 28}) {
+    return Icon(icon, color: Colors.white, size: size);
+  }
+
+  Widget _buildAvatarPlaceholder(double size, String initial) {
     return Container(
-      width: 48,
-      height: 48,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
+        shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: [
-            Colors.white.withOpacity(0.2),
-            Colors.white.withOpacity(0.1),
-          ],
+          colors: [Colors.blueGrey.shade600, Colors.blueGrey.shade400],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 4,
-            spreadRadius: 1,
-          ),
-        ],
       ),
-      child: Icon(icon, color: Colors.white, size: size),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: size * 0.45,
+        ),
+      ),
     );
   }
 
@@ -2648,122 +2670,65 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
   }
 
   /// Gift button for viewers to send gifts
-  ZegoLiveStreamingMenuBarExtendButton get giftButton =>
-      ZegoLiveStreamingMenuBarExtendButton(
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFF6B6B).withOpacity(0.4),
-                blurRadius: 8,
-                spreadRadius: 1,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: CircularIconContainer(
-            onTap: () {
-              showGiftBottomSheet(
-                context: context,
-                currentUser: widget.currentUser,
-                hostUser: widget.mUser ?? widget.currentUser,
-                liveStream: widget.mLiveStreamingModel,
-              );
-            },
-            icon: Icons.card_giftcard,
-            color: Colors.white,
-          ),
-        ),
-      );
+  // ZegoLiveStreamingMenuBarExtendButton get giftButton =>
+  //     ZegoLiveStreamingMenuBarExtendButton(
+  //   child: GestureDetector(
+  //     onTap: () {
+  //       showGiftBottomSheet(
+  //         context: context,
+  //         currentUser: widget.currentUser,
+  //         hostUser: widget.mUser ?? widget.currentUser,
+  //         liveStream: widget.mLiveStreamingModel,
+  //       );
+  //     },
+  //     child: Icon(Icons.card_giftcard, color: Colors.white, size: 24),
+  //   ),
+  // );
 
   /// Share button to share live stream link
-  ZegoLiveStreamingMenuBarExtendButton get shareButton =>
-      ZegoLiveStreamingMenuBarExtendButton(
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF667EEA).withOpacity(0.4),
-                blurRadius: 8,
-                spreadRadius: 1,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: CircularIconContainer(
-            onTap: () {
-              createLink(widget.mLiveStreamingModel.id);
-            },
-            icon: Icons.share,
-            color: Colors.white,
-          ),
-        ),
-      );
+  // ZegoLiveStreamingMenuBarExtendButton get shareButton =>
+  //     ZegoLiveStreamingMenuBarExtendButton(
+  //   child: GestureDetector(
+  //     onTap: () {
+  //       createLink(widget.mLiveStreamingModel.id);
+  //     },
+  //     child: Icon(Icons.share, color: Colors.white, size: 24),
+  //   ),
+  // );
 
   /// Translate button to toggle message translation
-  ZegoLiveStreamingMenuBarExtendButton get translateButton =>
-      ZegoLiveStreamingMenuBarExtendButton(
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors:
-                  translate
-                      ? [const Color(0xFF4ECDC4), const Color(0xFF44A08D)]
-                      : [Colors.grey[600]!, Colors.grey[500]!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(25),
-            boxShadow: [
-              BoxShadow(
-                color: (translate ? const Color(0xFF4ECDC4) : Colors.grey[600]!)
-                    .withOpacity(0.4),
-                blurRadius: 8,
-                spreadRadius: 1,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: CircularIconContainer(
-            onTap: () {
-              setState(() {
-                translate = !translate;
-              });
-              if (translate) {
-                ToasterService.showSuccess(
-                  context,
-                  "Messages are being translated",
-                );
-              }
-            },
-            icon: Icons.translate,
-            color: Colors.white,
-          ),
-        ),
-      );
+  // ZegoLiveStreamingMenuBarExtendButton get translateButton =>
+  //     ZegoLiveStreamingMenuBarExtendButton(
+  //       child: GestureDetector(
+  //         onTap: () {
+  //           setState(() {
+  //             translate = !translate;
+  //           });
+  //           if (translate) {
+  //             ToasterService.showSuccess(
+  //               context,
+  //               "Messages are being translated",
+  //             );
+  //           }
+  //         },
+  //         child: Icon(Icons.translate, color: Colors.white, size: 24),
+  //       ),
+  //     );
 
   /// Like button for host to show appreciation
-  ZegoLiveStreamingMenuBarExtendButton get likeButton =>
-      ZegoLiveStreamingMenuBarExtendButton(
-        child: CircularIconContainer(
-          icon: Icons.favorite_border_outlined,
-          color: const Color(0xFFFF4D67),
-          onTap: () {
-            // TODO: Implement like animation if needed
-            ToasterService.showSuccess(context, "❤️");
-          },
-        ),
-      );
+  // ZegoLiveStreamingMenuBarExtendButton get likeButton =>
+  //     ZegoLiveStreamingMenuBarExtendButton(
+  //       child: IconButton(
+  //         icon: Icon(
+  //           Icons.favorite_border_outlined,
+  //           color: const Color(0xFFFF4D67),
+  //         ),
+  //         onPressed: () {
+  //           // TODO: Implement like animation if needed
+  //           ToasterService.showSuccess(context, "❤️");
+  //         },
+  //         padding: EdgeInsets.zero,
+  //         constraints: BoxConstraints(),
+  //       ),
+  //     );
 }

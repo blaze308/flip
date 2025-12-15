@@ -10,8 +10,9 @@ import '../../services/token_auth_service.dart';
 import '../../widgets/custom_toaster.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/user_badge_widget.dart';
-import 'agora_video_party_screen.dart';
+import 'agora_video_party_screen_v2.dart';
 import 'agora_audio_party_screen.dart';
+import 'party_setup_screen.dart';
 
 /// Live Streams List Screen
 /// Shows all active live streams with filtering options
@@ -114,11 +115,11 @@ class _LiveListScreenState extends State<LiveListScreen>
         ),
       ).then((_) => _loadLiveStreams(showLoading: false));
     } else if (live.liveType == 'party') {
-      // Agora VIDEO party
+      // Agora VIDEO party (V2)
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => AgoraVideoPartyScreen(liveStream: live),
+          builder: (context) => AgoraVideoPartyScreenV2(liveStream: live),
         ),
       ).then((_) => _loadLiveStreams(showLoading: false));
     } else if (live.liveType == 'audio') {
@@ -643,38 +644,34 @@ class _LiveListScreenState extends State<LiveListScreen>
                   return;
                 }
 
-                // Create a new live stream
-                try {
-                  final liveStream =
-                      await LiveStreamingService.createLiveStream(
-                        liveType: 'live',
-                        streamingChannel:
-                            DateTime.now().millisecondsSinceEpoch.toString(),
-                        authorUid: int.parse(
-                          user.id.hashCode.toString().substring(0, 8),
-                        ),
-                      );
+                // Generate channel ID - live stream will be created AFTER successful initialization
+                final channelId = DateTime.now().millisecondsSinceEpoch.toString();
 
-                  // Navigate to our new Zego live streaming screen
-                  if (mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => ZegoLivestreaming(
-                              liveID: liveStream.streamingChannel,
-                              isHost: true,
-                              currentUser: user,
-                              preferences: prefs,
-                              mLiveStreamingModel: liveStream,
-                            ),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  ToasterService.showError(
+                // Navigate to Zego live streaming screen - it will create the live stream after init
+                if (mounted) {
+                  Navigator.push(
                     context,
-                    'Failed to start live stream',
+                    MaterialPageRoute(
+                      builder:
+                          (context) => ZegoLivestreaming(
+                            liveID: channelId,
+                            isHost: true,
+                            currentUser: user,
+                            preferences: prefs,
+                            mLiveStreamingModel: LiveStreamModel(
+                              id: '', // Will be set after creation
+                              authorId: user.id,
+                              streamingChannel: channelId,
+                              liveType: 'live',
+                              authorUid: int.parse(
+                                user.id.hashCode.toString().substring(0, 8),
+                              ),
+                              createdAt: DateTime.now(),
+                              updatedAt: DateTime.now(),
+                              streaming: false,
+                            ),
+                          ),
+                    ),
                   );
                 }
               },
@@ -696,37 +693,13 @@ class _LiveListScreenState extends State<LiveListScreen>
                   return;
                 }
 
-                // Create a new live stream
-                try {
-                  final liveStream =
-                      await LiveStreamingService.createLiveStream(
-                        liveType: 'party',
-                        streamingChannel:
-                            DateTime.now().millisecondsSinceEpoch.toString(),
-                        authorUid: int.parse(
-                          user.id.hashCode.toString().substring(0, 8),
-                        ),
-                        partyType: 'video',
-                        numberOfChairs: 6,
-                      );
-
-                  // Navigate to Agora video party screen
-                  if (mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => AgoraVideoPartyScreen(
-                              liveStream: liveStream,
-                              isHost: true,
-                            ),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  ToasterService.showError(
+                // Navigate to party setup screen where they choose seat count
+                if (mounted) {
+                  Navigator.push(
                     context,
-                    'Failed to start party live',
+                    MaterialPageRoute(
+                      builder: (context) => const PartySetupScreen(partyType: 'video'),
+                    ),
                   );
                 }
               },
@@ -748,37 +721,13 @@ class _LiveListScreenState extends State<LiveListScreen>
                   return;
                 }
 
-                // Create a new live stream
-                try {
-                  final liveStream =
-                      await LiveStreamingService.createLiveStream(
-                        liveType: 'audio',
-                        streamingChannel:
-                            DateTime.now().millisecondsSinceEpoch.toString(),
-                        authorUid: int.parse(
-                          user.id.hashCode.toString().substring(0, 8),
-                        ),
-                        partyType: 'audio',
-                        numberOfChairs: 6,
-                      );
-
-                  // Navigate to Agora audio party screen
-                  if (mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => AgoraVideoPartyScreen(
-                              liveStream: liveStream,
-                              isHost: true,
-                            ),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  ToasterService.showError(
+                // Navigate to party setup screen where they choose seat count
+                if (mounted) {
+                  Navigator.push(
                     context,
-                    'Failed to start audio party',
+                    MaterialPageRoute(
+                      builder: (context) => const PartySetupScreen(partyType: 'audio'),
+                    ),
                   );
                 }
               },

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/post_model.dart';
 import '../services/post_service.dart';
 import '../services/contextual_auth_service.dart';
+import '../services/deep_link_service.dart';
 import 'custom_toaster.dart';
 
 class PostMenuWidget extends StatelessWidget {
@@ -149,6 +151,44 @@ class PostMenuWidget extends StatelessWidget {
               ),
             ),
             PopupMenuItem<String>(
+              value: 'share',
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.share_outlined,
+                      color: Colors.green,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Share Post',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        'Share with WhatsApp, Email, etc',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
               value: 'unfollow',
               child: Row(
                 children: [
@@ -208,6 +248,9 @@ class PostMenuWidget extends StatelessWidget {
           break;
         case 'hide':
           await _hidePost(context);
+          break;
+        case 'share':
+          await _sharePostExternally(context);
           break;
         case 'unfollow':
           await _toggleFollow(context);
@@ -314,6 +357,31 @@ class PostMenuWidget extends StatelessWidget {
           context,
           'Failed to ${post.isFollowingUser ? 'unfollow' : 'follow'} user',
         );
+      }
+    }
+  }
+
+  Future<void> _sharePostExternally(BuildContext context) async {
+    try {
+      // Generate deep link for the post
+      final deepLink = DeepLinkService().generatePostLink(
+        post.id,
+        authorName: post.username,
+      );
+
+      // Create share message
+      final message =
+          'Check out this post by @${post.username} on AncientFlip!\n\n$deepLink\n\nDownload AncientFlip now!';
+
+      // Open native share dialog
+      await Share.share(message);
+
+      if (context.mounted) {
+        ToasterService.showSuccess(context, 'Post shared!');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ToasterService.showError(context, 'Failed to share post');
       }
     }
   }

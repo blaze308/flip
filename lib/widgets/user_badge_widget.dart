@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../models/user_model.dart';
 
 /// Reusable widget for displaying user badges (Wealth Level, Live Level, VIP, MVP, Guardian)
@@ -99,29 +100,37 @@ class _UserBadgeElement extends ComponentElement {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Badge icon
-          Image.asset(
-            iconPath,
-            width: size,
-            height: size,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              // Fallback to colored container if image not found
-              return Container(
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  color: backgroundColor ?? Colors.grey,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  _getIconForType(type),
-                  size: size * 0.6,
-                  color: Colors.white,
-                ),
-              );
-            },
-          ),
+          // Badge icon (SVG or raster)
+          if (iconPath.toLowerCase().endsWith('.svg'))
+            SvgPicture.asset(
+              iconPath,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+            )
+          else
+            Image.asset(
+              iconPath,
+              width: size,
+              height: size,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                // Fallback to colored container if image not found
+                return Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    color: backgroundColor ?? Colors.grey,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _getIconForType(type),
+                    size: size * 0.6,
+                    color: Colors.white,
+                  ),
+                );
+              },
+            ),
           // Label (optional)
           if (showLabel && label != null) ...[
             const SizedBox(width: 4),

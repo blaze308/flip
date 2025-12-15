@@ -212,30 +212,45 @@ class ToasterService {
   ) {
     // Remove existing toaster if any
     _currentToaster?.remove();
+    _currentToaster = null;
 
-    final overlay = Overlay.of(context);
-    _currentToaster = OverlayEntry(
-      builder:
-          (context) => Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
-            left: 0,
-            right: 0,
-            child: Material(
-              color: Colors.transparent,
-              child: CustomToaster(
-                message: message,
-                type: type,
-                duration: duration,
-                onDismiss: () {
-                  _currentToaster?.remove();
-                  _currentToaster = null;
-                },
+    // Check if context is still mounted/valid before accessing overlay
+    if (!context.mounted) {
+      developer.log(
+        'Context not mounted, cannot show toaster',
+        name: 'ToasterService',
+      );
+      return;
+    }
+
+    try {
+      final overlay = Overlay.of(context);
+      _currentToaster = OverlayEntry(
+        builder:
+            (context) => Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              left: 0,
+              right: 0,
+              child: Material(
+                color: Colors.transparent,
+                child: CustomToaster(
+                  message: message,
+                  type: type,
+                  duration: duration,
+                  onDismiss: () {
+                    _currentToaster?.remove();
+                    _currentToaster = null;
+                  },
+                ),
               ),
             ),
-          ),
-    );
+      );
 
-    overlay.insert(_currentToaster!);
+      overlay.insert(_currentToaster!);
+    } catch (e) {
+      developer.log('Error showing toaster: $e', name: 'ToasterService');
+      _currentToaster = null;
+    }
   }
 
   /// Hide current toaster if any

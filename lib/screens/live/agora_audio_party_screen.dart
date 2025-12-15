@@ -9,6 +9,7 @@ import 'dart:async';
 import '../../models/live_stream_model.dart';
 import '../../models/audio_chat_user_model.dart';
 import '../../models/live_message_model.dart';
+import '../../models/user_model.dart';
 import '../../services/live_streaming_service.dart';
 import '../../services/token_auth_service.dart';
 import '../../services/socket_service.dart';
@@ -40,16 +41,21 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _messageScrollController = ScrollController();
 
-  bool _isInitialized = false;
   bool _isJoining = true;
   bool _isMuted = true;
+  bool _liveStreamCreated = false; // Track if live stream was created in backend
+  String? _createdLiveStreamId; // Store the created live stream ID
   int? _localUid;
   int? _mySeatIndex;
   Map<int, bool> _remoteSpeaking = {}; // uid -> isSpeaking
   Map<int, AnimationController> _waveAnimations = {};
+  bool _isSwitchingSeat = false; // Prevent rapid seat switching
+  bool _isDisposed = false; // Guard async callbacks after dispose
 
   Timer? _heartbeatTimer;
   StreamSubscription? _socketSubscription;
+
+  String get _currentLiveStreamId => _createdLiveStreamId ?? widget.liveStream.id;
 
   @override
   void initState() {
@@ -94,10 +100,21 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
         RtcEngineEventHandler(
           onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
             print('✅ Joined AUDIO party: ${connection.channelId}');
-            setState(() {
-              _localUid = connection.localUid;
-              _isJoining = false;
-            });
+            if (_isDisposed) return;
+            if (mounted) {
+              setState(() {
+                _localUid = connection.localUid;
+                _isJoining = false;
+              });
+            }
+
+            // Create live stream in backend AFTER successful channel join (only for hosts)
+            if (widget.isHost && !_liveStreamCreated) {
+              _createLiveStream().then((_) async {
+                await _loadSeats();
+                await _joinHostSeat();
+              });
+            }
           },
           onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
             print('👤 User joined AUDIO party: $remoteUid');
@@ -139,6 +156,7 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
       // DISABLE VIDEO - This is an AUDIO-ONLY party!
       await _engine.disableVideo();
       await _engine.enableAudio();
+      await _engine.setDefaultAudioRouteToSpeakerphone(true);
       await _engine.enableAudioVolumeIndication(
         interval: 200,
         smooth: 3,
@@ -167,9 +185,6 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
       _listenForSocketEvents();
       _startHeartbeat();
 
-      setState(() {
-        _isInitialized = true;
-      });
     } catch (e) {
       print('❌ Error initializing AUDIO party: $e');
       if (mounted) {
@@ -198,9 +213,13 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
   }
 
   Future<void> _loadSeats() async {
+    if (_currentLiveStreamId.isEmpty) {
+      print('⚠️ Cannot load seats: live stream ID is empty');
+      return;
+    }
     try {
       final seats = await LiveStreamingService.getPartySeats(
-        widget.liveStream.id,
+        _currentLiveStreamId,
       );
 
       if (mounted) {
@@ -218,13 +237,18 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
       final user = TokenAuthService.currentUser;
       if (user == null) return;
 
+      if (_currentLiveStreamId.isEmpty) {
+        print('⚠️ Cannot join as viewer: live stream ID is empty');
+        return;
+      }
+
       await LiveStreamingService.joinLiveStream(
-        liveStreamId: widget.liveStream.id,
+        liveStreamId: _currentLiveStreamId,
         userUid: int.parse(user.id.hashCode.toString().substring(0, 8)),
       );
 
       SocketService.instance.socket?.emit('live:join', {
-        'liveStreamId': widget.liveStream.id,
+        'liveStreamId': _currentLiveStreamId,
       });
 
       print('✅ Joined AUDIO party as viewer');
@@ -238,28 +262,40 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
     if (socket == null) return;
 
     socket.on('live:ended', (data) {
-      if (data['liveStreamId'] == widget.liveStream.id) {
+      if (_isDisposed) return;
+      if (data['liveStreamId'] == _currentLiveStreamId) {
         _onLiveEnded();
       }
     });
 
     socket.on('live:seat:update', (data) {
+      if (_isDisposed) return;
       _onSeatUpdate(data);
     });
 
     socket.on('live:host:action', (data) {
+      if (_isDisposed) return;
       _onHostAction(data);
     });
 
     socket.on('live:message', (data) {
+      if (_isDisposed) return;
       _onNewMessage(data);
     });
   }
 
   void _onUserJoined(int uid) {
-    setState(() {
-      _remoteSpeaking[uid] = false;
-    });
+    if (_isDisposed) return;
+    try {
+      _engine.muteRemoteAudioStream(uid: uid, mute: false);
+    } catch (e) {
+      print('⚠️ Error unmuting remote audio: $e');
+    }
+    if (mounted) {
+      setState(() {
+        _remoteSpeaking[uid] = false;
+      });
+    }
   }
 
   void _onUserLeft(int uid) {
@@ -290,41 +326,112 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
           _engine.muteLocalAudioStream(false);
           ToasterService.showInfo(context, 'You have been unmuted by host');
           break;
+        case 'mute':
+          setState(() => _isMuted = true);
+          _engine.muteLocalAudioStream(true);
+          ToasterService.showInfo(context, 'You have been muted by host');
+          break;
+        case 'unmute':
+          setState(() => _isMuted = false);
+          _engine.muteLocalAudioStream(false);
+          ToasterService.showInfo(context, 'You have been unmuted by host');
+          break;
         case 'removed':
           ToasterService.showError(
             context,
             'You have been removed from the audio party',
           );
-          Navigator.pop(context);
+          _leaveLive(showConfirmation: false);
           break;
       }
     }
   }
 
   void _onNewMessage(Map<String, dynamic> data) {
-    final message = LiveMessageModel.fromJson(data['message']);
-    setState(() {
-      _messages.add(message);
-    });
+    if (_isDisposed) return;
+    try {
+      final message = LiveMessageModel.fromJson(data['message']);
+      if (mounted) {
+        setState(() {
+          _messages.add(message);
+        });
+      }
 
-    if (_messageScrollController.hasClients) {
-      _messageScrollController.animateTo(
-        _messageScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      // Auto-scroll to latest
+      if (_messageScrollController.hasClients) {
+        _messageScrollController.animateTo(
+          _messageScrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    } catch (e) {
+      print('❌ Error handling new message: $e');
     }
   }
 
   void _onLiveEnded() {
+    if (_isDisposed) return;
     if (mounted) {
       ToasterService.showInfo(context, 'Audio party has ended');
       Navigator.pop(context);
     }
   }
 
+  /// Host-only: toggle another user's audio (mute/unmute) locally and notify backend
+  Future<void> _toggleUserAudio(AudioChatUserModel seat) async {
+    if (!widget.isHost) return;
+    if (seat.joinedUserUid == null) return;
+
+    final newMutedState = !seat.enabledAudio; // toggle
+
+    // Authoritative backend call
+    if (seat.joinedUserId != null) {
+      try {
+        if (newMutedState) {
+          await LiveStreamingService.mutePartyUser(
+            liveStreamId: _currentLiveStreamId,
+            targetUserId: seat.joinedUserId!,
+            seatIndex: seat.seatIndex,
+          );
+        } else {
+          await LiveStreamingService.unmutePartyUser(
+            liveStreamId: _currentLiveStreamId,
+            targetUserId: seat.joinedUserId!,
+            seatIndex: seat.seatIndex,
+          );
+        }
+      } catch (e) {
+        print('❌ Error calling host mute API: $e');
+        ToasterService.showError(
+          context,
+          'Failed to ${newMutedState ? "mute" : "unmute"} user',
+        );
+        return;
+      }
+    }
+
+    // Best-effort local enforcement: mute/unmute remote audio
+    try {
+      await _engine.muteRemoteAudioStream(
+        uid: seat.joinedUserUid!,
+        mute: newMutedState,
+      );
+    } catch (e) {
+      print('⚠️ Error toggling remote audio locally: $e');
+    }
+
+    ToasterService.showInfo(
+      context,
+      newMutedState ? 'User muted' : 'User unmuted',
+    );
+
+    await _loadSeats();
+  }
+
   void _startHeartbeat() {
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_isDisposed) return;
       _loadSeats();
     });
   }
@@ -335,36 +442,129 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
   }
 
   Future<void> _joinSeat(int seatIndex) async {
+    if (_isSwitchingSeat) return;
+
+    if (_currentLiveStreamId.isEmpty) {
+      ToasterService.showError(context, 'Live stream not ready');
+      return;
+    }
+
+    // Hosts are locked to seat 0 in TikTok-style party mode
+    if (widget.isHost && seatIndex != 0) {
+      ToasterService.showInfo(
+        context,
+        'Hosts cannot change seats. You are always in seat 0.',
+      );
+      return;
+    }
+
+    // Prevent switching to same seat
+    if (_mySeatIndex == seatIndex) {
+      print('⚠️ Already in this seat');
+      return;
+    }
+
+    final user = TokenAuthService.currentUser;
+    if (user == null) return;
+
+    final prevCanTalk =
+        _mySeatIndex != null ? _seats[_mySeatIndex!].canTalk : null;
+
+    setState(() => _isSwitchingSeat = true);
+
     try {
-      final user = TokenAuthService.currentUser;
-      if (user == null) return;
+      // If already in a seat, leave it first (non-host only)
+      if (_mySeatIndex != null && !widget.isHost) {
+        try {
+          await LiveStreamingService.leavePartySeat(
+            liveStreamId: _currentLiveStreamId,
+            seatIndex: _mySeatIndex!,
+          );
+          print('✅ Left seat $_mySeatIndex before switching');
+        } catch (e) {
+          print('⚠️ Error leaving old seat: $e');
+        }
+      }
 
       await LiveStreamingService.joinPartySeat(
-        liveStreamId: widget.liveStream.id,
+        liveStreamId: _currentLiveStreamId,
         seatIndex: seatIndex,
         userUid: _localUid ?? 0,
+        canTalk: widget.isHost ? true : prevCanTalk,
       );
 
       await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
 
-      setState(() {
-        _mySeatIndex = seatIndex;
-      });
+      if (mounted) {
+        setState(() {
+          _mySeatIndex = seatIndex;
+        });
+      }
 
-      ToasterService.showSuccess(context, 'Joined seat $seatIndex');
-      await _loadSeats();
+      ToasterService.showSuccess(context, 'Joined seat ${seatIndex + 1}');
+      _loadSeats(); // non-blocking refresh
     } catch (e) {
       print('❌ Error joining seat: $e');
       ToasterService.showError(context, 'Failed to join seat');
+    } finally {
+      if (mounted) {
+        setState(() => _isSwitchingSeat = false);
+      }
+    }
+  }
+
+  Future<void> _joinHostSeat() async {
+    if (!widget.isHost) return;
+    if (_localUid == null) return;
+    if (_currentLiveStreamId.isEmpty) {
+      print('⚠️ Cannot join host seat: live stream ID is empty');
+      return;
+    }
+
+    try {
+      await LiveStreamingService.joinPartySeat(
+        liveStreamId: _currentLiveStreamId,
+        seatIndex: 0,
+        userUid: _localUid!,
+      );
+
+      if (mounted && !_isDisposed) {
+        setState(() => _mySeatIndex = 0);
+      }
+
+      // Notify via socket (best-effort)
+      SocketService.instance.socket?.emit('live:seat:joined', {
+        'liveStreamId': _currentLiveStreamId,
+        'seatIndex': 0,
+        'uid': _localUid,
+      });
+
+      print('✅ Host joined seat 0');
+    } catch (e) {
+      print('❌ Error joining host seat: $e');
     }
   }
 
   Future<void> _leaveSeat() async {
+    // Hosts cannot leave their seat; they must end the live
+    if (widget.isHost) {
+      ToasterService.showInfo(
+        context,
+        'Hosts cannot leave their seat. End the live stream to leave.',
+      );
+      return;
+    }
+
     if (_mySeatIndex == null) return;
+
+    if (_currentLiveStreamId.isEmpty) {
+      print('⚠️ Cannot leave seat: live stream ID is empty');
+      return;
+    }
 
     try {
       await LiveStreamingService.leavePartySeat(
-        liveStreamId: widget.liveStream.id,
+        liveStreamId: _currentLiveStreamId,
         seatIndex: _mySeatIndex!,
       );
 
@@ -386,44 +586,226 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    final liveStreamId = _currentLiveStreamId;
+    if (liveStreamId.isEmpty) {
+      ToasterService.showError(context, 'Live stream not ready');
+      return;
+    }
+
     try {
+      // Clear input immediately for better UX
+      _messageController.clear();
+
       await LiveStreamingService.sendMessage(
-        liveStreamId: widget.liveStream.id,
+        liveStreamId: liveStreamId,
         message: text,
         messageType: 'COMMENT',
       );
 
-      _messageController.clear();
+      // Add message locally with author info
+      final user = TokenAuthService.currentUser;
+      if (user != null && mounted && !_isDisposed) {
+        final author = UserModel(
+          id: user.id,
+          username: user.displayName ?? 'user',
+          displayName: user.displayName ?? 'User',
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          profileImageUrl: user.photoURL,
+          accountBadge: '',
+          postsCount: 0,
+          followersCount: 0,
+          followingCount: 0,
+          likesCount: 0,
+          isFollowing: false,
+          isFollower: false,
+        );
+
+        final message = LiveMessageModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          authorId: user.id,
+          author: author,
+          liveStreamId: liveStreamId,
+          message: text,
+          messageType: 'COMMENT',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        _onNewMessage({'message': message.toJson()});
+      }
     } catch (e) {
       print('❌ Error sending message: $e');
-      ToasterService.showError(context, 'Failed to send message');
+      // Only show error if text still present (send failed before clear)
+      if (mounted && _messageController.text == text) {
+        ToasterService.showError(context, 'Failed to send message');
+      }
     }
   }
 
-  Future<void> _leaveLive() async {
+  /// Create live stream in backend AFTER successful Agora initialization
+  Future<void> _createLiveStream() async {
+    if (!widget.isHost || _liveStreamCreated) return;
+
     try {
-      if (_mySeatIndex != null) {
+      final user = TokenAuthService.currentUser;
+      if (user == null) return;
+
+      final liveStream = await LiveStreamingService.createLiveStream(
+        liveType: 'audio',
+        streamingChannel: widget.liveStream.streamingChannel,
+        authorUid: widget.liveStream.authorUid,
+        partyType: widget.liveStream.partyType,
+        numberOfChairs: widget.liveStream.numberOfChairs,
+      );
+
+      setState(() {
+        _liveStreamCreated = true;
+        _createdLiveStreamId = liveStream.id;
+      });
+
+      print('✅ Live stream created in backend: ${liveStream.id}');
+    } catch (e) {
+      print('❌ Error creating live stream: $e');
+      if (mounted) {
+        ToasterService.showError(
+          context,
+          'Failed to register live stream',
+        );
+        Navigator.pop(context);
+      }
+    }
+  }
+
+  /// End live stream in backend
+  Future<void> _endLiveStream() async {
+    if (!_liveStreamCreated || _createdLiveStreamId == null) return;
+
+    try {
+      await LiveStreamingService.endLiveStream(_createdLiveStreamId!);
+      print('✅ Live stream ended: $_createdLiveStreamId');
+    } catch (e) {
+      print('❌ Error ending live stream: $e');
+    }
+  }
+
+  Future<void> _leaveLive({
+    bool showConfirmation = true,
+    bool navigateBack = true,
+  }) async {
+    try {
+      // Viewers: leave seat first if occupied
+      if (!widget.isHost && _mySeatIndex != null) {
         await _leaveSeat();
       }
 
-      final user = TokenAuthService.currentUser;
-      if (user != null && !widget.isHost) {
+      bool shouldLeave = true;
+
+      if (showConfirmation && mounted) {
+        final result = await showDialog<bool>(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                backgroundColor: const Color(0xFF1A1A1A),
+                title: const Text(
+                  'Leave Audio Party?',
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: Text(
+                  widget.isHost
+                      ? 'End the audio party for everyone?'
+                      : 'Are you sure you want to leave the audio party?',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: TextButton.styleFrom(backgroundColor: Colors.red),
+                    child: const Text(
+                      'Leave',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+        );
+        shouldLeave = result == true;
+      }
+
+      if (!shouldLeave) return;
+
+      // Hosts end live stream
+      if (widget.isHost && _liveStreamCreated) {
+        await _endLiveStream();
+      } else if (!widget.isHost && _currentLiveStreamId.isNotEmpty) {
+        // Viewers leave live stream
+        final user = TokenAuthService.currentUser;
+        final uid = _localUid ?? int.tryParse(user?.id.hashCode.toString().substring(0, 8) ?? '0') ?? 0;
+
         await LiveStreamingService.leaveLiveStream(
-          liveStreamId: widget.liveStream.id,
-          userUid: int.parse(user.id.hashCode.toString().substring(0, 8)),
+          liveStreamId: _currentLiveStreamId,
+          userUid: uid,
         );
 
         SocketService.instance.socket?.emit('live:leave', {
-          'liveStreamId': widget.liveStream.id,
+          'liveStreamId': _currentLiveStreamId,
+          'uid': uid,
         });
+
+        print('✅ Left live');
+      }
+
+      if (navigateBack && mounted) {
+        Navigator.pop(context);
       }
     } catch (e) {
       print('❌ Error leaving live: $e');
     }
   }
 
+  /// Silent cleanup during dispose (no dialogs or navigation)
+  Future<void> _cleanupOnDispose() async {
+    try {
+      // Viewers: leave seat silently
+      if (!widget.isHost &&
+          _mySeatIndex != null &&
+          _currentLiveStreamId.isNotEmpty) {
+        await LiveStreamingService.leavePartySeat(
+          liveStreamId: _currentLiveStreamId,
+          seatIndex: _mySeatIndex!,
+        );
+      }
+
+      // Hosts already end live in dispose
+      if (widget.isHost) return;
+
+      if (_currentLiveStreamId.isNotEmpty) {
+        final uid = _localUid ?? 0;
+        await LiveStreamingService.leaveLiveStream(
+          liveStreamId: _currentLiveStreamId,
+          userUid: uid,
+        );
+
+        SocketService.instance.socket?.emit('live:leave', {
+          'liveStreamId': _currentLiveStreamId,
+          'uid': uid,
+        });
+      }
+    } catch (e) {
+      print('⚠️ Error during dispose cleanup: $e');
+    }
+  }
+
   @override
   void dispose() {
+    _isDisposed = true;
     _heartbeatTimer?.cancel();
     _socketSubscription?.cancel();
     _messageController.dispose();
@@ -431,7 +813,16 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
     for (var controller in _waveAnimations.values) {
       controller.dispose();
     }
-    _leaveLive();
+    
+    // IMPORTANT: For hosts, end live stream FIRST before any navigation
+    // This ensures the live stream is marked as ended in backend
+    if (widget.isHost && _liveStreamCreated) {
+      _endLiveStream();
+    }
+    
+    // Leave live stream (for viewers only, silent)
+    _cleanupOnDispose();
+    
     _engine.leaveChannel();
     _engine.release();
     WakelockPlus.disable();
@@ -448,16 +839,73 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
       return _buildLoadingScreen();
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(),
-            Expanded(child: _buildAudioSeatsGrid()),
-            _buildChatSection(),
-            _buildBottomControls(),
-          ],
+    return WillPopScope(
+      onWillPop: () async {
+        if (!widget.isHost && _mySeatIndex != null) {
+          await _leaveSeat();
+        }
+
+        if (mounted) {
+          final shouldLeave = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              title: const Text(
+                'Leave Audio Party?',
+                style: TextStyle(color: Colors.white),
+              ),
+              content: Text(
+                widget.isHost
+                    ? 'End the audio party for everyone?'
+                    : 'Are you sure you want to leave the audio party?',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: TextButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text(
+                    'Leave',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldLeave == true) {
+            await _leaveLive(showConfirmation: false, navigateBack: true);
+          }
+        }
+
+        return false; // We handle navigation ourselves
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/images/audio_room_background.png'),
+              fit: BoxFit.cover,
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                _buildTopBar(),
+                Expanded(child: _buildAudioSeatsGrid()),
+                _buildChatSection(),
+                _buildBottomControls(),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -488,13 +936,19 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
 
   Widget _buildTopBar() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(color: Color(0xFF2A2A2A)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+        ),
+      ),
       child: Row(
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.maybePop(context),
           ),
           const SizedBox(width: 12),
 
@@ -524,7 +978,7 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.6),
+              color: Colors.white.withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -545,10 +999,28 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
 
           const Spacer(),
 
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onPressed: () {},
-          ),
+          if (widget.isHost)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.star, color: Colors.purple, size: 14),
+                  SizedBox(width: 4),
+                  Text(
+                    'HOST',
+                    style: TextStyle(
+                      color: Colors.purple,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -557,30 +1029,31 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
   Widget _buildAudioSeatsGrid() {
     final numberOfSeats = widget.liveStream.numberOfChairs;
 
+    final showTwoColumn = numberOfSeats <= 4;
+
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: numberOfSeats <= 4 ? 2 : 3,
-        childAspectRatio: 1.0,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        crossAxisCount: showTwoColumn ? 2 : 3,
+        childAspectRatio: showTwoColumn ? 1.0 : 0.9,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: numberOfSeats,
       itemBuilder: (context, index) {
         final seat = _seats.firstWhere(
           (s) => s.seatIndex == index,
-          orElse:
-              () => AudioChatUserModel(
-                id: '',
-                liveStreamId: widget.liveStream.id,
-                seatIndex: index,
-                canTalk: false,
-                enabledVideo: false,
-                enabledAudio: false,
-                leftRoom: false,
-                createdAt: DateTime.now(),
-                updatedAt: DateTime.now(),
-              ),
+          orElse: () => AudioChatUserModel(
+            id: '',
+            liveStreamId: widget.liveStream.id,
+            seatIndex: index,
+            canTalk: false,
+            enabledVideo: false,
+            enabledAudio: false,
+            leftRoom: false,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
         );
 
         return _buildAudioSeatCard(seat, index);
@@ -595,10 +1068,26 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
 
     return GestureDetector(
       onTap: () {
-        if (!isOccupied && _mySeatIndex == null) {
+        if (_isSwitchingSeat) return;
+
+        if (!isOccupied) {
+          // Hosts can only ever sit in seat 0
+          if (widget.isHost && index != 0) {
+            ToasterService.showInfo(
+              context,
+              'Hosts cannot change seats. You are always in seat 0.',
+            );
+            return;
+          }
           _joinSeat(index);
-        } else if (isMe) {
+        } else if (isMe && !widget.isHost) {
           _leaveSeat();
+        }
+      },
+      onLongPress: () {
+        // Host long-press to toggle user audio (mute/unmute)
+        if (widget.isHost && isOccupied && !isMe) {
+          _toggleUserAudio(seat);
         }
       },
       child: Container(
@@ -748,6 +1237,34 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
                 ),
               ),
             ),
+            // Diamonds badge
+            if (isOccupied && seat.joinedUser != null)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.diamond, color: Colors.pink, size: 12),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${seat.joinedUser?.diamonds ?? 0}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -758,7 +1275,9 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
     return Container(
       height: 150,
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(color: Color(0xFF2A2A2A)),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.3),
+      ),
       child: Column(
         children: [
           Expanded(
@@ -805,7 +1324,7 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
                     hintText: 'Say something...',
                     hintStyle: TextStyle(color: Colors.grey[600]),
                     filled: true,
-                    fillColor: const Color(0xFF1A1A1A),
+                    fillColor: Colors.white.withOpacity(0.1),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(24),
                       borderSide: BorderSide.none,
@@ -834,14 +1353,7 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        color: Colors.black.withOpacity(0.4),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -856,7 +1368,13 @@ class _AgoraAudioPartyScreenState extends State<AgoraAudioPartyScreen>
             _buildControlButton(
               icon: Icons.exit_to_app,
               label: 'Leave Seat',
-              onTap: _leaveSeat,
+              onTap: () {
+                if (widget.isHost) {
+                  _leaveLive(); // host ending live
+                } else {
+                  _leaveSeat();
+                }
+              },
               color: Colors.red,
             ),
           ] else ...[
