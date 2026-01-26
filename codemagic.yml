@@ -1,0 +1,201 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - app_store_credentials
+        - firebase_ios
+      vars:
+        APP_ID: ancientplustech.ancient.flip
+        # Environment variables - set these in Codemagic UI under Environment Variables
+        # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
+        # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
+    scripts:
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
+      - name: Get Flutter dependencies
+        script: |
+          cd flip
+          flutter pub get
+      - name: Install CocoaPods dependencies
+        script: |
+          cd flip/ios
+          pod install
+      - name: Create .env file
+        script: |
+          cd flip
+          cat > .env << EOF
+          ZEGO_APP_ID=${ZEGO_APP_ID}
+          ZEGO_APP_SIGN=${ZEGO_APP_SIGN}
+          AGORA_APP_ID=${AGORA_APP_ID}
+          PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY}
+          ANCIENT_COIN_CLIENT_ID=${ANCIENT_COIN_CLIENT_ID:-}
+          ANCIENT_COIN_CLIENT_SECRET=${ANCIENT_COIN_CLIENT_SECRET:-}
+          ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
+          EOF
+          echo "✅ Created .env file with environment variables"
+      - name: Flutter build ipa
+        script: |
+          cd flip
+          flutter build ipa --release \
+            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
+            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - user@example.com  # Update with your email
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        
+        # Submit to TestFlight (optional - uncomment to enable)
+        # submit_to_testflight: true
+        # beta_groups:  # Optional: specify TestFlight beta groups
+        #   - group name 1
+        #   - group name 2
+
+  android-workflow:
+    name: Android Workflow
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      android_sdk: "34.0.0"
+      java: "17"
+      groups:
+        - keystore_credentials
+        - firebase_android
+      vars:
+        PACKAGE_NAME: ancientplustech.ancient.flip
+        # Environment variables - set these in Codemagic UI under Environment Variables
+        # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
+        # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
+    scripts:
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
+      - name: Get Flutter dependencies
+        script: |
+          cd flip
+          flutter pub get
+      - name: Create .env file
+        script: |
+          cd flip
+          cat > .env << EOF
+          ZEGO_APP_ID=${ZEGO_APP_ID}
+          ZEGO_APP_SIGN=${ZEGO_APP_SIGN}
+          AGORA_APP_ID=${AGORA_APP_ID}
+          PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY}
+          ANCIENT_COIN_CLIENT_ID=${ANCIENT_COIN_CLIENT_ID:-}
+          ANCIENT_COIN_CLIENT_SECRET=${ANCIENT_COIN_CLIENT_SECRET:-}
+          ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
+          EOF
+          echo "✅ Created .env file with environment variables"
+      - name: Flutter build appbundle
+        script: |
+          cd flip
+          flutter build appbundle --release \
+            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
+            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+    artifacts:
+      - build/app/outputs/bundle/**/*.aab
+      - build/app/outputs/flutter-apk/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - user@example.com  # Update with your email
+        notify:
+          success: true
+          failure: false
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal  # Options: internal, alpha, beta, production
+        # submit_as_draft: true  # Uncomment to submit as draft
+
+  # Combined workflow for both platforms
+  build-all:
+    name: Build iOS & Android
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      android_sdk: "34.0.0"
+      java: "17"
+      groups:
+        - app_store_credentials
+        - keystore_credentials
+        - firebase_ios
+        - firebase_android
+      vars:
+        APP_ID: ancientplustech.ancient.flip
+        PACKAGE_NAME: ancientplustech.ancient.flip
+        # Environment variables - set these in Codemagic UI under Environment Variables
+        # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
+        # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
+    scripts:
+      - name: Set up local.properties
+        script: |
+          echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
+      - name: Get Flutter dependencies
+        script: |
+          cd flip
+          flutter pub get
+      - name: Install CocoaPods dependencies
+        script: |
+          cd flip/ios
+          pod install
+      - name: Create .env file
+        script: |
+          cd flip
+          cat > .env << EOF
+          ZEGO_APP_ID=${ZEGO_APP_ID}
+          ZEGO_APP_SIGN=${ZEGO_APP_SIGN}
+          AGORA_APP_ID=${AGORA_APP_ID}
+          PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY}
+          ANCIENT_COIN_CLIENT_ID=${ANCIENT_COIN_CLIENT_ID:-}
+          ANCIENT_COIN_CLIENT_SECRET=${ANCIENT_COIN_CLIENT_SECRET:-}
+          ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
+          EOF
+          echo "✅ Created .env file with environment variables"
+      - name: Flutter build ipa
+        script: |
+          cd flip
+          flutter build ipa --release \
+            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
+            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+      - name: Flutter build appbundle
+        script: |
+          cd flip
+          flutter build appbundle --release \
+            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
+            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/app/outputs/bundle/**/*.aab
+      - build/app/outputs/flutter-apk/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - user@example.com  # Update with your email
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
