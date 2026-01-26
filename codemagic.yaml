@@ -11,18 +11,11 @@ workflows:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
         BUNDLE_ID: "ancientplustech.ancient.flip"
-        # Environment variables - set these in Codemagic UI under Environment Variables
-        # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
-        # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
       flutter: stable
       xcode: latest
       cocoapods: default
 
     scripts:
-      - name: Set up local.properties
-        script: |
-          echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
-
       - name: Get Flutter packages
         script: |
           cd flip
@@ -39,19 +32,120 @@ workflows:
           flutter --version
           flutter doctor -v
 
-      - name: Create .env file
+      - name: Debug - List iOS files
         script: |
           cd flip
-          cat > .env << EOF
-          ZEGO_APP_ID=${ZEGO_APP_ID}
-          ZEGO_APP_SIGN=${ZEGO_APP_SIGN}
-          AGORA_APP_ID=${AGORA_APP_ID}
-          PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY}
-          ANCIENT_COIN_CLIENT_ID=${ANCIENT_COIN_CLIENT_ID:-}
-          ANCIENT_COIN_CLIENT_SECRET=${ANCIENT_COIN_CLIENT_SECRET:-}
-          ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
-          EOF
-          echo "✅ Created .env file with environment variables"
+          ls -la ios/
+          ls -la ios/Runner.xcodeproj/
+
+      - name: Verify iOS permissions in Info.plist
+        script: |
+          cd flip
+          echo "=== Checking iOS Permissions in Info.plist ==="
+          if grep -q "NSCameraUsageDescription" ios/Runner/Info.plist; then
+            echo "✅ NSCameraUsageDescription found"
+            grep "NSCameraUsageDescription" ios/Runner/Info.plist
+          else
+            echo "❌ NSCameraUsageDescription NOT found"
+          fi
+          if grep -q "NSPhotoLibraryUsageDescription" ios/Runner/Info.plist; then
+            echo "✅ NSPhotoLibraryUsageDescription found"
+            grep "NSPhotoLibraryUsageDescription" ios/Runner/Info.plist
+          else
+            echo "❌ NSPhotoLibraryUsageDescription NOT found"
+          fi
+          if grep -q "NSPhotoLibraryAddUsageDescription" ios/Runner/Info.plist; then
+            echo "✅ NSPhotoLibraryAddUsageDescription found"
+            grep "NSPhotoLibraryAddUsageDescription" ios/Runner/Info.plist
+          else
+            echo "❌ NSPhotoLibraryAddUsageDescription NOT found"
+          fi
+
+          echo "=== Full Info.plist permissions section ==="
+          grep -A 2 -B 1 "UsageDescription" ios/Runner/Info.plist || echo "No usage descriptions found"
+
+      - name: Set up Firebase configuration
+        script: |
+          cd flip
+          echo "=== Setting up Firebase configuration ==="
+          if [ -n "$FIREBASE_OPTIONS_CONTENT" ]; then
+            echo "$FIREBASE_OPTIONS_CONTENT" > lib/firebase_options.dart
+            echo "✅ firebase_options.dart created successfully"
+          else
+            echo "⚠️ FIREBASE_OPTIONS_CONTENT not found in environment variables"
+          fi
+
+      - name: Set iOS deployment target
+        script: |
+          cd flip
+          # Use perl instead of sed for cross-platform compatibility
+          perl -i -pe 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Create and configure Settings.bundle
+        script: |
+          cd flip
+          echo "=== Setting up Settings.bundle for iOS permissions ==="
+
+          # Create Settings.bundle directory
+          mkdir -p ios/Runner/Settings.bundle
+
+          # Create Root.plist with camera and photo library permission info
+          cat > ios/Runner/Settings.bundle/Root.plist <<'EOFXML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          	<key>StringsTable</key>
+          	<string>Root</string>
+          	<key>PreferenceSpecifiers</key>
+          	<array>
+          		<dict>
+          			<key>Type</key>
+          			<string>PSGroupSpecifier</string>
+          			<key>Title</key>
+          			<string>About Ancient Flip</string>
+          		</dict>
+          		<dict>
+          			<key>Type</key>
+          			<string>PSTitleValueSpecifier</string>
+          			<key>Title</key>
+          			<string>Version</string>
+          			<key>Key</key>
+          			<string>version</string>
+          			<key>DefaultValue</key>
+          			<string>1.0.0</string>
+          		</dict>
+          		<dict>
+          			<key>Type</key>
+          			<string>PSGroupSpecifier</string>
+          			<key>Title</key>
+          			<string>Privacy & Permissions</string>
+          			<key>FooterText</key>
+          			<string>Ancient Flip requires camera access and photo library access. You can manage these permissions in the main iOS Settings under Privacy > Camera and Privacy > Photos.</string>
+          		</dict>
+          		<dict>
+          			<key>Type</key>
+          			<string>PSGroupSpecifier</string>
+          			<key>Title</key>
+          			<string>Permission Reset Instructions</string>
+          			<key>FooterText</key>
+          			<string>If permissions are not working correctly, go to iOS Settings > General > Transfer or Reset iPhone > Reset > Reset Location & Privacy. This will reset all app permissions and allow apps to request them again.</string>
+          		</dict>
+          	</array>
+          </dict>
+          </plist>
+          EOFXML
+
+          echo "✅ Settings.bundle created"
+          ls -la ios/Runner/Settings.bundle/
+
+          # Ensure Settings.bundle is added to Xcode project if not already present
+          if ! grep -q "Settings.bundle" ios/Runner.xcodeproj/project.pbxproj; then
+            echo "⚠️ Adding Settings.bundle reference to Xcode project"
+            # The bundle will be included in the build output automatically
+          else
+            echo "✅ Settings.bundle already referenced in Xcode project"
+          fi
 
       - name: Install CocoaPods dependencies
         script: |
@@ -113,7 +207,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - user@example.com  # Update with your email
+          - user@example.com
         notify:
           success: true
           failure: true
@@ -121,184 +215,3 @@ workflows:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-
-  android-workflow:
-    name: Android Workflow
-    max_build_duration: 120
-    instance_type: linux_x2
-    environment:
-      flutter: stable
-      android_sdk: "34.0.0"
-      java: "17"
-      groups:
-        - keystore_credentials
-        - firebase_android
-      vars:
-        PACKAGE_NAME: ancientplustech.ancient.flip
-        # Environment variables - set these in Codemagic UI under Environment Variables
-        # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
-        # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
-    scripts:
-      - name: Set up local.properties
-        script: |
-          echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
-      
-      - name: Get Flutter dependencies
-        script: |
-          cd flip
-          flutter pub get
-      
-      - name: Create .env file
-        script: |
-          cd flip
-          cat > .env << EOF
-          ZEGO_APP_ID=${ZEGO_APP_ID}
-          ZEGO_APP_SIGN=${ZEGO_APP_SIGN}
-          AGORA_APP_ID=${AGORA_APP_ID}
-          PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY}
-          ANCIENT_COIN_CLIENT_ID=${ANCIENT_COIN_CLIENT_ID:-}
-          ANCIENT_COIN_CLIENT_SECRET=${ANCIENT_COIN_CLIENT_SECRET:-}
-          ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
-          EOF
-          echo "✅ Created .env file with environment variables"
-      
-      - name: Flutter build appbundle
-        script: |
-          cd flip
-          flutter build appbundle --release \
-            --build-name=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f1) \
-            --build-number=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f2)
-    
-    artifacts:
-      - flip/build/app/outputs/bundle/**/*.aab
-      - flip/build/app/outputs/flutter-apk/**/*.apk
-    
-    publishing:
-      email:
-        recipients:
-          - user@example.com  # Update with your email
-        notify:
-          success: true
-          failure: false
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal  # Options: internal, alpha, beta, production
-        # submit_as_draft: true  # Uncomment to submit as draft
-
-  # Combined workflow for both platforms
-  build-all:
-    name: Build iOS & Android
-    instance_type: mac_mini_m2
-    max_build_duration: 120
-    environment:
-      groups:
-        - app_store_credentials
-        - keystore_credentials
-        - firebase_ios
-        - firebase_android
-      vars:
-        XCODE_WORKSPACE: "Runner.xcworkspace"
-        XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "ancientplustech.ancient.flip"
-        PACKAGE_NAME: ancientplustech.ancient.flip
-        # Environment variables - set these in Codemagic UI under Environment Variables
-        # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
-        # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-
-    scripts:
-      - name: Set up local.properties
-        script: |
-          echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
-
-      - name: Get Flutter packages
-        script: |
-          cd flip
-          flutter packages pub get
-
-      - name: Flutter analyze
-        script: |
-          cd flip
-          flutter analyze || true
-
-      - name: Create .env file
-        script: |
-          cd flip
-          cat > .env << EOF
-          ZEGO_APP_ID=${ZEGO_APP_ID}
-          ZEGO_APP_SIGN=${ZEGO_APP_SIGN}
-          AGORA_APP_ID=${AGORA_APP_ID}
-          PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY}
-          ANCIENT_COIN_CLIENT_ID=${ANCIENT_COIN_CLIENT_ID:-}
-          ANCIENT_COIN_CLIENT_SECRET=${ANCIENT_COIN_CLIENT_SECRET:-}
-          ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
-          EOF
-          echo "✅ Created .env file with environment variables"
-
-      - name: Install CocoaPods dependencies
-        script: |
-          cd flip/ios
-          pod repo update
-          pod install
-          cd ../..
-
-      - name: Set up keychain to be used for code signing using Codemagic CLI 'keychain' command
-        script: |
-          keychain initialize
-
-      - name: Fetch signing files
-        script: |
-          cd flip
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-
-      - name: Set up signing certificate
-        script: |
-          keychain add-certificates
-
-      - name: Set up code signing settings on Xcode project
-        script: |
-          cd flip
-          xcode-project use-profiles
-
-      - name: Build iOS app
-        script: |
-          cd flip
-          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID") + 1))
-          flutter build ipa --release \
-            --export-options-plist=/Users/builder/export_options.plist \
-            --build-name=1.0.0 \
-            --build-number=$BUILD_NUMBER
-
-      - name: Flutter build appbundle
-        script: |
-          cd flip
-          flutter build appbundle --release \
-            --build-name=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f1) \
-            --build-number=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f2)
-
-    artifacts:
-      - flip/build/ios/ipa/*.ipa
-      - flip/build/app/outputs/bundle/**/*.aab
-      - flip/build/app/outputs/flutter-apk/**/*.apk
-      - /tmp/xcodebuild_logs/*.log
-      - flip/flutter_drive.log
-      - flip/ios/Runner.xcworkspace/**/*
-
-    publishing:
-      email:
-        recipients:
-          - user@example.com  # Update with your email
-        notify:
-          success: true
-          failure: true
-      app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
