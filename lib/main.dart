@@ -36,8 +36,39 @@ import 'screens/utility/gift_leaderboard_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables (required for Agora, etc.)
-  await dotenv.load(fileName: ".env");
+  // Load environment variables (required for Agora, Zego, Paystack, etc.)
+  // Try to load from assets (for production builds) or file system (for local development)
+  bool envLoaded = false;
+  try {
+    await dotenv.load(fileName: ".env");
+    envLoaded = true;
+    debugPrint("✅ Environment variables loaded successfully");
+  } catch (e) {
+    // .env file not found - this is expected in some build environments
+    // The app will continue but some features may not work without env vars
+    debugPrint("⚠️ Warning: Could not load .env file: $e");
+    debugPrint(
+      "⚠️ Some features (Agora, Zego, Paystack) may not work without environment variables",
+    );
+  }
+
+  // Verify critical environment variables are loaded
+  if (envLoaded) {
+    final requiredVars = ['ZEGO_APP_ID', 'ZEGO_APP_SIGN', 'AGORA_APP_ID'];
+    final missingVars =
+        requiredVars
+            .where(
+              (varName) =>
+                  dotenv.env[varName] == null || dotenv.env[varName]!.isEmpty,
+            )
+            .toList();
+
+    if (missingVars.isNotEmpty) {
+      debugPrint(
+        "⚠️ Warning: Missing required environment variables: ${missingVars.join(', ')}",
+      );
+    }
+  }
 
   // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
