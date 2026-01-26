@@ -4,10 +4,12 @@ import '../models/coin_package_model.dart';
 import '../services/wallet_service.dart';
 import '../services/paystack_service.dart';
 import '../services/ancient_coin_service.dart';
+import '../services/google_play_iap_service.dart';
 import '../services/token_auth_service.dart';
 import '../screens/premium/paystack_webview_screen.dart';
 import '../screens/premium/ancient_coin_webview_screen.dart';
 import '../widgets/custom_toaster.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 
 /// Purchase Dialog V2
 /// Allows users to purchase coins using real packages from backend
@@ -64,7 +66,7 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
     } else if (paymentMethod == 'ancientcoin') {
       await _handleAncientCoinPayment();
     } else if (paymentMethod == 'iap') {
-      ToasterService.showInfo(context, 'In-App Purchase coming soon!');
+      await _handleIAPPayment();
     }
   }
 
@@ -266,6 +268,77 @@ class _PurchaseDialogV2State extends State<PurchaseDialogV2> {
       if (mounted) {
         setState(() => _isPurchasing = false);
         ToasterService.showError(context, 'Payment failed: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<void> _handleIAPPayment() async {
+    setState(() => _isPurchasing = true);
+
+    try {
+      // Initialize IAP
+      final initialized = await GooglePlayIAPService.initialize(context);
+      if (!initialized) {
+        throw Exception('In-App Purchase not available on this device');
+      }
+
+      // Load products
+      final products = await GooglePlayIAPService.loadProducts();
+      if (products.isEmpty) {
+        throw Exception('No products available. Please try again later.');
+      }
+
+      // Find matching product for selected package
+      // Map package coins to product ID
+      String? productId;
+      final totalCoins = _selectedPackage!.coins + _selectedPackage!.bonusCoins;
+
+      if (totalCoins == 8000)
+        productId = 'coins_8000';
+      else if (totalCoins == 16000)
+        productId = 'coins_16000';
+      else if (totalCoins == 64000)
+        productId = 'coins_64000';
+      else if (totalCoins == 128000)
+        productId = 'coins_128000';
+      else if (totalCoins == 320000)
+        productId = 'coins_320000';
+      else if (totalCoins == 640000)
+        productId = 'coins_640000';
+      else if (totalCoins == 800000)
+        productId = 'coins_800000';
+
+      if (productId == null) {
+        throw Exception('Product not found for this package');
+      }
+
+      final product = products.firstWhere(
+        (p) => p.id == productId,
+        orElse:
+            () => throw Exception('Product $productId not configured in store'),
+      );
+
+      if (mounted) {
+        setState(() => _isPurchasing = false);
+      }
+
+      // Purchase the product
+      print('🛒 Initiating purchase for ${product.id}');
+      final success = await GooglePlayIAPService.purchaseProduct(product);
+
+      if (!success) {
+        throw Exception('Failed to initiate purchase');
+      }
+
+      // Purchase stream will handle the rest
+      // Close dialog after initiating purchase
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isPurchasing = false);
+        ToasterService.showError(context, 'IAP error: ${e.toString()}');
       }
     }
   }

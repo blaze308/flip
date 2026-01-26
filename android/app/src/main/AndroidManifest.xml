@@ -65,9 +65,9 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <!-- Custom scheme for posts and reels: flip://post/123 or flip://reel/456 -->
-                <data android:scheme="flip" android:host="post" />
-                <data android:scheme="flip" android:host="reel" />
-                <data android:scheme="flip" android:host="user" />
+                <data android:scheme="flip" android:host="post" android:pathPrefix="/" />
+                <data android:scheme="flip" android:host="reel" android:pathPrefix="/" />
+                <data android:scheme="flip" android:host="user" android:pathPrefix="/" />
                 <!-- Fallback: flip://open -->
                 <data android:scheme="flip" android:host="open" />
             </intent-filter>

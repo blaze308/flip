@@ -16,6 +16,8 @@ class UserModel {
   final String? gender;
   final String? occupation;
   final List<String>? interests;
+  final DateTime? dateOfBirth;
+  final String? language;
   final String accountBadge;
   final int postsCount;
   final int followersCount;
@@ -24,6 +26,7 @@ class UserModel {
   final bool isFollowing;
   final bool isFollower;
   final DateTime? createdAt;
+  final Map<String, String>? socialLinks;
 
   // Gamification fields
   final int creditsSent;
@@ -62,6 +65,8 @@ class UserModel {
     this.gender,
     this.occupation,
     this.interests,
+    this.dateOfBirth,
+    this.language,
     this.accountBadge = '',
     this.postsCount = 0,
     this.followersCount = 0,
@@ -70,6 +75,7 @@ class UserModel {
     this.isFollowing = false,
     this.isFollower = false,
     this.createdAt,
+    this.socialLinks,
     // Gamification defaults
     this.creditsSent = 0,
     this.giftsReceived = 0,
@@ -125,7 +131,7 @@ class UserModel {
   bool get isVip => isNormalVip || isSuperVip || isDiamondVip;
   bool get hasGuardian => guardianType != null;
   bool get isGuarding => guardingUserId != null;
-  
+
   String get vipTier {
     if (isDiamondVip) return 'diamond';
     if (isSuperVip) return 'super';
@@ -180,9 +186,10 @@ class UserModel {
         'user';
 
     // Extract interests
-    final List<String>? interests = profile?['interests'] is List
-        ? (profile!['interests'] as List).map((e) => e.toString()).toList()
-        : null;
+    final List<String>? interests =
+        profile?['interests'] is List
+            ? (profile!['interests'] as List).map((e) => e.toString()).toList()
+            : null;
 
     // Parse createdAt
     DateTime? createdAt;
@@ -218,7 +225,9 @@ class UserModel {
     DateTime? guardianExpiresAt;
     if (gamification?['guardianExpiresAt'] != null) {
       try {
-        guardianExpiresAt = DateTime.parse(gamification!['guardianExpiresAt'] as String);
+        guardianExpiresAt = DateTime.parse(
+          gamification!['guardianExpiresAt'] as String,
+        );
       } catch (e) {
         guardianExpiresAt = null;
       }
@@ -240,15 +249,27 @@ class UserModel {
       coverPhotoURL: profile?['coverPhotoURL'] as String?,
       bio: profile?['bio'] as String? ?? json['bio'] as String?,
       website: profile?['website'] as String? ?? json['website'] as String?,
-      location: locationData != null
-          ? '${locationData['city'] ?? ''}, ${locationData['country'] ?? ''}'.trim().replaceAll(RegExp(r'^,\s*|,\s*$'), '')
-          : json['location'] as String?,
+      location:
+          locationData != null
+              ? '${locationData['city'] ?? ''}, ${locationData['country'] ?? ''}'
+                  .trim()
+                  .replaceAll(RegExp(r'^,\s*|,\s*$'), '')
+              : json['location'] as String?,
       country: locationData?['country'] as String?,
       state: locationData?['state'] as String?,
       city: locationData?['city'] as String?,
+      socialLinks:
+          profile?['socialLinks'] != null
+              ? Map<String, String>.from(profile!['socialLinks'] as Map)
+              : null,
       gender: profile?['gender'] as String?,
       occupation: profile?['occupation'] as String?,
       interests: interests,
+      dateOfBirth:
+          profile?['dateOfBirth'] != null
+              ? DateTime.tryParse(profile!['dateOfBirth'].toString())
+              : null,
+      language: profile?['preferences']?['language'] as String?,
       accountBadge: json['accountBadge'] as String? ?? '',
       postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
       followersCount: (json['followersCount'] as num?)?.toInt() ?? 0,
@@ -275,7 +296,8 @@ class UserModel {
       guardianExpiresAt: guardianExpiresAt,
       guardingUserId: gamification?['guardingUserId'] as String?,
       guardedByUserId: gamification?['guardedByUserId'] as String?,
-      experiencePoints: (gamification?['experiencePoints'] as num?)?.toInt() ?? 0,
+      experiencePoints:
+          (gamification?['experiencePoints'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -296,9 +318,12 @@ class UserModel {
       'country': country,
       'state': state,
       'city': city,
+      'socialLinks': socialLinks,
       'gender': gender,
       'occupation': occupation,
       'interests': interests,
+      'dateOfBirth': dateOfBirth?.toIso8601String(),
+      'language': language,
       'accountBadge': accountBadge,
       'postsCount': postsCount,
       'followersCount': followersCount,
@@ -348,6 +373,8 @@ class UserModel {
     String? gender,
     String? occupation,
     List<String>? interests,
+    DateTime? dateOfBirth,
+    String? language,
     String? accountBadge,
     int? postsCount,
     int? followersCount,
@@ -356,6 +383,7 @@ class UserModel {
     bool? isFollowing,
     bool? isFollower,
     DateTime? createdAt,
+    Map<String, String>? socialLinks,
     int? creditsSent,
     int? giftsReceived,
     int? wealthLevel,
@@ -392,6 +420,8 @@ class UserModel {
       gender: gender ?? this.gender,
       occupation: occupation ?? this.occupation,
       interests: interests ?? this.interests,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      language: language ?? this.language,
       accountBadge: accountBadge ?? this.accountBadge,
       postsCount: postsCount ?? this.postsCount,
       followersCount: followersCount ?? this.followersCount,
@@ -400,6 +430,7 @@ class UserModel {
       isFollowing: isFollowing ?? this.isFollowing,
       isFollower: isFollower ?? this.isFollower,
       createdAt: createdAt ?? this.createdAt,
+      socialLinks: socialLinks ?? this.socialLinks,
       creditsSent: creditsSent ?? this.creditsSent,
       giftsReceived: giftsReceived ?? this.giftsReceived,
       wealthLevel: wealthLevel ?? this.wealthLevel,
@@ -421,4 +452,3 @@ class UserModel {
     );
   }
 }
-

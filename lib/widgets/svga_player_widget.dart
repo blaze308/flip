@@ -11,6 +11,7 @@ class SvgaPlayerWidget extends StatefulWidget {
   final bool loop;
   final Widget Function(BuildContext context)? placeholder;
   final Widget Function(BuildContext context, dynamic error)? errorWidget;
+  final VoidCallback? onComplete;
 
   const SvgaPlayerWidget({
     super.key,
@@ -22,6 +23,7 @@ class SvgaPlayerWidget extends StatefulWidget {
     this.loop = true,
     this.placeholder,
     this.errorWidget,
+    this.onComplete,
   });
 
   @override
@@ -62,7 +64,11 @@ class _SvgaPlayerWidgetState extends State<SvgaPlayerWidget>
         if (widget.loop) {
           _controller!.repeat();
         } else {
-          _controller!.forward();
+          _controller!.forward().then((_) {
+            if (widget.onComplete != null) {
+              widget.onComplete!();
+            }
+          });
         }
       }
 

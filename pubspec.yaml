@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.7.0
@@ -61,6 +61,7 @@ dependencies:
 
   # Media picker and video handling
   image_picker: ^1.0.7
+  image_cropper: ^11.0.0
   file_picker: ^10.1.2
   video_player: ^2.8.2
   video_thumbnail: ^0.5.3
@@ -85,6 +86,8 @@ dependencies:
   record: ^6.1.2 # Simpler, more reliable audio recording
   audioplayers: ^6.5.1
 
+  # In-App Purchases (Google Play & App Store)
+  in_app_purchase: ^3.2.0
 
   wakelock_plus: ^1.2.0 # Keep screen awake during calls
   
@@ -107,7 +110,7 @@ dependencies:
   share_plus: ^12.0.0
 
   # Video downloading
-  dio: ^5.7.0
+  dio: ^5.9.0
   gal: ^2.3.0
 
   # Deep linking and app links

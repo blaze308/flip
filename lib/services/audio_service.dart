@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 class AudioService {
   static final AudioRecorder _recorder = AudioRecorder();
   static final AudioPlayer _player = AudioPlayer();
+  static final AudioPlayer _sfxPlayer = AudioPlayer();
   static bool _isRecording = false;
   static bool _isPlaying = false;
   static String? _currentRecordingPath;
@@ -197,6 +198,29 @@ class AudioService {
       debugPrint('🔊 AudioService: Error playing audio: $e');
       return false;
     }
+  }
+
+  /// Play sound effects (non-interrupting)
+  static Future<void> playSfx(String assetPath) async {
+    try {
+      await _sfxPlayer.play(AssetSource(assetPath));
+    } catch (e) {
+      debugPrint('🔊 AudioService: Error playing SFX: $e');
+    }
+  }
+
+  /// Play gift sound based on gift value
+  static Future<void> playGiftSound(int weight) async {
+    String soundPath = 'sounds/gift_normal.mp3';
+    if (weight >= 50000) {
+      soundPath = 'sounds/gift_luxury.mp3';
+    } else if (weight >= 10000) {
+      soundPath = 'sounds/gift_premium.mp3';
+    }
+
+    // For now, use a generic placeholder or the actual assets if they exist
+    // Since I can't check assets, I'll provide the logic
+    await playSfx(soundPath);
   }
 
   /// Play audio from local file

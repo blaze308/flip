@@ -183,8 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Account & Security',
             subtitle: 'Password, email, phone',
             onTap: () {
-              // TODO: Navigate to account security screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(context, '/settings/account');
             },
           ),
           _buildSettingsTile(
@@ -192,8 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Privacy',
             subtitle: 'Control your privacy settings',
             onTap: () {
-              // TODO: Navigate to privacy screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(context, '/settings/privacy');
             },
           ),
           _buildSettingsTile(
@@ -213,8 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Push Notifications',
             subtitle: 'Manage notification preferences',
             onTap: () {
-              // TODO: Navigate to notifications screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(context, '/settings/notifications');
             },
           ),
           _buildSettingsTile(
@@ -222,8 +219,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Message Notifications',
             subtitle: 'Chat and message alerts',
             onTap: () {
-              // TODO: Navigate to message notifications screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(
+                context,
+                '/settings/notifications',
+              ); // Shared for now
             },
           ),
 
@@ -234,8 +233,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Language',
             subtitle: 'English',
             onTap: () {
-              // TODO: Navigate to language screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(context, '/settings/language');
             },
           ),
           _buildSettingsTile(
@@ -279,7 +277,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'About',
             subtitle: 'App information',
             onTap: () {
-              _showAboutDialog();
+              Navigator.pushNamed(context, '/settings/about');
             },
           ),
           _buildSettingsTile(
@@ -331,8 +329,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Delete Account',
             titleColor: Colors.red,
             onTap: () {
-              // TODO: Navigate to delete account screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(
+                context,
+                '/settings/account',
+              ); // Account deletion is inside security
             },
           ),
 
@@ -392,55 +392,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing ?? Icon(Icons.chevron_right, color: Colors.grey[600]),
         onTap: onTap,
       ),
-    );
-  }
-
-  void _showAboutDialog() {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            backgroundColor: const Color(0xFF1D1E33),
-            title: const Text(
-              'About Flip',
-              style: TextStyle(color: Colors.white),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Flip - Social Media App',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Version: $_appVersion',
-                  style: TextStyle(color: Colors.grey[400]),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'A modern social media platform for sharing moments, connecting with friends, and discovering new content.',
-                  style: TextStyle(color: Colors.grey[300], height: 1.5),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  '© 2024 Ancient Plus Tech',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
     );
   }
 }

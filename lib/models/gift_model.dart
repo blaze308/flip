@@ -59,6 +59,7 @@ class GiftModel {
 
 enum GiftType {
   svga,
+  lottie,
   mp4,
   gif;
 
@@ -66,6 +67,8 @@ enum GiftType {
     switch (type.toLowerCase()) {
       case 'svga':
         return GiftType.svga;
+      case 'lottie':
+        return GiftType.lottie;
       case 'mp4':
         return GiftType.mp4;
       case 'gif':
@@ -80,6 +83,8 @@ enum GiftType {
     switch (this) {
       case GiftType.svga:
         return 'svga';
+      case GiftType.lottie:
+        return 'lottie';
       case GiftType.mp4:
         return 'mp4';
       case GiftType.gif:

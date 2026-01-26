@@ -11,6 +11,7 @@ import 'package:lottie/lottie.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:developer' as developer;
 import '../../models/live_stream_model.dart';
 import '../../models/user_model.dart';
@@ -18,7 +19,13 @@ import '../../services/live_streaming_service.dart';
 import '../../services/token_auth_service.dart';
 import '../../widgets/custom_toaster.dart';
 import '../../widgets/gift_bottom_sheet.dart';
-import '../../widgets/circular_icon_container.dart';
+
+import '../../widgets/pk_widgets.dart';
+
+import '../../services/socket_service.dart';
+import '../../models/gift_model.dart';
+import '../../services/gift_service.dart';
+import '../../widgets/gift_animation_overlay.dart';
 
 class ZegoLivestreaming extends StatefulWidget {
   final UserModel? mUser;
@@ -70,6 +77,15 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
   Timer? _connectionTimeoutTimer; // Timeout if Zego doesn't connect
   Timer? _heartbeatTimer; // Heartbeat to keep stream alive
   AnimationController? _animationController;
+
+  // Gifting State
+  final List<GiftReceiptEvent> _giftQueue = [];
+  GiftReceiptEvent? _currentGift;
+  bool _isShowingGift = false;
+  int _comboCount = 0;
+  String? _lastComboUserId;
+  String? _lastComboGiftId;
+  StreamSubscription? _giftSubscription;
 
   String linkToShare = "";
 
@@ -165,6 +181,8 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
 
     // ZegoGiftManager().service.recvNotifier.addListener(onGiftReceived);
 
+    _setupGiftListener();
+
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       // ZegoGiftManager().service.init(
       //       appID: appID,
@@ -200,6 +218,52 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
         }
       });
     }
+  }
+
+  void _setupGiftListener() {
+    _giftSubscription = SocketService.instance.onGiftReceived.listen((event) {
+      debugPrint('🎁 SocketService: Gift received in room: ${event.giftId}');
+      if (event.contextId == widget.liveID ||
+          event.contextId == _createdLiveStreamId) {
+        _handleIncomingGift(event);
+      }
+    });
+  }
+
+  void _handleIncomingGift(GiftReceiptEvent event) {
+    if (mounted) {
+      setState(() {
+        // Simple combo logic: same user, same gift within short interval
+        if (_lastComboUserId == event.senderId &&
+            _lastComboGiftId == event.giftId) {
+          _comboCount += event.quantity;
+        } else {
+          _comboCount = event.quantity;
+          _lastComboUserId = event.senderId;
+          _lastComboGiftId = event.giftId;
+        }
+
+        _giftQueue.add(event);
+        if (!_isShowingGift) {
+          _showNextGift();
+        }
+      });
+    }
+  }
+
+  void _showNextGift() {
+    if (_giftQueue.isEmpty) {
+      setState(() {
+        _isShowingGift = false;
+        _currentGift = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isShowingGift = true;
+      _currentGift = _giftQueue.removeAt(0);
+    });
   }
 
   /// Create live stream in backend AFTER successful Zego connection
@@ -389,13 +453,17 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
             ),
             child:
                 isMysteriousMan
-                    ? ClipRRect(
-                      borderRadius: BorderRadius.circular(50),
-                      child: Image.asset(
-                        "assets/images/mysteryman.png",
-                        width: 10,
-                        height: 10,
-                        fit: BoxFit.cover,
+                    ? Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: const Icon(
+                        Icons.person_outline,
+                        color: Colors.white,
+                        size: 18,
                       ),
                     )
                     : CircleAvatar(
@@ -565,6 +633,7 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
     // ZegoGiftManager().service.uninit();
     _animationController!.dispose();
     _platformMessageController.dispose();
+    _giftSubscription?.cancel();
     WakelockPlus.disable();
     super.dispose();
   }
@@ -586,22 +655,22 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
   @override
   Widget build(BuildContext context) {
     //PK Config
-    // final PkWidgets pkWidgets = PkWidgets();
-    ZegoLiveStreamingPKBattleConfig pk() {
+    final PKWidgets pkWidgets = PKWidgets();
+    ZegoLiveStreamingPKBattleConfig pk(WidgetRef ref) {
       return ZegoLiveStreamingPKBattleConfig(
         mixerLayout: null, // TODO: Configure PK layout properly
         topBuilder: (context, hosts, extraInfo) {
-          // Size size = MediaQuery.of(context).size;
+          Size size = MediaQuery.of(context).size;
           return Padding(
             padding: const EdgeInsets.all(10),
             child: Stack(
               children: [
-                //todo
-                // Positioned(
-                //     left: size.width * 0.25,
-                //     top: 15,
-                //     child: pkWidgets.TreasureWidget(widget.currentUser)),
-                // Center(child: pkWidgets.PKTimerWidget()),
+                Positioned(
+                  left: size.width * 0.25,
+                  top: 15,
+                  child: pkWidgets.TreasureWidget(widget.currentUser, ref),
+                ),
+                Center(child: pkWidgets.PKTimerWidget()),
               ],
             ),
           );
@@ -705,7 +774,7 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
               ),
             ),
           )
-          ..pkBattle = pk()
+          // ..pkBattle = pk() // Set inside Consumer below
           ..avatarBuilder = (
             BuildContext context,
             Size size,
@@ -1212,229 +1281,296 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
           ),
           child: Stack(
             children: [
-              ZegoUIKitPrebuiltLiveStreaming(
-                appID: appID,
-                appSign: appSign,
-                userID: widget.currentUser.id,
-                userName:
-                    (isMysteriousMan == true && !widget.isHost)
-                        ? maskedName
-                        : widget.currentUser.displayName ??
-                            widget.currentUser.id,
-                liveID: widget.liveID,
-                config: config,
-                events: ZegoUIKitPrebuiltLiveStreamingEvents(
-                  onError: (error) {
-                    print('❌ Zego error: $error');
-                    // If live stream was created, end it
-                    if (_liveStreamCreated) {
-                      _endLiveStream();
-                    }
-                    // TODO: Implement LiveEndReportScreen navigation
-                    Navigator.pop(context);
-                  },
-                  onEnded:
-                      (event, defaultAction) => Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) =>
-                                  Container(), // TODO: Implement LiveEndReportScreen
-                        ),
-                      ),
-                  onLeaveConfirmation: (
-                    ZegoLiveStreamingLeaveConfirmationEvent event,
+              Consumer(
+                builder: (context, ref, child) {
+                  // Apply pk config with ref
+                  config.pkBattle = pk(ref);
+                  return ZegoUIKitPrebuiltLiveStreaming(
+                    appID: appID,
+                    appSign: appSign,
+                    userID: widget.currentUser.id,
+                    userName:
+                        (isMysteriousMan == true && !widget.isHost)
+                            ? maskedName
+                            : widget.currentUser.displayName ??
+                                widget.currentUser.id,
+                    liveID: widget.liveID,
+                    config: config,
+                    events: ZegoUIKitPrebuiltLiveStreamingEvents(
+                      onError: (error) {
+                        print('❌ Zego error: $error');
+                        // If live stream was created, end it
+                        if (_liveStreamCreated) {
+                          _endLiveStream();
+                        }
+                        // TODO: Implement LiveEndReportScreen navigation
+                        Navigator.pop(context);
+                      },
+                      onEnded:
+                          (event, defaultAction) => Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      Container(), // TODO: Implement LiveEndReportScreen
+                            ),
+                          ),
+                      onLeaveConfirmation: (
+                        ZegoLiveStreamingLeaveConfirmationEvent event,
 
-                    /// defaultAction to return to the previous page
-                    Future<bool> Function() defaultAction,
-                  ) async {
-                    return showLiveExitDialog(
-                      isHost: widget.isHost,
-                      context: context,
-                      liveStreamingModel: widget.mLiveStreamingModel,
-                    );
-                  },
-                  user: ZegoLiveStreamingUserEvents(
-                    onEnter: (p0) async {
-                      print("testing live user entering p0 ${p0}");
-
-                      String userId = p0.id;
-                      // TODO: Implement entrance effect if needed
-                      print("User entered: $userId");
-                    },
-                    onLeave: (p0) async {
-                      print("testing live user leaving p0 ${p0}");
-                    },
-                  ),
-                  duration: ZegoLiveStreamingDurationEvents(
-                    onUpdated: (p0) {
-                      if (p0.inSeconds >= 30 * 60) {
-                        ZegoUIKitPrebuiltLiveStreamingController().leave(
-                          context,
+                        /// defaultAction to return to the previous page
+                        Future<bool> Function() defaultAction,
+                      ) async {
+                        return showLiveExitDialog(
+                          isHost: widget.isHost,
+                          context: context,
+                          liveStreamingModel: widget.mLiveStreamingModel,
                         );
-                      }
-                    },
+                      },
+                      user: ZegoLiveStreamingUserEvents(
+                        onEnter: (p0) async {
+                          print("testing live user entering p0 ${p0}");
+
+                          String userId = p0.id;
+                          // TODO: Implement entrance effect if needed
+                          print("User entered: $userId");
+                        },
+                        onLeave: (p0) async {
+                          print("testing live user leaving p0 ${p0}");
+                        },
+                      ),
+                      duration: ZegoLiveStreamingDurationEvents(
+                        onUpdated: (p0) {
+                          if (p0.inSeconds >= 30 * 60) {
+                            ZegoUIKitPrebuiltLiveStreamingController().leave(
+                              context,
+                            );
+                          }
+                        },
+                      ),
+                      // pk: pkEvents?.event,
+                      pk: ZegoLiveStreamingPKEvents(
+                        onIncomingRequestReceived: (event, defaultAction) {
+                          debugPrint(
+                            'custom event, onIncomingPKBattleRequestReceived, event:$event',
+                          );
+                          defaultAction.call();
+                        },
+                        onIncomingRequestCancelled: (event, defaultAction) {
+                          debugPrint(
+                            'custom event, onIncomingPKBattleRequestCancelled, event:$event',
+                          );
+                          defaultAction.call();
+
+                          requestIDNotifier.value = '';
+
+                          removeRequestingHostsMap(event.requestID);
+                        },
+                        onIncomingRequestTimeout: (event, defaultAction) {
+                          debugPrint(
+                            'custom event, onIncomingPKBattleRequestTimeout, event:$event',
+                          );
+                          defaultAction.call();
+
+                          requestIDNotifier.value = '';
+
+                          removeRequestingHostsMap(event.requestID);
+                        },
+                        onOutgoingRequestAccepted: (
+                          event,
+                          defaultAction,
+                        ) async {
+                          debugPrint(
+                            'custom event, onOutgoingPKBattleRequestAccepted, event:$event',
+                          );
+                          defaultAction.call();
+
+                          removeRequestingHostsMapWhenRemoteHostDone(
+                            event.requestID,
+                            event.fromHost.id,
+                          );
+                        },
+                        onOutgoingRequestRejected: (event, defaultAction) {
+                          debugPrint(
+                            'custom event, onOutgoingPKBattleRequestRejected, event:$event',
+                          );
+                          defaultAction.call();
+
+                          removeRequestingHostsMapWhenRemoteHostDone(
+                            event.requestID,
+                            event.fromHost.id,
+                          );
+                        },
+                        onOutgoingRequestTimeout: (event, defaultAction) {
+                          debugPrint(
+                            'custom event, onOutgoingPKBattleRequestTimeout, event:$event',
+                          );
+
+                          removeRequestingHostsMapWhenRemoteHostDone(
+                            event.requestID,
+                            event.fromHost.id,
+                          );
+
+                          defaultAction.call();
+                        },
+                        onEnded: (event, defaultAction) async {
+                          debugPrint(
+                            'custom event, onPKBattleEnded, event:$event',
+                          );
+                          defaultAction.call();
+
+                          requestIDNotifier.value = '';
+
+                          removeRequestingHostsMapWhenRemoteHostDone(
+                            event.requestID,
+                            event.fromHost.id,
+                          );
+                        },
+                        onUserOffline: (event, defaultAction) async {
+                          debugPrint(
+                            'custom event, onUserOffline, event:$event',
+                          );
+                          defaultAction.call();
+
+                          removeRequestingHostsMapWhenRemoteHostDone(
+                            event.requestID,
+                            event.fromHost.id,
+                          );
+                        },
+                        onUserQuited: (event, defaultAction) async {
+                          debugPrint(
+                            'custom event, onUserQuited, event:$event',
+                          );
+                          defaultAction.call();
+
+                          if (event.fromHost.id ==
+                              ZegoUIKit().getLocalUser().id) {
+                            requestIDNotifier.value = '';
+                          }
+
+                          removeRequestingHostsMapWhenRemoteHostDone(
+                            event.requestID,
+                            event.fromHost.id,
+                          );
+                        },
+                        onUserJoined: (ZegoUIKitUser user) {
+                          debugPrint('custom event, onUserJoined:$user');
+                        },
+                        onUserDisconnected: (ZegoUIKitUser user) {
+                          debugPrint('custom event, onUserDisconnected:$user');
+                        },
+                        onUserReconnecting: (ZegoUIKitUser user) {
+                          debugPrint('custom event, onUserReconnecting:$user');
+                        },
+                        onUserReconnected: (ZegoUIKitUser user) {
+                          debugPrint('custom event, onUserReconnected:$user');
+                        },
+                      ),
+                      onStateUpdated: (state) async {
+                        // liveStateNotifier.value = state;
+                        // PKStateNotifier.value = state;
+
+                        if (state == ZegoLiveStreamingState.idle) {
+                          print("liveStreaming is idle");
+                          developer.log("liveStreaming is idle");
+                        }
+
+                        // Track when Zego actually connects (not idle means connected)
+                        if (state != ZegoLiveStreamingState.idle &&
+                            !_zegoConnected) {
+                          _zegoConnected = true;
+                          // Cancel timeout since we connected successfully
+                          _connectionTimeoutTimer?.cancel();
+
+                          // Create live stream in backend AFTER successful connection
+                          if (widget.isHost) {
+                            await _createLiveStream();
+                          }
+
+                          // Start heartbeat to keep stream alive
+                          _startHeartbeat();
+
+                          print("✅ Zego connected - Live stream is now active");
+                          developer.log(
+                            "✅ Zego connected - Live stream is now active",
+                          );
+                        }
+
+                        // Additional logging for connection states
+                        if (state != ZegoLiveStreamingState.idle) {
+                          print("🔄 Zego state: $state");
+                        }
+
+                        if (state == ZegoLiveStreamingState.inPKBattle) {
+                          setState(() {
+                            isInPKBattle = true;
+                          });
+                          print("PKBattle in Session");
+                          developer.log("PKBattle in Session");
+                        }
+                      },
+                      topMenuBar: ZegoLiveStreamingTopMenuBarEvents(
+                        onHostAvatarClicked: (host) async {
+                          String hostId = host.id;
+                          // TODO: Implement host profile view
+                          print("Host avatar clicked: $hostId");
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+
+              // Gift Animation Overlay
+              if (_isShowingGift && _currentGift != null)
+                GiftAnimationOverlay(
+                  gift: GiftModel(
+                    id: _currentGift!.giftId,
+                    name: _currentGift!.giftName,
+                    iconUrl: _currentGift!.giftIcon ?? '',
+                    svgaUrl: _currentGift!.animation ?? '',
+                    weight: _currentGift!.coins,
+                    type: GiftType.fromString(
+                      _currentGift!.giftId.contains('svga') ? 'svga' : 'gif',
+                    ), // Simple heuristic
                   ),
-                  // pk: pkEvents?.event,
-                  pk: ZegoLiveStreamingPKEvents(
-                    onIncomingRequestReceived: (event, defaultAction) {
-                      debugPrint(
-                        'custom event, onIncomingPKBattleRequestReceived, event:$event',
-                      );
-                      defaultAction.call();
-                    },
-                    onIncomingRequestCancelled: (event, defaultAction) {
-                      debugPrint(
-                        'custom event, onIncomingPKBattleRequestCancelled, event:$event',
-                      );
-                      defaultAction.call();
-
-                      requestIDNotifier.value = '';
-
-                      removeRequestingHostsMap(event.requestID);
-                    },
-                    onIncomingRequestTimeout: (event, defaultAction) {
-                      debugPrint(
-                        'custom event, onIncomingPKBattleRequestTimeout, event:$event',
-                      );
-                      defaultAction.call();
-
-                      requestIDNotifier.value = '';
-
-                      removeRequestingHostsMap(event.requestID);
-                    },
-                    onOutgoingRequestAccepted: (event, defaultAction) async {
-                      debugPrint(
-                        'custom event, onOutgoingPKBattleRequestAccepted, event:$event',
-                      );
-                      defaultAction.call();
-
-                      removeRequestingHostsMapWhenRemoteHostDone(
-                        event.requestID,
-                        event.fromHost.id,
-                      );
-                    },
-                    onOutgoingRequestRejected: (event, defaultAction) {
-                      debugPrint(
-                        'custom event, onOutgoingPKBattleRequestRejected, event:$event',
-                      );
-                      defaultAction.call();
-
-                      removeRequestingHostsMapWhenRemoteHostDone(
-                        event.requestID,
-                        event.fromHost.id,
-                      );
-                    },
-                    onOutgoingRequestTimeout: (event, defaultAction) {
-                      debugPrint(
-                        'custom event, onOutgoingPKBattleRequestTimeout, event:$event',
-                      );
-
-                      removeRequestingHostsMapWhenRemoteHostDone(
-                        event.requestID,
-                        event.fromHost.id,
-                      );
-
-                      defaultAction.call();
-                    },
-                    onEnded: (event, defaultAction) async {
-                      debugPrint('custom event, onPKBattleEnded, event:$event');
-                      defaultAction.call();
-
-                      requestIDNotifier.value = '';
-
-                      removeRequestingHostsMapWhenRemoteHostDone(
-                        event.requestID,
-                        event.fromHost.id,
-                      );
-                    },
-                    onUserOffline: (event, defaultAction) async {
-                      debugPrint('custom event, onUserOffline, event:$event');
-                      defaultAction.call();
-
-                      removeRequestingHostsMapWhenRemoteHostDone(
-                        event.requestID,
-                        event.fromHost.id,
-                      );
-                    },
-                    onUserQuited: (event, defaultAction) async {
-                      debugPrint('custom event, onUserQuited, event:$event');
-                      defaultAction.call();
-
-                      if (event.fromHost.id == ZegoUIKit().getLocalUser().id) {
-                        requestIDNotifier.value = '';
-                      }
-
-                      removeRequestingHostsMapWhenRemoteHostDone(
-                        event.requestID,
-                        event.fromHost.id,
-                      );
-                    },
-                    onUserJoined: (ZegoUIKitUser user) {
-                      debugPrint('custom event, onUserJoined:$user');
-                    },
-                    onUserDisconnected: (ZegoUIKitUser user) {
-                      debugPrint('custom event, onUserDisconnected:$user');
-                    },
-                    onUserReconnecting: (ZegoUIKitUser user) {
-                      debugPrint('custom event, onUserReconnecting:$user');
-                    },
-                    onUserReconnected: (ZegoUIKitUser user) {
-                      debugPrint('custom event, onUserReconnected:$user');
-                    },
-                  ),
-                  onStateUpdated: (state) async {
-                    // liveStateNotifier.value = state;
-                    // PKStateNotifier.value = state;
-
-                    if (state == ZegoLiveStreamingState.idle) {
-                      print("liveStreaming is idle");
-                      developer.log("liveStreaming is idle");
-                    }
-
-                    // Track when Zego actually connects (not idle means connected)
-                    if (state != ZegoLiveStreamingState.idle &&
-                        !_zegoConnected) {
-                      _zegoConnected = true;
-                      // Cancel timeout since we connected successfully
-                      _connectionTimeoutTimer?.cancel();
-
-                      // Create live stream in backend AFTER successful connection
-                      if (widget.isHost) {
-                        await _createLiveStream();
-                      }
-
-                      // Start heartbeat to keep stream alive
-                      _startHeartbeat();
-
-                      print("✅ Zego connected - Live stream is now active");
-                      developer.log(
-                        "✅ Zego connected - Live stream is now active",
-                      );
-                    }
-
-                    // Additional logging for connection states
-                    if (state != ZegoLiveStreamingState.idle) {
-                      print("🔄 Zego state: $state");
-                    }
-
-                    if (state == ZegoLiveStreamingState.inPKBattle) {
-                      setState(() {
-                        isInPKBattle = true;
-                      });
-                      print("PKBattle in Session");
-                      developer.log("PKBattle in Session");
-                    }
+                  senderName: _currentGift!.senderName,
+                  onComplete: () {
+                    _showNextGift();
                   },
-                  topMenuBar: ZegoLiveStreamingTopMenuBarEvents(
-                    onHostAvatarClicked: (host) async {
-                      String hostId = host.id;
-                      // TODO: Implement host profile view
-                      print("Host avatar clicked: $hostId");
+                ),
+
+              // Gift Combo Multiplier
+              if (_isShowingGift && _comboCount > 1)
+                Positioned(
+                  left: 100,
+                  bottom: 250,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0.5, end: 1.5),
+                    duration: const Duration(milliseconds: 200),
+                    builder: (context, scale, child) {
+                      return Transform.scale(
+                        scale: scale,
+                        child: Text(
+                          'x$_comboCount',
+                          style: const TextStyle(
+                            color: Colors.yellow,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            fontStyle: FontStyle.italic,
+                            shadows: [
+                              Shadow(
+                                blurRadius: 10,
+                                color: Colors.orange,
+                                offset: Offset(2, 2),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),
-              ),
 
               //PK Battle Invite Button
               // if (widget.isHost == true)
@@ -2660,10 +2796,28 @@ class _ZegoLivestreamingState extends State<ZegoLivestreaming>
       builder:
           (context) => GiftBottomSheet(
             liveStreamId: liveStream.id,
-            onGiftSent: (gift) {
-              // TODO: Implement actual gift sending logic via service
-              print('Gift sent: ${gift.name}');
-              ToasterService.showSuccess(context, 'Sent ${gift.name}!');
+            receiverId: hostUser.id ?? '',
+            onGiftSent: (gift) async {
+              try {
+                final result = await GiftService.sendGift(
+                  giftId: gift.id,
+                  receiverId: hostUser.id ?? '',
+                  context: 'live',
+                  contextId: liveStream.id,
+                  quantity: 1,
+                );
+                if (result['success'] == true) {
+                  print('Gift sent successfully: ${gift.name}');
+                } else {
+                  ToasterService.showError(
+                    context,
+                    result['message'] ?? 'Failed to send ${gift.name}',
+                  );
+                }
+              } catch (e) {
+                print('Error sending gift: $e');
+                ToasterService.showError(context, 'Error sending gift');
+              }
             },
           ),
     );

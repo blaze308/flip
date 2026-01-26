@@ -22,6 +22,8 @@ class _CreateImagePostScreenState extends State<CreateImagePostScreen> {
   bool _isLoading = false;
   bool _isPublic = true;
   int _currentImageIndex = 0;
+  double _uploadProgress = 0.0;
+  String _statusMessage = '';
 
   @override
   void dispose() {
@@ -31,187 +33,247 @@ class _CreateImagePostScreenState extends State<CreateImagePostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Colors.black,
+          appBar: _buildAppBar(),
+          body: _buildBody(),
         ),
-        title: const Text(
-          'Create Photo Post',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+        if (_isLoading) _buildLoadingOverlay(),
+      ],
+    );
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      title: const Text(
+        'Create Photo Post',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      centerTitle: true,
+      actions: [
+        TextButton(
+          onPressed: _isLoading || _selectedImages.isEmpty ? null : _createPost,
+          child: Text(
+            'Post',
+            style: TextStyle(
+              color:
+                  _selectedImages.isEmpty
+                      ? Colors.grey
+                      : const Color(0xFF4ECDC4),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
-        centerTitle: true,
-        actions: [
-          TextButton(
-            onPressed:
-                _isLoading || _selectedImages.isEmpty ? null : _createPost,
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(
+      children: [
+        // Image preview area
+        Expanded(
+          flex: 2,
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey[800]!, width: 2),
+            ),
             child:
-                _isLoading
-                    ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                _selectedImages.isEmpty
+                    ? _buildImagePlaceholder()
+                    : _buildImagePreview(),
+          ),
+        ),
+
+        // Caption and options
+        Expanded(
+          flex: 2,
+          child: Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(25),
+                topRight: Radius.circular(25),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[600],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    )
-                    : Text(
-                      'Post',
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Caption input
+                    const Text(
+                      'Caption',
                       style: TextStyle(
-                        color:
-                            _selectedImages.isEmpty
-                                ? Colors.grey
-                                : const Color(0xFF4ECDC4),
+                        color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Image preview area
-          Expanded(
-            flex: 2,
-            child: Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.grey[800]!, width: 2),
-              ),
-              child:
-                  _selectedImages.isEmpty
-                      ? _buildImagePlaceholder()
-                      : _buildImagePreview(),
-            ),
-          ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _captionController,
+                      maxLines: 3,
+                      maxLength: 2000,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      decoration: InputDecoration(
+                        hintText: 'Write a caption...',
+                        hintStyle: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 16,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[900],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        counterStyle: TextStyle(color: Colors.grey[400]),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
 
-          // Caption and options
-          Expanded(
-            flex: 2,
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(25),
-                  topRight: Radius.circular(25),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Handle bar
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
+                    // Clear all button (only show if multiple images)
+                    if (_selectedImages.length > 1) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _clearImages,
+                          icon: const Icon(Icons.clear_all),
+                          label: const Text('Clear All Images'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red[700],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // Caption input
-                      const Text(
-                        'Caption',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _captionController,
-                        maxLines: 3,
-                        maxLength: 2000,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Write a caption...',
-                          hintStyle: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 16,
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[900],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          counterStyle: TextStyle(color: Colors.grey[400]),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      // Clear all button (only show if multiple images)
-                      if (_selectedImages.length > 1) ...[
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _clearImages,
-                            icon: const Icon(Icons.clear_all),
-                            label: const Text('Clear All Images'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red[700],
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-
-                      // Privacy setting
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Public Post',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Switch(
-                            value: _isPublic,
-                            activeColor: const Color(0xFF4ECDC4),
-                            onChanged: (value) {
-                              setState(() => _isPublic = value);
-                            },
-                          ),
-                        ],
-                      ),
                     ],
-                  ),
+
+                    // Privacy setting
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Public Post',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Switch(
+                          value: _isPublic,
+                          activeColor: const Color(0xFF4ECDC4),
+                          onChanged: (value) {
+                            setState(() => _isPublic = value);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.85),
+      width: double.infinity,
+      height: double.infinity,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: CircularProgressIndicator(
+                    value: _uploadProgress > 0 ? _uploadProgress : null,
+                    strokeWidth: 8,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF4ECDC4),
+                    ),
+                    backgroundColor: Colors.grey[800],
+                  ),
+                ),
+                if (_uploadProgress > 0)
+                  Text(
+                    '${(_uploadProgress * 100).toInt()}%',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                else
+                  const Icon(Icons.cloud_upload, color: Colors.white, size: 40),
+              ],
+            ),
+            const SizedBox(height: 30),
+            Text(
+              _statusMessage,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Please wait while we process and upload your photos. Optimization is being applied for best quality.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -466,24 +528,39 @@ class _CreateImagePostScreenState extends State<CreateImagePostScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _uploadProgress = 0.0;
+      _statusMessage = 'Initializing...';
+    });
 
     try {
-      // Upload images to Cloudinary via backend
-      print('📸 Uploading ${_selectedImages.length} images to Cloudinary...');
+      // 1. Upload images
+      setState(() => _statusMessage = 'Uploading photos...');
       final List<String> imageUrls;
 
       if (_selectedImages.length == 1) {
         // Single image upload
-        final imageUrl = await PostService.uploadImage(_selectedImages[0]);
-        imageUrls = [imageUrl];
+        imageUrls = [
+          await PostService.uploadImage(
+            _selectedImages[0],
+            onProgress: (progress) {
+              setState(() => _uploadProgress = progress);
+            },
+          ),
+        ];
       } else {
         // Multiple images upload
-        imageUrls = await PostService.uploadMultipleImages(_selectedImages);
+        imageUrls = await PostService.uploadMultipleImages(
+          _selectedImages,
+          onProgress: (progress) {
+            setState(() => _uploadProgress = progress);
+          },
+        );
       }
 
-      print('📸 All images uploaded successfully to Cloudinary: $imageUrls');
-
+      // 2. Create the final post
+      setState(() => _statusMessage = 'Finalizing post...');
       final createdPost = await PostService.createPost(
         type: PostType.image,
         content:

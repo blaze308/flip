@@ -31,6 +31,8 @@ class SocketService {
       StreamController.broadcast();
   final StreamController<CallEndedEvent> _callEndedController =
       StreamController.broadcast();
+  final StreamController<GiftReceiptEvent> _giftReceiptController =
+      StreamController.broadcast();
 
   // Streams for listening to events
   Stream<MessageModel> get onNewMessage => _newMessageController.stream;
@@ -43,6 +45,7 @@ class SocketService {
   Stream<CallInvitationEvent> get onCallInvitation =>
       _callInvitationController.stream;
   Stream<CallEndedEvent> get onCallEnded => _callEndedController.stream;
+  Stream<GiftReceiptEvent> get onGiftReceived => _giftReceiptController.stream;
 
   // Getters
   bool get isConnected => _isConnected;
@@ -373,6 +376,31 @@ class SocketService {
         print('📞 SocketService: Error parsing call ended: $e');
       }
     });
+
+    // Gift Events
+    _socket!.on('gift_received', (data) {
+      try {
+        print('🎁 SocketService: Gift received notification');
+        final giftEvent = GiftReceiptEvent.fromJson(
+          data as Map<String, dynamic>,
+        );
+        _giftReceiptController.add(giftEvent);
+      } catch (e) {
+        print('🎁 SocketService: Error parsing gift receipt: $e');
+      }
+    });
+
+    _socket!.on('live:gift:sent', (data) {
+      try {
+        print('🎁 SocketService: Live room gift event');
+        final giftEvent = GiftReceiptEvent.fromJson(
+          data as Map<String, dynamic>,
+        );
+        _giftReceiptController.add(giftEvent);
+      } catch (e) {
+        print('🎁 SocketService: Error parsing live gift receipt: $e');
+      }
+    });
   }
 
   /// Join a chat room
@@ -487,6 +515,7 @@ class SocketService {
     _connectionController.close();
     _callInvitationController.close();
     _callEndedController.close();
+    _giftReceiptController.close();
   }
 }
 
@@ -655,6 +684,66 @@ class CallEndedEvent {
       callId: json['callId'] as String,
       endedBy: json['endedBy'] as String,
       endedAt: DateTime.parse(json['endedAt'] as String),
+    );
+  }
+}
+
+class GiftReceiptEvent {
+  final String giftId;
+  final String giftName;
+  final String? giftIcon;
+  final String? animation;
+  final int coins;
+  final int quantity;
+  final String senderId;
+  final String senderName;
+  final String? senderAvatar;
+  final bool isSenderMVP;
+  final String receiverId;
+  final String receiverName;
+  final String context;
+  final String? contextId;
+  final DateTime timestamp;
+
+  const GiftReceiptEvent({
+    required this.giftId,
+    required this.giftName,
+    this.giftIcon,
+    this.animation,
+    required this.coins,
+    required this.quantity,
+    required this.senderId,
+    required this.senderName,
+    this.senderAvatar,
+    this.isSenderMVP = false,
+    required this.receiverId,
+    required this.receiverName,
+    required this.context,
+    this.contextId,
+    required this.timestamp,
+  });
+
+  factory GiftReceiptEvent.fromJson(Map<String, dynamic> json) {
+    final gift = json['gift'] as Map<String, dynamic>;
+    final sender = json['sender'] as Map<String, dynamic>;
+    final receiver = json['receiver'] as Map<String, dynamic>;
+
+    return GiftReceiptEvent(
+      giftId: gift['id'] as String,
+      giftName: gift['name'] as String,
+      giftIcon: gift['icon'] as String?,
+      animation: gift['animation'] as String?,
+      coins: (gift['coins'] as num).toInt(),
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      senderId: sender['userId'] as String,
+      senderName: sender['displayName'] as String,
+      senderAvatar: sender['photoURL'] as String?,
+      isSenderMVP: sender['isMVP'] as bool? ?? false,
+      receiverId: receiver['userId'] as String,
+      receiverName: receiver['displayName'] as String,
+      context: json['context'] as String,
+      contextId: json['contextId'] as String?,
+      timestamp: DateTime.parse(json['timestamp'] as String),
     );
   }
 }

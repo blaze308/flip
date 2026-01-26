@@ -13,9 +13,7 @@ class GiftService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/gifts'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
       );
 
       print('📱 GiftService.getAllGifts: ${response.statusCode}');
@@ -57,8 +55,9 @@ class GiftService {
       };
       if (context != null) queryParams['context'] = context;
 
-      final uri = Uri.parse('$baseUrl/gifts/received')
-          .replace(queryParameters: queryParams);
+      final uri = Uri.parse(
+        '$baseUrl/gifts/received',
+      ).replace(queryParameters: queryParams);
 
       final response = await http.get(
         uri,
@@ -107,8 +106,9 @@ class GiftService {
         'skip': skip.toString(),
       };
 
-      final uri = Uri.parse('$baseUrl/gifts/sent')
-          .replace(queryParameters: queryParams);
+      final uri = Uri.parse(
+        '$baseUrl/gifts/sent',
+      ).replace(queryParameters: queryParams);
 
       final response = await http.get(
         uri,
@@ -186,14 +186,13 @@ class GiftService {
         'skip': skip.toString(),
       };
 
-      final uri = Uri.parse('$baseUrl/gifts/user/$userId/received')
-          .replace(queryParameters: queryParams);
+      final uri = Uri.parse(
+        '$baseUrl/gifts/user/$userId/received',
+      ).replace(queryParameters: queryParams);
 
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
       );
 
       print('📱 GiftService.getUserReceivedGifts: ${response.statusCode}');
@@ -216,5 +215,109 @@ class GiftService {
       return {'gifts': [], 'total': 0};
     }
   }
-}
 
+  /// Send a gift to another user
+  static Future<Map<String, dynamic>> sendGift({
+    required String giftId,
+    required String receiverId,
+    String context = 'live',
+    String? contextId,
+    String? message,
+    int quantity = 1,
+  }) async {
+    try {
+      final token = await TokenAuthService.getToken();
+      if (token == null) {
+        print('❌ GiftService: No auth token');
+        return {'success': false, 'message': 'Not authenticated'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/gifts/send'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'giftId': giftId,
+          'receiverId': receiverId,
+          'context': context,
+          'contextId': contextId,
+          'message': message,
+          'quantity': quantity,
+        }),
+      );
+
+      print('📱 GiftService.sendGift: ${response.statusCode}');
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data']};
+      } else if (response.statusCode == 400 &&
+          data['message'] == 'Insufficient coins') {
+        // Return insufficient balance info
+        return {
+          'success': false,
+          'insufficientBalance': true,
+          'required': data['data']['required'],
+          'current': data['data']['current'],
+          'shortfall': data['data']['shortfall'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to send gift',
+        };
+      }
+    } catch (e) {
+      print('❌ GiftService.sendGift error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Purchase coins and automatically send a gift
+  /// This is used when user doesn't have enough coins
+  static Future<Map<String, dynamic>> purchaseAndSendGift({
+    required String paymentMethod,
+    required String coinPackageId,
+    required Map<String, dynamic> giftData,
+  }) async {
+    try {
+      final token = await TokenAuthService.getToken();
+      if (token == null) {
+        print('❌ GiftService: No auth token');
+        return {'success': false, 'message': 'Not authenticated'};
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/payments/purchase-and-send-gift'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode({
+          'paymentMethod': paymentMethod,
+          'coinPackageId': coinPackageId,
+          'giftData': giftData,
+        }),
+      );
+
+      print('📱 GiftService.purchaseAndSendGift: ${response.statusCode}');
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data']};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to purchase and send gift',
+        };
+      }
+    } catch (e) {
+      print('❌ GiftService.purchaseAndSendGift error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+}

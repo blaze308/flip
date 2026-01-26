@@ -4,9 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 
-import 'screens/onboarding/onboarding_screen.dart';
-import 'screens/onboarding/onboarding_screen_two.dart';
-import 'screens/onboarding/onboarding_screen_three.dart';
+import 'screens/onboarding/unified_onboarding_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/forget_password_screen.dart';
@@ -25,8 +23,15 @@ import 'screens/create/create_image_story_screen.dart';
 import 'screens/create/create_video_story_screen.dart';
 import 'screens/create/create_audio_story_screen.dart';
 import 'screens/chat/message_list_screen.dart';
+import 'screens/settings/settings_screen.dart';
+import 'screens/settings/account_security_screen.dart';
+import 'screens/settings/privacy_settings_screen.dart';
+import 'screens/settings/notification_settings_screen.dart';
+import 'screens/settings/language_settings_screen.dart';
+import 'screens/settings/about_screen.dart';
 import 'services/app_lifecycle_manager.dart';
 import 'services/connectivity_service.dart';
+import 'screens/utility/gift_leaderboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,9 +70,7 @@ class AncientFlipApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const TokenAppRouter(),
-        '/onboarding': (context) => const OnboardingScreen(),
-        '/onboarding2': (context) => const OnboardingScreenTwo(),
-        '/onboarding3': (context) => const OnboardingScreenThree(),
+        '/onboarding': (context) => const UnifiedOnboardingScreen(),
         '/register': (context) => const RegisterScreen(),
         '/login': (context) => const LoginScreen(),
         '/forget-password': (context) => const ForgetPasswordScreen(),
@@ -85,6 +88,14 @@ class AncientFlipApp extends StatelessWidget {
         '/create-video-story': (context) => const CreateVideoStoryScreen(),
         '/create-audio-story': (context) => const CreateAudioStoryScreen(),
         '/messages': (context) => const MessageListScreen(),
+        '/settings': (context) => const SettingsScreen(),
+        '/settings/account': (context) => const AccountSecurityScreen(),
+        '/settings/privacy': (context) => const PrivacySettingsScreen(),
+        '/settings/notifications':
+            (context) => const NotificationSettingsScreen(),
+        '/settings/language': (context) => const LanguageSettingsScreen(),
+        '/settings/about': (context) => const AboutScreen(),
+        '/utility/gift-leaderboard': (context) => const GiftLeaderboardScreen(),
       },
     );
   }

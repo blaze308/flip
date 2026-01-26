@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:lottie/lottie.dart';
+import 'package:flutter/services.dart';
 import '../models/gift_model.dart';
 import '../widgets/svga_player_widget.dart';
+import '../services/audio_service.dart';
 
 /// Gift Animation Overlay
 /// Shows animated gifts when sent in live streams
@@ -54,11 +57,24 @@ class _GiftAnimationOverlayState extends State<GiftAnimationOverlay>
     );
 
     _controller.forward().then((_) {
-      Future.delayed(const Duration(milliseconds: 2000), () {
-        if (mounted) {
-          widget.onComplete();
-        }
-      });
+      // Trigger haptic feedback for big gifts
+      if (widget.gift.weight >= 10000) {
+        HapticFeedback.vibrate();
+      } else {
+        HapticFeedback.lightImpact();
+      }
+
+      // Industry Standard: Play sound effect when gift appears
+      AudioService.playGiftSound(widget.gift.weight);
+
+      // Auto-dismiss if not SVGA (SVGA handles its own completion often)
+      if (widget.gift.type != GiftType.svga) {
+        Future.delayed(const Duration(milliseconds: 2000), () {
+          if (mounted) {
+            widget.onComplete();
+          }
+        });
+      }
     });
   }
 
@@ -165,6 +181,19 @@ class _GiftAnimationOverlayState extends State<GiftAnimationOverlay>
         width: 300,
         height: 300,
         loop: false,
+        onComplete: () {
+          if (mounted) {
+            widget.onComplete();
+          }
+        },
+      );
+    } else if (widget.gift.type == GiftType.lottie) {
+      return Lottie.network(
+        widget.gift.svgaUrl,
+        width: 300,
+        height: 300,
+        fit: BoxFit.contain,
+        repeat: false,
       );
     } else if (widget.gift.type == GiftType.mp4) {
       // TODO: Implement MP4 player if needed

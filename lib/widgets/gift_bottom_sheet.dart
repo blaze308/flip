@@ -2,17 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/gift_model.dart';
 import '../services/live_streaming_service.dart';
+import '../services/gift_service.dart';
 import 'custom_toaster.dart';
+import 'gift_payment_dialog.dart';
 
 /// Gift Bottom Sheet
 /// Shows available gifts for sending in live streams
 class GiftBottomSheet extends StatefulWidget {
   final String liveStreamId;
+  final String receiverId;
+  final String context;
   final Function(GiftModel gift) onGiftSent;
 
   const GiftBottomSheet({
     super.key,
     required this.liveStreamId,
+    required this.receiverId,
+    this.context = 'live',
     required this.onGiftSent,
   });
 
@@ -64,7 +70,9 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
     switch (category) {
       case 'Popular':
         // Mid-range gifts (20k-40k)
-        return _gifts.where((g) => g.weight >= 20000 && g.weight <= 40000).toList();
+        return _gifts
+            .where((g) => g.weight >= 20000 && g.weight <= 40000)
+            .toList();
       case 'Premium':
         // High-value gifts (40k+)
         return _gifts.where((g) => g.weight > 40000).toList();
@@ -85,20 +93,62 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
     if (_selectedGift == null) return;
 
     try {
-      // TODO: Implement gift sending API
-      // For now, just call the callback
-      widget.onGiftSent(_selectedGift!);
-      
+      setState(() => _isLoading = true);
+
+      // Attempt to send the gift
+      final result = await GiftService.sendGift(
+        giftId: _selectedGift!.id,
+        receiverId: widget.receiverId,
+        context: widget.context,
+        contextId: widget.liveStreamId,
+        quantity: _quantity,
+      );
+
       if (mounted) {
-        ToasterService.showSuccess(
-          context,
-          'Sent ${_selectedGift!.name} x$_quantity',
-        );
-        Navigator.pop(context);
+        setState(() => _isLoading = false);
+
+        if (result['success'] == true) {
+          // Gift sent successfully
+          widget.onGiftSent(_selectedGift!);
+          ToasterService.showSuccess(
+            context,
+            'Sent ${_selectedGift!.name} x$_quantity',
+          );
+          Navigator.pop(context);
+        } else if (result['insufficientBalance'] == true) {
+          // Show payment dialog
+          final paymentResult = await showDialog<bool>(
+            context: context,
+            builder:
+                (context) => GiftPaymentDialog(
+                  gift: _selectedGift!,
+                  receiverId: widget.receiverId,
+                  context: widget.context,
+                  contextId: widget.liveStreamId,
+                  quantity: _quantity,
+                  required: result['required'] ?? 0,
+                  current: result['current'] ?? 0,
+                  shortfall: result['shortfall'] ?? 0,
+                ),
+          );
+
+          if (paymentResult == true && mounted) {
+            // Gift was sent after payment
+            widget.onGiftSent(_selectedGift!);
+            Navigator.pop(context);
+          }
+        } else {
+          // Other error
+          ToasterService.showError(
+            context,
+            result['message'] ?? 'Failed to send gift',
+          );
+        }
       }
     } catch (e) {
       print('❌ Error sending gift: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ToasterService.showError(context, 'Failed to send gift');
       }
     }
@@ -120,13 +170,14 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
           _buildHeader(),
           _buildTabBar(),
           Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF4ECDC4),
-                    ),
-                  )
-                : _buildGiftGrid(),
+            child:
+                _isLoading
+                    ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF4ECDC4),
+                      ),
+                    )
+                    : _buildGiftGrid(),
           ),
           if (_selectedGift != null) _buildSendSection(),
         ],
@@ -148,6 +199,16 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
             ),
           ),
           const Spacer(),
+          IconButton(
+            icon: const Icon(
+              Icons.emoji_events_outlined,
+              color: Colors.pinkAccent,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamed(context, '/utility/gift-leaderboard');
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.close, color: Colors.white),
             onPressed: () => Navigator.pop(context),
@@ -196,10 +257,7 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
   Widget _buildGiftList(List<GiftModel> gifts) {
     if (gifts.isEmpty) {
       return const Center(
-        child: Text(
-          'No gifts available',
-          style: TextStyle(color: Colors.grey),
-        ),
+        child: Text('No gifts available', style: TextStyle(color: Colors.grey)),
       );
     }
 
@@ -215,19 +273,19 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
       itemBuilder: (context, index) {
         final gift = gifts[index];
         final isSelected = _selectedGift?.id == gift.id;
-        
+
         return GestureDetector(
           onTap: () => _onGiftTap(gift),
           child: Container(
             decoration: BoxDecoration(
-              color: isSelected
-                  ? const Color(0xFF4ECDC4).withOpacity(0.2)
-                  : const Color(0xFF1A1A1A),
+              color:
+                  isSelected
+                      ? const Color(0xFF4ECDC4).withOpacity(0.2)
+                      : const Color(0xFF1A1A1A),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected
-                    ? const Color(0xFF4ECDC4)
-                    : Colors.transparent,
+                color:
+                    isSelected ? const Color(0xFF4ECDC4) : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -239,24 +297,26 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
                   imageUrl: gift.iconUrl,
                   width: 50,
                   height: 50,
-                  placeholder: (context, url) => const SizedBox(
-                    width: 50,
-                    height: 50,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF4ECDC4),
-                        strokeWidth: 2,
+                  placeholder:
+                      (context, url) => const SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF4ECDC4),
+                            strokeWidth: 2,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => const Icon(
-                    Icons.card_giftcard,
-                    color: Color(0xFF4ECDC4),
-                    size: 50,
-                  ),
+                  errorWidget:
+                      (context, url, error) => const Icon(
+                        Icons.card_giftcard,
+                        color: Color(0xFF4ECDC4),
+                        size: 50,
+                      ),
                 ),
                 const SizedBox(height: 4),
-                
+
                 // Gift name
                 Text(
                   gift.name,
@@ -269,11 +329,14 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                 ),
-                
+
                 // Gift price
                 Container(
                   margin: const EdgeInsets.only(top: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFfcb69f).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
@@ -308,7 +371,7 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
 
   Widget _buildSendSection() {
     final totalPrice = (_selectedGift?.weight ?? 0) * _quantity;
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -361,9 +424,9 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
               ],
             ),
           ),
-          
+
           const SizedBox(width: 16),
-          
+
           // Send button
           Expanded(
             child: ElevatedButton(
@@ -406,4 +469,3 @@ class _GiftBottomSheetState extends State<GiftBottomSheet>
     );
   }
 }
-

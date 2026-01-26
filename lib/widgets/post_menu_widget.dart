@@ -5,6 +5,7 @@ import '../services/post_service.dart';
 import '../services/contextual_auth_service.dart';
 import '../services/deep_link_service.dart';
 import 'custom_toaster.dart';
+import 'report_post_bottom_sheet.dart';
 
 class PostMenuWidget extends StatelessWidget {
   final PostModel post;
@@ -233,6 +234,44 @@ class PostMenuWidget extends StatelessWidget {
                 ],
               ),
             ),
+            PopupMenuItem<String>(
+              value: 'report',
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.flag_outlined,
+                      color: Colors.red,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Report Post',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        'Flag inappropriate content',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
     );
   }
@@ -254,6 +293,9 @@ class PostMenuWidget extends StatelessWidget {
           break;
         case 'unfollow':
           await _toggleFollow(context);
+          break;
+        case 'report':
+          _showReportSheet(context);
           break;
       }
     } catch (e) {
@@ -384,6 +426,15 @@ class PostMenuWidget extends StatelessWidget {
         ToasterService.showError(context, 'Failed to share post');
       }
     }
+  }
+
+  void _showReportSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ReportPostBottomSheet(postId: post.id),
+    );
   }
 }
 

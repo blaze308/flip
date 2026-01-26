@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
+import 'package:flutter/material.dart';
+import 'package:video_compress/video_compress.dart';
 import '../models/post_model.dart';
 import 'optimistic_ui_service.dart';
 import 'token_auth_service.dart';
@@ -14,6 +15,14 @@ class PostService {
 
   // Development mode flag - set to true for local testing
   static const bool isDevelopmentMode = false;
+
+  static final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 30),
+    ),
+  );
 
   /// Get authentication headers (returns null for guest users)
   /// Uses JWT token system exclusively
@@ -451,7 +460,39 @@ class PostService {
       if (fontFamily != null) textStyle['fontFamily'] = fontFamily;
       if (fontSize != null) textStyle['fontSize'] = fontSize.toInt();
       if (fontWeight != null) {
-        textStyle['fontWeight'] = fontWeight.toString().split('.').last;
+        String weightValue;
+        switch (fontWeight) {
+          case FontWeight.w100:
+            weightValue = '100';
+            break;
+          case FontWeight.w200:
+            weightValue = '200';
+            break;
+          case FontWeight.w300:
+            weightValue = '300';
+            break;
+          case FontWeight.w400:
+            weightValue = '400';
+            break;
+          case FontWeight.w500:
+            weightValue = '500';
+            break;
+          case FontWeight.w600:
+            weightValue = '600';
+            break;
+          case FontWeight.w700:
+            weightValue = '700';
+            break;
+          case FontWeight.w800:
+            weightValue = '800';
+            break;
+          case FontWeight.w900:
+            weightValue = '900';
+            break;
+          default:
+            weightValue = '400';
+        }
+        textStyle['fontWeight'] = weightValue;
       }
       if (textAlign != null) {
         textStyle['textAlign'] = textAlign.toString().split('.').last;
@@ -477,6 +518,28 @@ class PostService {
         message: 'Failed to update post: ${e.toString()}',
         statusCode: 0,
       );
+    }
+  }
+
+  /// Report a post
+  static Future<bool> reportPost({
+    required String postId,
+    required String reason,
+    String? additionalDetails,
+  }) async {
+    try {
+      final response = await _makeRequest(
+        'POST',
+        '/api/posts/$postId/report',
+        body: {
+          'reason': reason,
+          if (additionalDetails != null) 'details': additionalDetails,
+        },
+      );
+      return response['success'] ?? false;
+    } catch (e) {
+      print('🚩 PostService: Failed to report post: $e');
+      return false;
     }
   }
 
@@ -588,237 +651,178 @@ class PostService {
 
   /// Test backend connectivity
   /// Upload an image file to Cloudinary via backend
-  static Future<String> uploadImage(File imageFile) async {
+  /// Upload an image file with progress tracking
+  static Future<String> uploadImage(
+    File imageFile, {
+    void Function(double)? onProgress,
+  }) async {
     try {
-      print('📸 PostService: Starting image upload...');
+      print('📸 PostService: Starting image upload with progress tracking...');
 
-      // Create multipart request
-      final uri = Uri.parse('$baseUrl/api/upload/image');
-      final request = http.MultipartRequest('POST', uri);
-
-      // Add headers
       final headers = await _getUploadHeaders();
-      request.headers.addAll(headers);
+      final String fileName = imageFile.path.split('/').last;
 
-      // Add image file
-      final imageStream = http.ByteStream(imageFile.openRead());
-      final imageLength = await imageFile.length();
+      final formData = FormData.fromMap({
+        'image': await MultipartFile.fromFile(
+          imageFile.path,
+          filename: fileName,
+        ),
+      });
 
-      // Determine MIME type from file extension
-      String mimeType = 'image/jpeg'; // default
-      final extension = imageFile.path.toLowerCase().split('.').last;
-      switch (extension) {
-        case 'png':
-          mimeType = 'image/png';
-          break;
-        case 'jpg':
-        case 'jpeg':
-          mimeType = 'image/jpeg';
-          break;
-        case 'gif':
-          mimeType = 'image/gif';
-          break;
-        case 'webp':
-          mimeType = 'image/webp';
-          break;
-        default:
-          mimeType = 'image/jpeg';
-      }
-
-      final multipartFile = http.MultipartFile(
-        'image',
-        imageStream,
-        imageLength,
-        filename: 'image_${DateTime.now().millisecondsSinceEpoch}.$extension',
-        contentType: MediaType.parse(mimeType),
+      final response = await _dio.post(
+        '/api/upload/image',
+        data: formData,
+        options: Options(headers: headers),
+        onSendProgress: (sent, total) {
+          if (total != -1 && onProgress != null) {
+            onProgress(sent / total);
+          }
+        },
       );
-      request.files.add(multipartFile);
-
-      print('📸 PostService: Sending upload request...');
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      print('📸 PostService: Upload response status: ${response.statusCode}');
-      print('📸 PostService: Upload response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final responseData = json.decode(response.body);
-        if (responseData['success'] == true &&
-            responseData['data']['imageUrl'] != null) {
-          final imageUrl = responseData['data']['imageUrl'] as String;
-          print('📸 PostService: Image uploaded successfully: $imageUrl');
-          return imageUrl;
-        } else {
-          throw Exception(
-            'Upload failed: ${responseData['message'] ?? 'Unknown error'}',
-          );
+        final data = response.data;
+        if (data['success'] == true && data['data']['imageUrl'] != null) {
+          return data['data']['imageUrl'] as String;
         }
-      } else {
-        throw Exception(
-          'Upload failed with status ${response.statusCode}: ${response.body}',
+      }
+      throw PostException(
+        message:
+            'Upload failed: ${response.data['message'] ?? 'Unknown error'}',
+        statusCode: response.statusCode ?? 500,
+      );
+    } catch (e) {
+      print('📸 PostService: Image upload error: $e');
+      if (e is DioException) {
+        throw PostException(
+          message: e.response?.data['message'] ?? 'Network error during upload',
+          statusCode: e.response?.statusCode ?? 0,
         );
       }
-    } catch (e) {
-      print('📸 PostService: Upload error: $e');
-      throw Exception('Failed to upload image: $e');
+      rethrow;
     }
   }
 
-  /// Upload multiple images to Cloudinary via backend
+  /// Upload multiple images with progress tracking
   static Future<List<String>> uploadMultipleImages(
-    List<File> imageFiles,
-  ) async {
+    List<File> imageFiles, {
+    void Function(double)? onProgress,
+  }) async {
     try {
       print('📸 PostService: Starting multiple images upload...');
 
-      // Create multipart request
-      final uri = Uri.parse('$baseUrl/api/upload/multiple-images');
-      final request = http.MultipartRequest('POST', uri);
-
-      // Add headers
       final headers = await _getUploadHeaders();
-      request.headers.addAll(headers);
+      final List<MultipartFile> multipartFiles = [];
 
-      // Add image files
       for (int i = 0; i < imageFiles.length; i++) {
-        final imageFile = imageFiles[i];
-        final imageStream = http.ByteStream(imageFile.openRead());
-        final imageLength = await imageFile.length();
-
-        // Determine MIME type from file extension
-        String mimeType = 'image/jpeg'; // default
-        final extension = imageFile.path.toLowerCase().split('.').last;
-        switch (extension) {
-          case 'png':
-            mimeType = 'image/png';
-            break;
-          case 'jpg':
-          case 'jpeg':
-            mimeType = 'image/jpeg';
-            break;
-          case 'gif':
-            mimeType = 'image/gif';
-            break;
-          case 'webp':
-            mimeType = 'image/webp';
-            break;
-          default:
-            mimeType = 'image/jpeg';
-        }
-
-        final multipartFile = http.MultipartFile(
-          'images',
-          imageStream,
-          imageLength,
-          filename:
-              'image_${DateTime.now().millisecondsSinceEpoch}_$i.$extension',
-          contentType: MediaType.parse(mimeType),
+        final file = imageFiles[i];
+        final fileName = file.path.split('/').last;
+        multipartFiles.add(
+          await MultipartFile.fromFile(file.path, filename: fileName),
         );
-        request.files.add(multipartFile);
       }
 
-      print('📸 PostService: Sending multiple images upload request...');
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      final formData = FormData.fromMap({'images': multipartFiles});
 
-      print(
-        '📸 PostService: Multiple images upload response status: ${response.statusCode}',
-      );
-      print(
-        '📸 PostService: Multiple images upload response body: ${response.body}',
+      final response = await _dio.post(
+        '/api/upload/multiple-images',
+        data: formData,
+        options: Options(headers: headers),
+        onSendProgress: (sent, total) {
+          if (total != -1 && onProgress != null) {
+            onProgress(sent / total);
+          }
+        },
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final responseData = json.decode(response.body);
-        if (responseData['success'] == true &&
-            responseData['data']['images'] != null) {
-          final images = responseData['data']['images'] as List;
-          final imageUrls =
-              images.map((img) => img['imageUrl'] as String).toList();
-          print(
-            '📸 PostService: Multiple images uploaded successfully: $imageUrls',
-          );
-          return imageUrls;
-        } else {
-          throw Exception(
-            'Upload failed: ${responseData['message'] ?? 'Unknown error'}',
-          );
+        final data = response.data;
+        if (data['success'] == true && data['data']['images'] != null) {
+          final images = data['data']['images'] as List;
+          return images.map((img) => img['imageUrl'] as String).toList();
         }
-      } else {
-        throw Exception(
-          'Upload failed with status ${response.statusCode}: ${response.body}',
-        );
       }
+      throw PostException(
+        message: 'Multiple upload failed',
+        statusCode: response.statusCode ?? 500,
+      );
     } catch (e) {
       print('📸 PostService: Multiple images upload error: $e');
-      throw Exception('Failed to upload images: $e');
+      if (e is DioException) {
+        throw PostException(
+          message:
+              e.response?.data['message'] ?? 'Network error during mult-upload',
+          statusCode: e.response?.statusCode ?? 0,
+        );
+      }
+      rethrow;
     }
   }
 
   /// Upload a video file to Cloudinary via backend
-  static Future<Map<String, dynamic>> uploadVideo(File videoFile) async {
+  /// Upload a video file with progress tracking and automatic compression
+  static Future<Map<String, dynamic>> uploadVideo(
+    File videoFile, {
+    void Function(double)? onProgress,
+    void Function(String)? onStatusUpdate,
+  }) async {
     try {
-      print('🎥 PostService: Starting video upload...');
+      print('🎥 PostService: Industrial-standard video processing started...');
 
-      // Create multipart request
-      final uri = Uri.parse('$baseUrl/api/upload/video');
-      final request = http.MultipartRequest('POST', uri);
+      // 1. Video Compression (TikTok Standard)
+      if (onStatusUpdate != null) onStatusUpdate('Compressing video...');
+      final compressedMedia = await VideoCompress.compressVideo(
+        videoFile.path,
+        quality: VideoQuality.DefaultQuality,
+        deleteOrigin: false, // Keep original in case user wants to retry
+        includeAudio: true,
+      );
 
-      // Add headers
-      final headers = await _getUploadHeaders();
-      request.headers.addAll(headers);
-
-      // Add video file
-      final videoStream = http.ByteStream(videoFile.openRead());
-      final videoLength = await videoFile.length();
-
-      // Determine MIME type from file extension
-      String mimeType = 'video/mp4'; // default
-      final extension = videoFile.path.toLowerCase().split('.').last;
-      switch (extension) {
-        case 'mp4':
-          mimeType = 'video/mp4';
-          break;
-        case 'mov':
-          mimeType = 'video/quicktime';
-          break;
-        case 'avi':
-          mimeType = 'video/x-msvideo';
-          break;
-        case 'webm':
-          mimeType = 'video/webm';
-          break;
-        case '3gp':
-          mimeType = 'video/3gpp';
-          break;
-        default:
-          mimeType = 'video/mp4';
+      if (compressedMedia == null || compressedMedia.file == null) {
+        throw PostException(message: 'Video compression failed', statusCode: 0);
       }
 
-      final multipartFile = http.MultipartFile(
-        'video',
-        videoStream,
-        videoLength,
-        filename: 'video_${DateTime.now().millisecondsSinceEpoch}.$extension',
-        contentType: MediaType.parse(mimeType),
-      );
-      request.files.add(multipartFile);
-
-      print('🎥 PostService: Sending video upload request...');
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
+      final fileToUpload = compressedMedia.file!;
       print(
-        '🎥 PostService: Video upload response status: ${response.statusCode}',
+        '🎥 PostService: Compressed from ${videoFile.lengthSync()} to ${fileToUpload.lengthSync()} bytes',
       );
-      print('🎥 PostService: Video upload response body: ${response.body}');
+
+      // 2. Upload with Dio
+      if (onStatusUpdate != null) onStatusUpdate('Uploading...');
+      final headers = await _getUploadHeaders();
+      final String fileName = fileToUpload.path.split('/').last;
+
+      final formData = FormData.fromMap({
+        'video': await MultipartFile.fromFile(
+          fileToUpload.path,
+          filename: fileName,
+        ),
+      });
+
+      final response = await _dio.post(
+        '/api/upload/video',
+        data: formData,
+        options: Options(
+          headers: headers,
+          sendTimeout: const Duration(
+            minutes: 10,
+          ), // Large files need more time
+        ),
+        onSendProgress: (sent, total) {
+          if (total != -1 && onProgress != null) {
+            onProgress(sent / total);
+          }
+        },
+      );
+
+      // Cleanup compressed temp file
+      await VideoCompress.deleteAllCache();
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final responseData = json.decode(response.body);
-        if (responseData['success'] == true &&
-            responseData['data']['videoUrl'] != null) {
-          final videoData = responseData['data'];
-          final result = {
+        final data = response.data;
+        if (data['success'] == true && data['data']['videoUrl'] != null) {
+          final videoData = data['data'];
+          return {
             'videoUrl': videoData['videoUrl'] as String,
             'thumbnailUrl': videoData['thumbnailUrl'] as String,
             'duration': videoData['duration'] as double? ?? 0.0,
@@ -826,23 +830,23 @@ class PostService {
             'height': videoData['height'] as int? ?? 0,
             'size': videoData['size'] as int? ?? 0,
           };
-          print(
-            '🎥 PostService: Video uploaded successfully: ${result['videoUrl']}',
-          );
-          return result;
-        } else {
-          throw Exception(
-            'Upload failed: ${responseData['message'] ?? 'Unknown error'}',
-          );
         }
-      } else {
-        throw Exception(
-          'Upload failed with status ${response.statusCode}: ${response.body}',
-        );
       }
+
+      throw PostException(
+        message: 'Video upload failed: ${response.data['message'] ?? ''}',
+        statusCode: response.statusCode ?? 500,
+      );
     } catch (e) {
       print('🎥 PostService: Video upload error: $e');
-      throw Exception('Failed to upload video: $e');
+      await VideoCompress.deleteAllCache();
+      if (e is DioException) {
+        throw PostException(
+          message: e.response?.data['message'] ?? 'Network error during upload',
+          statusCode: e.response?.statusCode ?? 0,
+        );
+      }
+      rethrow;
     }
   }
 

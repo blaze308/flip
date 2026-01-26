@@ -92,10 +92,11 @@ class _MvpPurchaseScreenState extends ConsumerState<MvpPurchaseScreen> {
             ),
             child: Column(
               children: [
-                Image.asset(
-                  'assets/images/icon_mvp.png',
-                  width: 80,
-                  height: 80,
+                // MVP Icon - using Material Icon instead of asset
+                const Icon(
+                  Icons.star_rounded,
+                  size: 80,
+                  color: Colors.white,
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -146,10 +147,10 @@ class _MvpPurchaseScreenState extends ConsumerState<MvpPurchaseScreen> {
                   ),
                   Row(
                     children: [
-                      Image.asset(
-                        'assets/images/coin_icon.png',
-                        width: 24,
-                        height: 24,
+                      const Icon(
+                        Icons.monetization_on,
+                        color: Color(0xFF4ECDC4),
+                        size: 24,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -186,10 +187,10 @@ class _MvpPurchaseScreenState extends ConsumerState<MvpPurchaseScreen> {
                 ),
                 child: Row(
                   children: [
-                    Image.asset(
-                      user.mvpIcon,
-                      width: 40,
-                      height: 40,
+                    const Icon(
+                      Icons.verified,
+                      color: Color(0xFF4ECDC4),
+                      size: 40,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -269,6 +270,7 @@ class _MvpPurchaseScreenState extends ConsumerState<MvpPurchaseScreen> {
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Text(
                                 package.durationText,
@@ -277,23 +279,28 @@ class _MvpPurchaseScreenState extends ConsumerState<MvpPurchaseScreen> {
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                 ),
+                                textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 12),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Image.asset(
-                                    'assets/images/coin_icon.png',
-                                    width: 24,
-                                    height: 24,
+                                  const Icon(
+                                    Icons.monetization_on,
+                                    color: Color(0xFF4ECDC4),
+                                    size: 20,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '${package.price}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      '${package.price}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ],

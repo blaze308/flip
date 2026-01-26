@@ -19,6 +19,7 @@ import flutter_secure_storage_macos
 import flutter_volume_controller
 import gal
 import google_sign_in_ios
+import in_app_purchase_storekit
 import iris_method_channel
 import just_audio
 import local_auth_darwin
@@ -53,6 +54,7 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FlutterVolumeControllerPlugin.register(with: registry.registrar(forPlugin: "FlutterVolumeControllerPlugin"))
   GalPlugin.register(with: registry.registrar(forPlugin: "GalPlugin"))
   FLTGoogleSignInPlugin.register(with: registry.registrar(forPlugin: "FLTGoogleSignInPlugin"))
+  InAppPurchasePlugin.register(with: registry.registrar(forPlugin: "InAppPurchasePlugin"))
   IrisMethodChannelPlugin.register(with: registry.registrar(forPlugin: "IrisMethodChannelPlugin"))
   JustAudioPlugin.register(with: registry.registrar(forPlugin: "JustAudioPlugin"))
   LocalAuthPlugin.register(with: registry.registrar(forPlugin: "LocalAuthPlugin"))

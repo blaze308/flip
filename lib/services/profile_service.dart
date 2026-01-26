@@ -113,6 +113,7 @@ class ProfileService {
     String? occupation,
     List<String>? interests,
     String? coverPhotoURL,
+    Map<String, String>? socialLinks,
     String? language,
     String? timezone,
   }) async {
@@ -141,6 +142,7 @@ class ProfileService {
       if (occupation != null) profile['occupation'] = occupation;
       if (interests != null) profile['interests'] = interests;
       if (coverPhotoURL != null) profile['coverPhotoURL'] = coverPhotoURL;
+      if (socialLinks != null) profile['socialLinks'] = socialLinks;
 
       // Location
       if (country != null || state != null || city != null) {
@@ -231,6 +233,28 @@ class ProfileService {
     } catch (e) {
       print('❌ ProfileService.updateUsername error: $e');
       return {'success': false, 'message': 'An error occurred: $e'};
+    }
+  }
+
+  /// Check if username is available
+  static Future<bool> checkUsernameAvailability(String username) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/check-username?username=$username'),
+      );
+
+      print(
+        '📱 ProfileService.checkUsernameAvailability: ${response.statusCode}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['success'] == true && data['available'] == true;
+      }
+      return false;
+    } catch (e) {
+      print('❌ ProfileService.checkUsernameAvailability error: $e');
+      return false;
     }
   }
 

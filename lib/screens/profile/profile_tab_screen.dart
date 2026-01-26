@@ -16,6 +16,8 @@ import '../premium/wallet_screen_riverpod.dart';
 import '../settings/settings_screen.dart';
 import 'followers_screen.dart';
 import 'profile_edit_screen.dart';
+import '../../widgets/profile_completion_widget.dart';
+import '../../utils/profile_completion_calculator.dart';
 
 /// Profile screen using the old tab-style layout, wired to new services.
 class ProfileTabScreen extends StatefulWidget {
@@ -37,16 +39,44 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
 
   final List<_Shortcut> _personal = const [
     _Shortcut(label: 'Posts', icon: Icons.grid_on, type: _ShortcutType.posts),
-    _Shortcut(label: 'Gifts', icon: Icons.card_giftcard, type: _ShortcutType.gifts),
-    _Shortcut(label: 'Followers', icon: Icons.people_alt_outlined, type: _ShortcutType.followers),
-    _Shortcut(label: 'Following', icon: Icons.person_outline, type: _ShortcutType.following),
+    _Shortcut(
+      label: 'Gifts',
+      icon: Icons.card_giftcard,
+      type: _ShortcutType.gifts,
+    ),
+    _Shortcut(
+      label: 'Followers',
+      icon: Icons.people_alt_outlined,
+      type: _ShortcutType.followers,
+    ),
+    _Shortcut(
+      label: 'Following',
+      icon: Icons.person_outline,
+      type: _ShortcutType.following,
+    ),
   ];
 
   final List<_Shortcut> _privileges = const [
-    _Shortcut(label: 'MVP', icon: Icons.workspace_premium, type: _ShortcutType.mvp),
-    _Shortcut(label: 'Premium Hub', icon: Icons.auto_awesome, type: _ShortcutType.premiumHub),
-    _Shortcut(label: 'Wallet', icon: Icons.account_balance_wallet, type: _ShortcutType.wallet),
-    _Shortcut(label: 'Settings', icon: Icons.settings, type: _ShortcutType.settings),
+    _Shortcut(
+      label: 'MVP',
+      icon: Icons.workspace_premium,
+      type: _ShortcutType.mvp,
+    ),
+    _Shortcut(
+      label: 'Premium Hub',
+      icon: Icons.auto_awesome,
+      type: _ShortcutType.premiumHub,
+    ),
+    _Shortcut(
+      label: 'Wallet',
+      icon: Icons.account_balance_wallet,
+      type: _ShortcutType.wallet,
+    ),
+    _Shortcut(
+      label: 'Settings',
+      icon: Icons.settings,
+      type: _ShortcutType.settings,
+    ),
   ];
 
   @override
@@ -77,9 +107,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
         return;
       }
       _isCurrentUser = widget.userId == null || widget.userId == currentUser.id;
-      final user = _isCurrentUser
-          ? await ProfileService.getMyProfile()
-          : await ProfileService.getUserProfile(widget.userId!);
+      final user =
+          _isCurrentUser
+              ? await ProfileService.getMyProfile()
+              : await ProfileService.getUserProfile(widget.userId!);
       if (!mounted) return;
       setState(() {
         _user = user;
@@ -116,51 +147,77 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF05070E),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF4ECDC4)))
-          : TokenAuthService.currentUser == null || _isTokenInvalid
+      body:
+          _loading
+              ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFF4ECDC4)),
+              )
+              : TokenAuthService.currentUser == null || _isTokenInvalid
               ? _buildNotLoggedIn()
               : _user == null
-                  ? _buildError()
-                  : SafeArea(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _headerCard(),
-                            const SizedBox(height: 12),
-                            _actionButtons(),
-                            const SizedBox(height: 12),
-                            _statsRow(),
-                            const SizedBox(height: 16),
-                            _premiumRow(),
-                            const SizedBox(height: 16),
-                            _walletRow(),
-                            const SizedBox(height: 16),
-                            _bioSection(),
-                            _interestsSection(),
-                            const SizedBox(height: 16),
-                            _mvpPerksSection(),
-                            const SizedBox(height: 16),
-                            _gamificationSection(),
-                            const SizedBox(height: 16),
-                            if (_isCurrentUser) _paymentMethodsSection(),
-                            const SizedBox(height: 20),
-                            _sectionTitle('Personal'),
-                            const SizedBox(height: 10),
-                            _shortcutGrid(_personal),
-                            const SizedBox(height: 20),
-                            _sectionTitle('Privileges'),
-                            const SizedBox(height: 10),
-                            _shortcutGrid(_privileges),
-                            const SizedBox(height: 20),
-                            _tabsSection(),
-                            const SizedBox(height: 24),
-                          ],
-                        ),
-                      ),
+              ? _buildError()
+              : RefreshIndicator(
+                onRefresh: _load,
+                color: const Color(0xFF4ECDC4),
+                backgroundColor: const Color(0xFF0B1020),
+                child: SafeArea(
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_isCurrentUser)
+                          ProfileCompletionWidget(
+                            user: _user!,
+                            onCompletePressed: () async {
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder:
+                                      (_) => ProfileEditScreen(user: _user!),
+                                ),
+                              );
+                              if (result == true) _load();
+                            },
+                          ),
+                        _headerCard(),
+                        const SizedBox(height: 12),
+                        _actionButtons(),
+                        const SizedBox(height: 12),
+                        _statsRow(),
+                        const SizedBox(height: 16),
+                        _premiumRow(),
+                        const SizedBox(height: 16),
+                        _walletRow(),
+                        const SizedBox(height: 16),
+                        _bioSection(),
+                        _interestsSection(),
+                        const SizedBox(height: 16),
+                        _mvpPerksSection(),
+                        const SizedBox(height: 16),
+                        _gamificationSection(),
+                        const SizedBox(height: 16),
+                        if (_isCurrentUser) _paymentMethodsSection(),
+                        const SizedBox(height: 20),
+                        _sectionTitle('Personal'),
+                        const SizedBox(height: 10),
+                        _shortcutGrid(_personal),
+                        const SizedBox(height: 20),
+                        _sectionTitle('Privileges'),
+                        const SizedBox(height: 10),
+                        _shortcutGrid(_privileges),
+                        const SizedBox(height: 20),
+                        _tabsSection(),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
     );
   }
 
@@ -171,12 +228,12 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
         children: [
           const Icon(Icons.error_outline, color: Colors.red, size: 48),
           const SizedBox(height: 12),
-          const Text('Profile unavailable', style: TextStyle(color: Colors.white)),
+          const Text(
+            'Profile unavailable',
+            style: TextStyle(color: Colors.white),
+          ),
           const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: _load,
-            child: const Text('Retry'),
-          )
+          ElevatedButton(onPressed: _load, child: const Text('Retry')),
         ],
       ),
     );
@@ -191,7 +248,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
           const SizedBox(height: 16),
           const Text(
             'Not Logged In',
-            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -240,11 +301,17 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.settings, color: Colors.white70, size: 20),
+                      icon: const Icon(
+                        Icons.settings,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
                         );
                       },
                     ),
@@ -253,7 +320,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                 const SizedBox(height: 6),
                 Text(
                   '@${user.username}',
-                  style: const TextStyle(color: Color(0xFF4ECDC4), fontSize: 14),
+                  style: const TextStyle(
+                    color: Color(0xFF4ECDC4),
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -268,7 +338,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                         Clipboard.setData(ClipboardData(text: user.id));
                         ToasterService.showSuccess(context, 'User ID copied');
                       },
-                      child: const Icon(Icons.copy, color: Colors.grey, size: 14),
+                      child: const Icon(
+                        Icons.copy,
+                        color: Colors.grey,
+                        size: 14,
+                      ),
                     ),
                   ],
                 ),
@@ -303,19 +377,21 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
       padding: const EdgeInsets.all(3),
       child: CircleAvatar(
         backgroundColor: const Color(0xFF0B1020),
-        backgroundImage: user.profileImageUrl != null
-            ? CachedNetworkImageProvider(user.profileImageUrl!)
-            : null,
-        child: user.profileImageUrl == null
-            ? Text(
-                user.initials,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              )
-            : null,
+        backgroundImage:
+            user.profileImageUrl != null
+                ? CachedNetworkImageProvider(user.profileImageUrl!)
+                : null,
+        child:
+            user.profileImageUrl == null
+                ? Text(
+                  user.initials,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                )
+                : null,
       ),
     );
   }
@@ -329,7 +405,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF4ECDC4),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
               onPressed: () async {
@@ -353,13 +431,21 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
           Expanded(
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: _user!.isFollowing ? Colors.transparent : const Color(0xFF4ECDC4),
-                foregroundColor: _user!.isFollowing ? const Color(0xFF4ECDC4) : Colors.white,
+                backgroundColor:
+                    _user!.isFollowing
+                        ? Colors.transparent
+                        : const Color(0xFF4ECDC4),
+                foregroundColor:
+                    _user!.isFollowing ? const Color(0xFF4ECDC4) : Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: _user!.isFollowing
-                      ? const BorderSide(color: Color(0xFF4ECDC4), width: 1.5)
-                      : BorderSide.none,
+                  side:
+                      _user!.isFollowing
+                          ? const BorderSide(
+                            color: Color(0xFF4ECDC4),
+                            width: 1.5,
+                          )
+                          : BorderSide.none,
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 elevation: 0,
@@ -373,7 +459,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFF4ECDC4),
               side: const BorderSide(color: Color(0xFF4ECDC4)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             ),
             onPressed: () {
@@ -398,7 +486,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => FollowersScreen(userId: user.id, isFollowers: true),
+              builder:
+                  (_) => FollowersScreen(userId: user.id, isFollowers: true),
             ),
           );
         },
@@ -411,7 +500,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => FollowersScreen(userId: user.id, isFollowers: false),
+              builder:
+                  (_) => FollowersScreen(userId: user.id, isFollowers: false),
             ),
           );
         },
@@ -427,32 +517,36 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: stats
-            .map(
-              (s) => GestureDetector(
-                onTap: s.onTap,
-                child: Column(
-                  children: [
-                    Icon(s.icon, color: const Color(0xFF4ECDC4), size: 22),
-                    const SizedBox(height: 6),
-                    Text(
-                      s.value.toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+        children:
+            stats
+                .map(
+                  (s) => GestureDetector(
+                    onTap: s.onTap,
+                    child: Column(
+                      children: [
+                        Icon(s.icon, color: const Color(0xFF4ECDC4), size: 22),
+                        const SizedBox(height: 6),
+                        Text(
+                          s.value.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          s.label,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      s.label,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            )
-            .toList(),
+                  ),
+                )
+                .toList(),
       ),
     );
   }
@@ -528,7 +622,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 14),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white70,
+              size: 14,
+            ),
           ],
         ),
       ),
@@ -550,7 +648,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const WalletScreenRiverpod()),
+                  MaterialPageRoute(
+                    builder: (_) => const WalletScreenRiverpod(),
+                  ),
                 );
               },
               child: Column(
@@ -561,7 +661,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.monetization_on, color: Color(0xFF4ECDC4), size: 18),
+                      const Icon(
+                        Icons.monetization_on,
+                        color: Color(0xFF4ECDC4),
+                        size: 18,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         '${user.coins}',
@@ -588,7 +692,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Diamonds', style: TextStyle(color: Colors.white70)),
+                  const Text(
+                    'Diamonds',
+                    style: TextStyle(color: Colors.white70),
+                  ),
                   const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -630,13 +737,14 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
         children: [
           const Text(
             'About',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
-          Text(
-            bio,
-            style: const TextStyle(color: Colors.white70, height: 1.5),
-          ),
+          Text(bio, style: const TextStyle(color: Colors.white70, height: 1.5)),
         ],
       ),
     );
@@ -650,22 +758,29 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: interests
-            .map(
-              (interest) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Text(
-                  interest,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ),
-            )
-            .toList(),
+        children:
+            interests
+                .map(
+                  (interest) => Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Text(
+                      interest,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
       ),
     );
   }
@@ -713,22 +828,31 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: perks
-                .map(
-                  (perk) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF9C27B0).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF9C27B0).withOpacity(0.4)),
-                    ),
-                    child: Text(
-                      perk,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
-                )
-                .toList(),
+            children:
+                perks
+                    .map(
+                      (perk) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF9C27B0).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFF9C27B0).withOpacity(0.4),
+                          ),
+                        ),
+                        child: Text(
+                          perk,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
           ),
         ],
       ),
@@ -803,7 +927,8 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
                       color: const Color(0xFFFFD700),
                     ),
                   ),
-                if (user.coins > 0 && user.diamonds > 0) const SizedBox(width: 10),
+                if (user.coins > 0 && user.diamonds > 0)
+                  const SizedBox(width: 10),
                 if (user.diamonds > 0)
                   Expanded(
                     child: _rewardCard(
@@ -845,7 +970,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
             const Spacer(),
             Text(
               isMax ? 'MAX' : 'Next: Lv.${progress['nextLevel']}',
-              style: TextStyle(color: isMax ? Colors.amber : Colors.grey, fontSize: 12),
+              style: TextStyle(
+                color: isMax ? Colors.amber : Colors.grey,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -929,7 +1057,9 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => PaymentMethodsScreen(user: _user!)),
+            MaterialPageRoute(
+              builder: (_) => PaymentMethodsScreen(user: _user!),
+            ),
           );
         },
         leading: Container(
@@ -948,7 +1078,11 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
           'Manage your payment options',
           style: TextStyle(color: Colors.white70, fontSize: 12),
         ),
-        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
+          color: Colors.white54,
+          size: 16,
+        ),
       ),
     );
   }
@@ -976,33 +1110,41 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(vertical: 12),
-        children: items
-            .map(
-              (item) => GestureDetector(
-                onTap: () => _handleShortcut(item),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.04),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: Icon(item.icon, color: const Color(0xFF4ECDC4), size: 22),
+        children:
+            items
+                .map(
+                  (item) => GestureDetector(
+                    onTap: () => _handleShortcut(item),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Icon(
+                            item.icon,
+                            color: const Color(0xFF4ECDC4),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          item.label,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      item.label,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            )
-            .toList(),
+                  ),
+                )
+                .toList(),
       ),
     );
   }
@@ -1119,7 +1261,10 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
       case _ShortcutType.gifts:
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => GiftsTab(userId: user.id, isCurrentUser: _isCurrentUser)),
+          MaterialPageRoute(
+            builder:
+                (_) => GiftsTab(userId: user.id, isCurrentUser: _isCurrentUser),
+          ),
         );
         break;
       case _ShortcutType.followers:
@@ -1134,21 +1279,34 @@ class _ProfileTabScreenState extends State<ProfileTabScreen>
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => FollowersScreen(userId: user.id, isFollowers: false),
+            builder:
+                (_) => FollowersScreen(userId: user.id, isFollowers: false),
           ),
         );
         break;
       case _ShortcutType.mvp:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const MvpPurchaseScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MvpPurchaseScreen()),
+        );
         break;
       case _ShortcutType.premiumHub:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const PremiumHubScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PremiumHubScreen()),
+        );
         break;
       case _ShortcutType.wallet:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletScreenRiverpod()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const WalletScreenRiverpod()),
+        );
         break;
       case _ShortcutType.settings:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SettingsScreen()),
+        );
         break;
     }
   }
@@ -1160,7 +1318,12 @@ class _Stat {
   final int value;
   final VoidCallback? onTap;
 
-  _Stat({required this.icon, required this.label, required this.value, this.onTap});
+  _Stat({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
 }
 
 class _Shortcut {
@@ -1168,7 +1331,11 @@ class _Shortcut {
   final IconData icon;
   final _ShortcutType type;
 
-  const _Shortcut({required this.label, required this.icon, required this.type});
+  const _Shortcut({
+    required this.label,
+    required this.icon,
+    required this.type,
+  });
 }
 
 enum _ShortcutType {
@@ -1181,4 +1348,3 @@ enum _ShortcutType {
   wallet,
   settings,
 }
-

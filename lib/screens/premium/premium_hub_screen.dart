@@ -4,6 +4,7 @@ import '../../providers/profile_providers.dart';
 import 'vip_purchase_screen.dart';
 import 'mvp_purchase_screen.dart';
 import 'guardian_purchase_screen.dart';
+import 'subscription_history_screen.dart'; // NEW
 
 /// Premium Hub Screen
 /// Central hub for all premium features (VIP, MVP, Guardian)
@@ -43,21 +44,37 @@ class PremiumHubScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Unlock Premium',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Premium Account',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.history, color: Colors.white),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) =>
+                                      const SubscriptionHistoryScreen(),
+                            ),
+                          );
+                        },
+                        tooltip: 'Subscription History',
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Get exclusive benefits and stand out',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
                   ),
                   const SizedBox(height: 16),
                   profileAsync.when(
@@ -65,32 +82,50 @@ class PremiumHubScreen extends ConsumerWidget {
                     error: (_, __) => const SizedBox.shrink(),
                     data: (user) {
                       if (user == null) return const SizedBox.shrink();
-                      
-                      final activePremiums = <String>[];
-                      if (user.isVip) activePremiums.add(user.vipTier.toUpperCase());
-                      if (user.isMVP) activePremiums.add('MVP');
-                      if (user.hasGuardian) activePremiums.add('${user.guardianType?.toUpperCase()} Guardian');
-                      
-                      if (activePremiums.isEmpty) {
-                        return const Text(
-                          'No active premium features',
-                          style: TextStyle(
-                            color: Colors.white60,
-                            fontSize: 14,
+
+                      final List<Widget> statusWidgets = [];
+
+                      if (user.isVip) {
+                        statusWidgets.add(
+                          _buildStatusChip(
+                            'VIP: ${user.vipTier.toUpperCase()}',
+                            user.vipExpiresAt,
+                            const Color(0xFFFFD700),
                           ),
                         );
                       }
-                      
+
+                      if (user.isMVP) {
+                        statusWidgets.add(
+                          _buildStatusChip(
+                            'MVP',
+                            user.mvpExpiresAt,
+                            const Color(0xFF9C27B0),
+                          ),
+                        );
+                      }
+
+                      if (user.hasGuardian) {
+                        statusWidgets.add(
+                          _buildStatusChip(
+                            '${user.guardianType?.toUpperCase()} Guardian',
+                            user.guardianExpiresAt,
+                            const Color(0xFFC0C0C0),
+                          ),
+                        );
+                      }
+
+                      if (statusWidgets.isEmpty) {
+                        return const Text(
+                          'No active premium features',
+                          style: TextStyle(color: Colors.white60, fontSize: 14),
+                        );
+                      }
+
                       return Wrap(
                         spacing: 8,
-                        children: activePremiums.map((premium) => Chip(
-                          label: Text(premium),
-                          backgroundColor: Colors.white.withOpacity(0.2),
-                          labelStyle: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )).toList(),
+                        runSpacing: 8,
+                        children: statusWidgets,
                       );
                     },
                   ),
@@ -259,10 +294,14 @@ class PremiumHubScreen extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Image.asset(
-                    iconPath,
+                  Container(
                     width: 50,
                     height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, size: 28, color: Colors.white),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -364,10 +403,7 @@ class PremiumHubScreen extends ConsumerWidget {
                 ),
                 Text(
                   description,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
                 ),
               ],
             ),
@@ -376,5 +412,43 @@ class PremiumHubScreen extends ConsumerWidget {
       ),
     );
   }
-}
 
+  Widget _buildStatusChip(String label, DateTime? expiresAt, Color color) {
+    String expiryText = '';
+    if (expiresAt != null) {
+      final now = DateTime.now();
+      final difference = expiresAt.difference(now).inDays;
+      if (difference < 0) {
+        expiryText = ' (Expired)';
+      } else if (difference == 0) {
+        expiryText = ' (Expires today)';
+      } else {
+        expiryText = ' ($difference days left)';
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            '$label$expiryText',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

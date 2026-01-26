@@ -52,18 +52,41 @@ class DeepLinkService {
         '🔗 DeepLink: Scheme: ${uri.scheme}, Host: ${uri.host}, Path: ${uri.path}',
       );
 
-      // Handle custom scheme: flip://open/post/123 or flip://open/reel/456
+      // Handle custom scheme: flip://post/123 or flip://reel/456 or flip://post/123
       if (uri.scheme == appScheme) {
         final pathSegments = uri.pathSegments;
         print('🔗 DeepLink: Custom scheme path segments: $pathSegments');
+        print('🔗 DeepLink: Host: ${uri.host}');
 
+        // Handle format: flip://post/123 (host-based routing)
+        if (uri.host.isNotEmpty &&
+            (uri.host == 'post' ||
+                uri.host == 'reel' ||
+                uri.host == 'user' ||
+                uri.host == 'profile' ||
+                uri.host == 'chat')) {
+          final resourceType = uri.host;
+          final resourceId =
+              pathSegments.isNotEmpty ? pathSegments.first : null;
+
+          print(
+            '🔗 DeepLink: Host-based routing - Type: $resourceType, ID: $resourceId',
+          );
+
+          if (resourceId != null && resourceId.isNotEmpty) {
+            _handleResourceNavigation(context, resourceType, resourceId);
+          }
+          return;
+        }
+
+        // Handle format: flip://open/post/123 (legacy path-based routing)
         if (pathSegments.length >= 2) {
           final action = pathSegments[0]; // 'open'
           final resourceType = pathSegments.length > 1 ? pathSegments[1] : null;
           final resourceId = pathSegments.length > 2 ? pathSegments[2] : null;
 
           print(
-            '🔗 DeepLink: Action: $action, Type: $resourceType, ID: $resourceId',
+            '🔗 DeepLink: Path-based routing - Action: $action, Type: $resourceType, ID: $resourceId',
           );
 
           if (resourceType != null && resourceId != null) {

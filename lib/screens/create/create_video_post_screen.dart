@@ -27,6 +27,8 @@ class _CreateVideoPostScreenState extends State<CreateVideoPostScreen> {
   bool _isPublic = true;
   Duration _videoDuration = Duration.zero;
   bool _isPlaying = false;
+  double _uploadProgress = 0.0;
+  String _statusMessage = '';
 
   @override
   void dispose() {
@@ -37,256 +39,312 @@ class _CreateVideoPostScreenState extends State<CreateVideoPostScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: Colors.black,
+          appBar: _buildAppBar(),
+          body: _buildBody(),
         ),
-        title: const Text(
-          'Create Video Post',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+        if (_isLoading) _buildLoadingOverlay(),
+      ],
+    );
+  }
+
+  AppBar _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      title: const Text(
+        'Create Video Post',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      centerTitle: true,
+      actions: [
+        TextButton(
+          onPressed: _isLoading || _selectedVideo == null ? null : _createPost,
+          child: Text(
+            'Post',
+            style: TextStyle(
+              color:
+                  _selectedVideo == null
+                      ? Colors.grey
+                      : const Color(0xFF4ECDC4),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
-        centerTitle: true,
-        actions: [
-          TextButton(
-            onPressed:
-                _isLoading || _selectedVideo == null ? null : _createPost,
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(
+      children: [
+        // Video preview area
+        Expanded(
+          flex: 3,
+          child: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey[800]!, width: 2),
+            ),
             child:
-                _isLoading
-                    ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                _selectedVideo == null
+                    ? _buildVideoPlaceholder()
+                    : _buildVideoPreview(),
+          ),
+        ),
+
+        // Caption and options
+        Expanded(
+          flex: 2,
+          child: Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(25),
+                topRight: Radius.circular(25),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle bar
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[600],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    )
-                    : Text(
-                      'Post',
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Caption input
+                    const Text(
+                      'Caption',
                       style: TextStyle(
-                        color:
-                            _selectedVideo == null
-                                ? Colors.grey
-                                : const Color(0xFF4ECDC4),
+                        color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Video preview area
-          Expanded(
-            flex: 3,
-            child: Container(
-              width: double.infinity,
-              margin: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.grey[800]!, width: 2),
-              ),
-              child:
-                  _selectedVideo == null
-                      ? _buildVideoPlaceholder()
-                      : _buildVideoPreview(),
-            ),
-          ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _captionController,
+                      maxLines: 3,
+                      maxLength: 2000,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                      decoration: InputDecoration(
+                        hintText: 'Write a caption...',
+                        hintStyle: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 16,
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[900],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        counterStyle: TextStyle(color: Colors.grey[400]),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
 
-          // Caption and options
-          Expanded(
-            flex: 2,
-            child: Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(25),
-                  topRight: Radius.circular(25),
+                    // Video info
+                    if (_selectedVideo != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(15),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[900],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.videocam,
+                                  color: Color(0xFF4ECDC4),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                const Text(
+                                  'Video Duration:',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  _formatDuration(_videoDuration),
+                                  style: TextStyle(
+                                    color: Colors.grey[300],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _selectThumbnail,
+                                    icon: const Icon(Icons.image, size: 18),
+                                    label: Text(
+                                      _thumbnailImage == null
+                                          ? 'Select Thumbnail'
+                                          : 'Change Thumbnail',
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.grey[800],
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _clearVideo,
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    label: const Text('Clear Video'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red[700],
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Privacy setting
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Public Post',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Switch(
+                          value: _isPublic,
+                          activeColor: const Color(0xFF4ECDC4),
+                          onChanged: (value) {
+                            setState(() => _isPublic = value);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Handle bar
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[600],
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
-                      // Caption input
-                      const Text(
-                        'Caption',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _captionController,
-                        maxLines: 3,
-                        maxLength: 2000,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Write a caption...',
-                          hintStyle: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 16,
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[900],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          counterStyle: TextStyle(color: Colors.grey[400]),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Video info
-                      if (_selectedVideo != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(15),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[900],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.videocam,
-                                    color: Color(0xFF4ECDC4),
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  const Text(
-                                    'Video Duration:',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    _formatDuration(_videoDuration),
-                                    style: TextStyle(
-                                      color: Colors.grey[300],
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: _selectThumbnail,
-                                      icon: const Icon(Icons.image, size: 18),
-                                      label: Text(
-                                        _thumbnailImage == null
-                                            ? 'Select Thumbnail'
-                                            : 'Change Thumbnail',
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.grey[800],
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: _clearVideo,
-                                      icon: const Icon(Icons.clear, size: 18),
-                                      label: const Text('Clear Video'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red[700],
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-
-                      // Privacy setting
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Public Post',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Switch(
-                            value: _isPublic,
-                            activeColor: const Color(0xFF4ECDC4),
-                            onChanged: (value) {
-                              setState(() => _isPublic = value);
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.85),
+      width: double.infinity,
+      height: double.infinity,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: CircularProgressIndicator(
+                    value: _uploadProgress > 0 ? _uploadProgress : null,
+                    strokeWidth: 8,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Color(0xFF4ECDC4),
+                    ),
+                    backgroundColor: Colors.grey[800],
                   ),
                 ),
+                if (_uploadProgress > 0)
+                  Text(
+                    '${(_uploadProgress * 100).toInt()}%',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                else
+                  const Icon(Icons.cloud_upload, color: Colors.white, size: 40),
+              ],
+            ),
+            const SizedBox(height: 30),
+            Text(
+              _statusMessage,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                'Please wait while we process and upload your video. Industry-standard compression is being applied.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -591,26 +649,41 @@ class _CreateVideoPostScreenState extends State<CreateVideoPostScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _uploadProgress = 0.0;
+      _statusMessage = 'Initializing...';
+    });
 
     try {
-      // Upload video to Cloudinary via backend
-      print('🎥 Uploading video to Cloudinary...');
-      final videoUploadResult = await PostService.uploadVideo(_selectedVideo!);
+      // 1. Process and upload video
+      final videoUploadResult = await PostService.uploadVideo(
+        _selectedVideo!,
+        onProgress: (progress) {
+          setState(() => _uploadProgress = progress);
+        },
+        onStatusUpdate: (status) {
+          setState(() => _statusMessage = status);
+        },
+      );
 
       final String videoUrl = videoUploadResult['videoUrl'] as String;
       String thumbnailUrl = videoUploadResult['thumbnailUrl'] as String;
       final double duration = videoUploadResult['duration'] as double;
 
-      // If user selected a custom thumbnail, upload it separately
+      // 2. Upload custom thumbnail if exists
       if (_thumbnailImage != null) {
-        print('📸 Uploading custom thumbnail...');
-        thumbnailUrl = await PostService.uploadImage(_thumbnailImage!);
+        setState(() => _statusMessage = 'Uploading thumbnail...');
+        thumbnailUrl = await PostService.uploadImage(
+          _thumbnailImage!,
+          onProgress: (progress) {
+            setState(() => _uploadProgress = progress);
+          },
+        );
       }
 
-      print('🎥 Video uploaded successfully: $videoUrl');
-      print('📸 Thumbnail URL: $thumbnailUrl');
-
+      // 3. Create the final post
+      setState(() => _statusMessage = 'Finalizing post...');
       final createdPost = await PostService.createPost(
         type: PostType.video,
         content:

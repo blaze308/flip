@@ -1,8 +1,8 @@
+import 'package:flip/screens/onboarding/unified_onboarding_screen.dart';
 import 'package:flutter/material.dart';
 
 import 'services/token_auth_service.dart';
 import 'screens/splash_screen.dart';
-import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/home_screen.dart';
 
 /// Simple app router that follows TikTok/Instagram pattern
@@ -57,7 +57,9 @@ class _TokenAppRouterState extends State<TokenAppRouter> {
     }
 
     // Simple routing: Onboarding → Homepage (always)
-    return _showOnboarding ? const OnboardingScreen() : const HomeScreen();
+    return _showOnboarding
+        ? const UnifiedOnboardingScreen()
+        : const HomeScreen();
   }
 
   /// Called when onboarding is completed (skip or finish)
