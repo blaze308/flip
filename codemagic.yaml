@@ -1,32 +1,44 @@
 workflows:
   ios-workflow:
     name: iOS Workflow
+    instance_type: mac_mini_m2
     max_build_duration: 120
-    instance_type: mac_mini_m1
     environment:
-      flutter: stable
-      xcode: latest
-      cocoapods: default
       groups:
         - app_store_credentials
         - firebase_ios
       vars:
-        APP_ID: ancientplustech.ancient.flip
+        XCODE_WORKSPACE: "Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "ancientplustech.ancient.flip"
         # Environment variables - set these in Codemagic UI under Environment Variables
         # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
         # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
     scripts:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
-      - name: Get Flutter dependencies
+
+      - name: Get Flutter packages
         script: |
           cd flip
-          flutter pub get
-      - name: Install CocoaPods dependencies
+          flutter packages pub get
+
+      - name: Flutter analyze
         script: |
-          cd flip/ios
-          pod install
+          cd flip
+          flutter analyze || true
+
+      - name: Debug - Check Flutter version
+        script: |
+          cd flip
+          flutter --version
+          flutter doctor -v
+
       - name: Create .env file
         script: |
           cd flip
@@ -40,31 +52,75 @@ workflows:
           ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
           EOF
           echo "✅ Created .env file with environment variables"
-      - name: Flutter build ipa
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd flip/ios
+          pod repo update
+          pod install
+          cd ../..
+
+      - name: Set up keychain to be used for code signing using Codemagic CLI 'keychain' command
+        script: |
+          keychain initialize
+
+      - name: Fetch signing files
         script: |
           cd flip
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Set up signing certificate
+        script: |
+          keychain add-certificates
+
+      - name: Set up code signing settings on Xcode project
+        script: |
+          cd flip
+          xcode-project use-profiles
+
+      - name: Debug - List schemes and workspace info
+        script: |
+          cd flip/ios
+          echo "=== Available Schemes ==="
+          xcodebuild -list -workspace Runner.xcworkspace
+          echo "=== Workspace structure ==="
+          ls -la Runner.xcworkspace/
+          cd ../..
+
+      - name: Debug - Check if Runner scheme exists
+        script: |
+          cd flip/ios
+          xcodebuild -showBuildSettings -workspace Runner.xcworkspace -scheme Runner | head -20
+          cd ../..
+
+      - name: Build iOS app
+        script: |
+          cd flip
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID") + 1))
           flutter build ipa --release \
-            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
-            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+            --export-options-plist=/Users/builder/export_options.plist \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER
+
     artifacts:
-      - build/ios/ipa/*.ipa
+      - flip/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - flutter_drive.log
+      - flip/flutter_drive.log
+      - flip/ios/Runner.xcworkspace/**/*
+
     publishing:
       email:
         recipients:
           - user@example.com  # Update with your email
         notify:
           success: true
-          failure: false
+          failure: true
       app_store_connect:
-        auth: integration
-        
-        # Submit to TestFlight (optional - uncomment to enable)
-        # submit_to_testflight: true
-        # beta_groups:  # Optional: specify TestFlight beta groups
-        #   - group name 1
-        #   - group name 2
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
 
   android-workflow:
     name: Android Workflow
@@ -86,10 +142,12 @@ workflows:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
+      
       - name: Get Flutter dependencies
         script: |
           cd flip
           flutter pub get
+      
       - name: Create .env file
         script: |
           cd flip
@@ -103,15 +161,18 @@ workflows:
           ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
           EOF
           echo "✅ Created .env file with environment variables"
+      
       - name: Flutter build appbundle
         script: |
           cd flip
           flutter build appbundle --release \
-            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
-            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+            --build-name=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f1) \
+            --build-number=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f2)
+    
     artifacts:
-      - build/app/outputs/bundle/**/*.aab
-      - build/app/outputs/flutter-apk/**/*.apk
+      - flip/build/app/outputs/bundle/**/*.aab
+      - flip/build/app/outputs/flutter-apk/**/*.apk
+    
     publishing:
       email:
         recipients:
@@ -127,37 +188,41 @@ workflows:
   # Combined workflow for both platforms
   build-all:
     name: Build iOS & Android
+    instance_type: mac_mini_m2
     max_build_duration: 120
-    instance_type: mac_mini_m1
     environment:
-      flutter: stable
-      xcode: latest
-      cocoapods: default
-      android_sdk: "34.0.0"
-      java: "17"
       groups:
         - app_store_credentials
         - keystore_credentials
         - firebase_ios
         - firebase_android
       vars:
-        APP_ID: ancientplustech.ancient.flip
+        XCODE_WORKSPACE: "Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "ancientplustech.ancient.flip"
         PACKAGE_NAME: ancientplustech.ancient.flip
         # Environment variables - set these in Codemagic UI under Environment Variables
         # Required: ZEGO_APP_ID, ZEGO_APP_SIGN, AGORA_APP_ID, PAYSTACK_PUBLIC_KEY
         # Optional: ANCIENT_COIN_CLIENT_ID, ANCIENT_COIN_CLIENT_SECRET, ANCIENT_COIN_WALLET_ADDRESS
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
     scripts:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$HOME/programs/flutter" > $CM_BUILD_DIR/flip/android/local.properties
-      - name: Get Flutter dependencies
+
+      - name: Get Flutter packages
         script: |
           cd flip
-          flutter pub get
-      - name: Install CocoaPods dependencies
+          flutter packages pub get
+
+      - name: Flutter analyze
         script: |
-          cd flip/ios
-          pod install
+          cd flip
+          flutter analyze || true
+
       - name: Create .env file
         script: |
           cd flip
@@ -171,31 +236,69 @@ workflows:
           ANCIENT_COIN_WALLET_ADDRESS=${ANCIENT_COIN_WALLET_ADDRESS:-}
           EOF
           echo "✅ Created .env file with environment variables"
-      - name: Flutter build ipa
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd flip/ios
+          pod repo update
+          pod install
+          cd ../..
+
+      - name: Set up keychain to be used for code signing using Codemagic CLI 'keychain' command
+        script: |
+          keychain initialize
+
+      - name: Fetch signing files
         script: |
           cd flip
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Set up signing certificate
+        script: |
+          keychain add-certificates
+
+      - name: Set up code signing settings on Xcode project
+        script: |
+          cd flip
+          xcode-project use-profiles
+
+      - name: Build iOS app
+        script: |
+          cd flip
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID") + 1))
           flutter build ipa --release \
-            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
-            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+            --export-options-plist=/Users/builder/export_options.plist \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUMBER
+
       - name: Flutter build appbundle
         script: |
           cd flip
           flutter build appbundle --release \
-            --build-name=$(jq .version -r pubspec.yaml | cut -d+ -f1) \
-            --build-number=$(jq .version -r pubspec.yaml | cut -d+ -f2)
+            --build-name=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f1) \
+            --build-number=$(grep 'version:' pubspec.yaml | cut -d' ' -f2 | cut -d+ -f2)
+
     artifacts:
-      - build/ios/ipa/*.ipa
-      - build/app/outputs/bundle/**/*.aab
-      - build/app/outputs/flutter-apk/**/*.apk
+      - flip/build/ios/ipa/*.ipa
+      - flip/build/app/outputs/bundle/**/*.aab
+      - flip/build/app/outputs/flutter-apk/**/*.apk
+      - /tmp/xcodebuild_logs/*.log
+      - flip/flutter_drive.log
+      - flip/ios/Runner.xcworkspace/**/*
+
     publishing:
       email:
         recipients:
           - user@example.com  # Update with your email
         notify:
           success: true
-          failure: false
+          failure: true
       app_store_connect:
-        auth: integration
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: internal
