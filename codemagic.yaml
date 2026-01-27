@@ -15,31 +15,35 @@ workflows:
       cocoapods: default
 
     scripts:
+      - name: Create .env file
+        script: |
+          echo "=== Creating .env file from environment variables ==="
+          echo "ZEGO_APP_ID=${ZEGO_APP_ID}" > .env
+          echo "ZEGO_APP_SIGN=${ZEGO_APP_SIGN}" >> .env
+          echo "AGORA_APP_ID=${AGORA_APP_ID}" >> .env
+          echo "API_URL=${API_URL}" >> .env
+          echo "✅ .env file created successfully"
+
       - name: Get Flutter packages
         script: |
-          cd flip
           flutter packages pub get
 
       - name: Flutter analyze
         script: |
-          cd flip
           flutter analyze || true
 
       - name: Debug - Check Flutter version
         script: |
-          cd flip
           flutter --version
           flutter doctor -v
 
       - name: Debug - List iOS files
         script: |
-          cd flip
           ls -la ios/
           ls -la ios/Runner.xcodeproj/
 
       - name: Verify iOS permissions in Info.plist
         script: |
-          cd flip
           echo "=== Checking iOS Permissions in Info.plist ==="
           if grep -q "NSCameraUsageDescription" ios/Runner/Info.plist; then
             echo "✅ NSCameraUsageDescription found"
@@ -65,7 +69,6 @@ workflows:
 
       - name: Set up Firebase configuration
         script: |
-          cd flip
           echo "=== Setting up Firebase configuration ==="
           if [ -n "$FIREBASE_OPTIONS_CONTENT" ]; then
             echo "$FIREBASE_OPTIONS_CONTENT" > lib/firebase_options.dart
@@ -76,20 +79,32 @@ workflows:
 
       - name: Set iOS deployment target
         script: |
-          cd flip
-          # Use perl instead of sed for cross-platform compatibility
           perl -i -pe 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 13.0;/g' ios/Runner.xcodeproj/project.pbxproj
+
+      - name: Fix Pod deployment targets
+        script: |
+          echo "=== Fixing CocoaPods deployment targets ==="
+          if ! grep -q "post_install do" ios/Podfile; then
+            echo "" >> ios/Podfile
+            echo "post_install do |installer|" >> ios/Podfile
+            echo "  installer.pods_project.targets.each do |target|" >> ios/Podfile
+            echo "    target.build_configurations.each do |config|" >> ios/Podfile
+            echo "      if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 12.0" >> ios/Podfile
+            echo "        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'" >> ios/Podfile
+            echo "      end" >> ios/Podfile
+            echo "    end" >> ios/Podfile
+            echo "  end" >> ios/Podfile
+            echo "end" >> ios/Podfile
+            echo "✅ Added post_install hook to Podfile"
+          else
+            echo "✅ post_install hook already exists in Podfile"
+          fi
 
       - name: Create and configure Settings.bundle
         script: |
-          cd flip
           echo "=== Setting up Settings.bundle for iOS permissions ==="
-
-          # Create Settings.bundle directory
           mkdir -p ios/Runner/Settings.bundle
-
-          # Create Root.plist with camera and photo library permission info
-          cat > ios/Runner/Settings.bundle/Root.plist <<'EOFXML'
+          cat > ios/Runner/Settings.bundle/Root.plist << 'PLISTEOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -133,25 +148,21 @@ workflows:
           	</array>
           </dict>
           </plist>
-          EOFXML
-
+          PLISTEOF
           echo "✅ Settings.bundle created"
           ls -la ios/Runner/Settings.bundle/
-
-          # Ensure Settings.bundle is added to Xcode project if not already present
           if ! grep -q "Settings.bundle" ios/Runner.xcodeproj/project.pbxproj; then
             echo "⚠️ Adding Settings.bundle reference to Xcode project"
-            # The bundle will be included in the build output automatically
           else
             echo "✅ Settings.bundle already referenced in Xcode project"
           fi
 
       - name: Install CocoaPods dependencies
         script: |
-          cd flip/ios
+          cd ios
           pod repo update
           pod install
-          cd ../..
+          cd ..
 
       - name: Set up keychain to be used for code signing using Codemagic CLI 'keychain' command
         script: |
@@ -159,7 +170,6 @@ workflows:
 
       - name: Fetch signing files
         script: |
-          cd flip
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
@@ -170,27 +180,25 @@ workflows:
 
       - name: Set up code signing settings on Xcode project
         script: |
-          cd flip
           xcode-project use-profiles
 
       - name: Debug - List schemes and workspace info
         script: |
-          cd flip/ios
+          cd ios
           echo "=== Available Schemes ==="
           xcodebuild -list -workspace Runner.xcworkspace
           echo "=== Workspace structure ==="
           ls -la Runner.xcworkspace/
-          cd ../..
+          cd ..
 
       - name: Debug - Check if Runner scheme exists
         script: |
-          cd flip/ios
+          cd ios
           xcodebuild -showBuildSettings -workspace Runner.xcworkspace -scheme Runner | head -20
-          cd ../..
+          cd ..
 
       - name: Build iOS app
         script: |
-          cd flip
           BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID") + 1))
           flutter build ipa --release \
             --export-options-plist=/Users/builder/export_options.plist \
@@ -198,10 +206,10 @@ workflows:
             --build-number=$BUILD_NUMBER
 
     artifacts:
-      - flip/build/ios/ipa/*.ipa
+      - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - flip/flutter_drive.log
-      - flip/ios/Runner.xcworkspace/**/*
+      - flutter_drive.log
+      - ios/Runner.xcworkspace/**/*
 
     publishing:
       email:
