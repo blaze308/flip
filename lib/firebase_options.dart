@@ -60,27 +60,27 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDhav_9c_RGyxiK5aM8vP71y59B0GuJUQc',
-    appId: '1:490623785866:ios:bc2ba95f28b974e6c58673',
+    appId: '1:490623785866:ios:f5372f716bb4ccb6c58673',
     messagingSenderId: '490623785866',
     projectId: 'ancientflip-cee4f',
     storageBucket: 'ancientflip-cee4f.firebasestorage.app',
     androidClientId:
         '490623785866-39822ejrst6q9putlkenb5ohb5aggm0f.apps.googleusercontent.com',
     iosClientId:
-        '490623785866-sp0pe9tno2o8tusj5kosn4015m18s6j7.apps.googleusercontent.com',
+        '490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s.apps.googleusercontent.com',
     iosBundleId: 'ancientplustech.ancient.flip',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDhav_9c_RGyxiK5aM8vP71y59B0GuJUQc',
-    appId: '1:490623785866:ios:bc2ba95f28b974e6c58673',
+    appId: '1:490623785866:ios:f5372f716bb4ccb6c58673',
     messagingSenderId: '490623785866',
     projectId: 'ancientflip-cee4f',
     storageBucket: 'ancientflip-cee4f.firebasestorage.app',
     androidClientId:
         '490623785866-39822ejrst6q9putlkenb5ohb5aggm0f.apps.googleusercontent.com',
     iosClientId:
-        '490623785866-sp0pe9tno2o8tusj5kosn4015m18s6j7.apps.googleusercontent.com',
+        '490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s.apps.googleusercontent.com',
     iosBundleId: 'ancientplustech.ancient.flip',
   );
 
