@@ -81,5 +81,8 @@
 	<!-- Microphone Permission for Audio/Video Calls -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Microphone access is required for calls</string>
+	<!-- Export Compliance: App uses only standard encryption (HTTPS/TLS) -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
