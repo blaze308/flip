@@ -359,4 +359,61 @@ class UserService {
       return UserListResult(success: false, users: [], message: e.toString());
     }
   }
+
+  /// Block a user
+  static Future<Map<String, dynamic>> blockUser(String userId) async {
+    try {
+      print('🚫 UserService: Blocking user: $userId');
+
+      final uri = Uri.parse('$baseUrl/api/social/block/$userId');
+      final headers = await _getHeaders();
+
+      final response = await http
+          .post(uri, headers: headers)
+          .timeout(timeoutDuration);
+
+      print('🚫 UserService: Block response status: ${response.statusCode}');
+      print('🚫 UserService: Block response body: ${response.body}');
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        print('🚫 UserService: User blocked successfully');
+        return data;
+      } else {
+        throw Exception(data['message'] ?? 'Failed to block user');
+      }
+    } catch (e) {
+      print('❌ UserService: Error blocking user: $e');
+      rethrow;
+    }
+  }
+
+  /// Unblock a user
+  static Future<Map<String, dynamic>> unblockUser(String userId) async {
+    try {
+      print('✅ UserService: Unblocking user: $userId');
+
+      final uri = Uri.parse('$baseUrl/api/social/unblock/$userId');
+      final headers = await _getHeaders();
+
+      final response = await http
+          .post(uri, headers: headers)
+          .timeout(timeoutDuration);
+
+      print('✅ UserService: Unblock response status: ${response.statusCode}');
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        print('✅ UserService: User unblocked successfully');
+        return data;
+      } else {
+        throw Exception(data['message'] ?? 'Failed to unblock user');
+      }
+    } catch (e) {
+      print('❌ UserService: Error unblocking user: $e');
+      rethrow;
+    }
+  }
 }

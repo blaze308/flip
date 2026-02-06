@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/token_auth_service.dart';
 import '../../services/message_service.dart';
 import '../../widgets/custom_toaster.dart';
+import 'terms_agreement_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -22,6 +24,7 @@ class _RegisterScreenState extends State<RegisterScreen>
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
+  bool _acceptedTerms = false;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -119,6 +122,13 @@ class _RegisterScreenState extends State<RegisterScreen>
   }
 
   Future<void> _handleRegister() async {
+    if (!_acceptedTerms) {
+      context.showErrorToaster(
+        'Please accept the Terms of Service and Privacy Policy to continue.',
+      );
+      return;
+    }
+
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
@@ -235,6 +245,13 @@ class _RegisterScreenState extends State<RegisterScreen>
   }
 
   Future<void> _handleGoogleSignUp() async {
+    if (!_acceptedTerms) {
+      context.showErrorToaster(
+        'Please accept the Terms of Service and Privacy Policy to continue.',
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -282,6 +299,13 @@ class _RegisterScreenState extends State<RegisterScreen>
   }
 
   Future<void> _handleAppleSignUp() async {
+    if (!_acceptedTerms) {
+      context.showErrorToaster(
+        'Please accept the Terms of Service and Privacy Policy to continue.',
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -547,7 +571,100 @@ class _RegisterScreenState extends State<RegisterScreen>
                           ),
                         ),
 
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 24),
+
+                        // Terms Acceptance Checkbox
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Checkbox(
+                              value: _acceptedTerms,
+                              onChanged: (value) {
+                                setState(() {
+                                  _acceptedTerms = value ?? false;
+                                });
+                              },
+                              activeColor: const Color(0xFF4ECDC4),
+                              checkColor: Colors.white,
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _acceptedTerms = !_acceptedTerms;
+                                  });
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.7),
+                                        fontSize: 14,
+                                      ),
+                                      children: [
+                                        const TextSpan(
+                                          text: 'I agree to the ',
+                                        ),
+                                        WidgetSpan(
+                                          child: GestureDetector(
+                                            onTap: () async {
+                                              // Show Terms Agreement Screen
+                                              final accepted = await Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (context) => const TermsAgreementScreen(),
+                                                ),
+                                              );
+                                              if (accepted == true && mounted) {
+                                                setState(() {
+                                                  _acceptedTerms = true;
+                                                });
+                                              }
+                                            },
+                                            child: const Text(
+                                              'Terms of Service',
+                                              style: TextStyle(
+                                                color: Color(0xFF4ECDC4),
+                                                fontWeight: FontWeight.w600,
+                                                decoration:
+                                                    TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const TextSpan(text: ' and '),
+                                        WidgetSpan(
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              // Open Privacy Policy
+                                              _launchURL(
+                                                  'https://ancientplustech.com/privacy');
+                                            },
+                                            child: const Text(
+                                              'Privacy Policy',
+                                              style: TextStyle(
+                                                color: Color(0xFF4ECDC4),
+                                                fontWeight: FontWeight.w600,
+                                                decoration:
+                                                    TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const TextSpan(
+                                          text:
+                                              '. I understand there is no tolerance for objectionable content or abusive users.',
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
 
                         // Register Button
                         SizedBox(
@@ -731,5 +848,16 @@ class _RegisterScreenState extends State<RegisterScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _launchURL(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        context.showErrorToaster('Could not open URL: $url');
+      }
+    }
   }
 }

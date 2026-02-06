@@ -443,7 +443,7 @@ class UserProfileWidget extends StatelessWidget {
                   title: 'Block User',
                   onTap: () {
                     Navigator.pop(context);
-                    // Handle block
+                    _handleBlockUser(context);
                   },
                   isDestructive: true,
                 ),
@@ -480,6 +480,81 @@ class UserProfileWidget extends StatelessWidget {
       onTap: onTap,
       contentPadding: EdgeInsets.zero,
     );
+  }
+
+  Future<void> _handleBlockUser(BuildContext context) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C3E50),
+        title: const Text(
+          'Block User',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to block ${user.displayName.isNotEmpty ? user.displayName : 'this user'}? You will no longer see their posts, and they won\'t be able to contact you.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Show loading
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Blocking user...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
+      // Block the user
+      await UserService.blockUser(user.id);
+
+      // Show success message
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('User blocked successfully. Their content has been removed from your feed.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        // Navigate back or refresh
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to block user: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 }
 

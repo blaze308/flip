@@ -16,6 +16,7 @@ import 'screens/home_screen.dart';
 import 'screens/auth/biometric_setup_screen.dart';
 import 'screens/auth/biometric_login_screen.dart';
 import 'screens/auth/complete_profile_screen.dart';
+import 'screens/auth/terms_agreement_screen.dart';
 import 'token_app_router.dart';
 import 'screens/create/create_story_type_screen.dart';
 import 'screens/create/create_text_story_screen.dart';
@@ -127,6 +128,7 @@ class AncientFlipApp extends StatelessWidget {
         '/settings/language': (context) => const LanguageSettingsScreen(),
         '/settings/about': (context) => const AboutScreen(),
         '/utility/gift-leaderboard': (context) => const GiftLeaderboardScreen(),
+        '/terms': (context) => const TermsAgreementScreen(showAcceptButton: false),
       },
     );
   }

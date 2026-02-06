@@ -284,7 +284,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.description,
             title: 'Terms of Service',
             onTap: () {
-              _launchURL('https://ancientplustech.com/terms');
+              Navigator.pushNamed(context, '/terms');
             },
           ),
           _buildSettingsTile(
@@ -306,7 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.help,
             title: 'Help & Support',
             onTap: () {
-              _launchURL('https://ancientplustech.com/support');
+              _launchURL('https://ancientsociety.tech/contact');
             },
           ),
           _buildSettingsTile(
