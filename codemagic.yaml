@@ -67,6 +67,36 @@ workflows:
           echo "=== Full Info.plist permissions section ==="
           grep -A 2 -B 1 "UsageDescription" ios/Runner/Info.plist || echo "No usage descriptions found"
 
+      - name: Verify Sign in with Apple entitlements
+        script: |
+          echo "=== Verifying Sign in with Apple Configuration ==="
+          
+          # Check if entitlements file exists
+          if [ -f "ios/Runner/Runner.entitlements" ]; then
+            echo "✅ Runner.entitlements file found"
+            cat ios/Runner/Runner.entitlements
+          else
+            echo "❌ ERROR: Runner.entitlements file NOT found!"
+            exit 1
+          fi
+          
+          # Check if entitlements includes Sign in with Apple
+          if grep -q "com.apple.developer.applesignin" ios/Runner/Runner.entitlements; then
+            echo "✅ Sign in with Apple entitlement found in Runner.entitlements"
+          else
+            echo "❌ ERROR: Sign in with Apple entitlement NOT found!"
+            exit 1
+          fi
+          
+          # Check if project.pbxproj references the entitlements
+          if grep -q "CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements" ios/Runner.xcodeproj/project.pbxproj; then
+            echo "✅ Entitlements properly referenced in Xcode project"
+          else
+            echo "❌ WARNING: Entitlements may not be properly referenced in Xcode project"
+          fi
+          
+          echo "✅ All Sign in with Apple checks passed"
+
       - name: Set up Firebase configuration
         script: |
           echo "=== Setting up Firebase configuration ==="

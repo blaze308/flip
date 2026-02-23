@@ -606,10 +606,25 @@ class TokenAuthService {
   static Future<AuthResult> signInWithApple({bool isSignup = false}) async {
     try {
       _updateState(AuthState.loading);
+      
+      developer.log('Starting Apple Sign In...', name: 'TokenAuthService');
+
+      // Check if Sign in with Apple is available on this device
+      final isAvailable = await SignInWithApple.isAvailable();
+      if (!isAvailable) {
+        developer.log('Sign in with Apple is not available on this device', name: 'TokenAuthService');
+        _updateState(AuthState.error);
+        return AuthResult(
+          success: false,
+          message: 'Sign in with Apple is not available on this device',
+        );
+      }
 
       // Generate a random nonce for Apple Sign In security
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
+      
+      developer.log('Generated nonce for Apple Sign In', name: 'TokenAuthService');
 
       // Request credential for the currently signed in Apple account
       final appleCredential = await SignInWithApple.getAppleIDCredential(
@@ -619,17 +634,33 @@ class TokenAuthService {
         ],
         nonce: nonce,
       );
+      
+      developer.log('Received Apple credential', name: 'TokenAuthService');
+
+      // Validate the identity token
+      if (appleCredential.identityToken == null) {
+        developer.log('Apple Sign In failed: No identity token received', name: 'TokenAuthService');
+        _updateState(AuthState.error);
+        return AuthResult(
+          success: false,
+          message: 'Apple sign in failed: No identity token received',
+        );
+      }
 
       // Create an `OAuthCredential` from the credential returned by Apple
       final oauthCredential = OAuthProvider(
         "apple.com",
       ).credential(idToken: appleCredential.identityToken, rawNonce: rawNonce);
+      
+      developer.log('Created OAuth credential, signing in to Firebase...', name: 'TokenAuthService');
 
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
         oauthCredential,
       );
 
       if (userCredential.user != null) {
+        developer.log('Firebase authentication successful', name: 'TokenAuthService');
+        
         // Update display name if available
         if (userCredential.user!.displayName == null &&
             appleCredential.givenName != null) {
@@ -638,9 +669,11 @@ class TokenAuthService {
                   .trim();
           await userCredential.user!.updateDisplayName(fullName);
           await userCredential.user!.reload();
+          developer.log('Updated display name: $fullName', name: 'TokenAuthService');
         }
 
         // Exchange Firebase token for JWT
+        developer.log('Exchanging Firebase token for JWT...', name: 'TokenAuthService');
         final exchangeResult = await _exchangeFirebaseToken(
           userCredential.user!,
           isSignup: isSignup,
@@ -651,6 +684,7 @@ class TokenAuthService {
             await _markOnboardingCompleted();
           }
 
+          developer.log('Apple Sign In successful!', name: 'TokenAuthService');
           _updateState(AuthState.authenticated, user: exchangeResult.user);
           return AuthResult(
             success: true,
@@ -658,6 +692,7 @@ class TokenAuthService {
             isNewUser: exchangeResult.isNewUser,
           );
         } else {
+          developer.log('Token exchange failed: ${exchangeResult.error}', name: 'TokenAuthService');
           _updateState(AuthState.error);
           return AuthResult(
             success: false,
@@ -665,10 +700,49 @@ class TokenAuthService {
           );
         }
       } else {
+        developer.log('Firebase sign in returned null user', name: 'TokenAuthService');
         _updateState(AuthState.error);
         return AuthResult(success: false, message: 'Apple sign in failed');
       }
-    } catch (e) {
+    } on SignInWithAppleAuthorizationException catch (e) {
+      developer.log('Apple authorization error: ${e.code} - ${e.message}', name: 'TokenAuthService');
+      _updateState(AuthState.error);
+      
+      // Handle specific error codes
+      String errorMessage;
+      switch (e.code) {
+        case AuthorizationErrorCode.canceled:
+          errorMessage = 'Apple sign in was cancelled';
+          break;
+        case AuthorizationErrorCode.failed:
+          errorMessage = 'Apple sign in failed. Please try again.';
+          break;
+        case AuthorizationErrorCode.invalidResponse:
+          errorMessage = 'Invalid response from Apple. Please try again.';
+          break;
+        case AuthorizationErrorCode.notHandled:
+          errorMessage = 'Apple sign in not handled. Please check your configuration.';
+          break;
+        case AuthorizationErrorCode.unknown:
+          errorMessage = 'An unknown error occurred. Please try again.';
+          break;
+        default:
+          errorMessage = 'Apple sign in failed: ${e.message}';
+      }
+      
+      return AuthResult(
+        success: false,
+        message: errorMessage,
+      );
+    } on FirebaseAuthException catch (e) {
+      developer.log('Firebase auth error: ${e.code} - ${e.message}', name: 'TokenAuthService');
+      _updateState(AuthState.error);
+      return AuthResult(
+        success: false,
+        message: 'Firebase authentication failed: ${e.message ?? e.code}',
+      );
+    } catch (e, stackTrace) {
+      developer.log('Apple sign in error: $e', name: 'TokenAuthService', error: e, stackTrace: stackTrace);
       _updateState(AuthState.error);
       return AuthResult(
         success: false,
