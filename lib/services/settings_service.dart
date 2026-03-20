@@ -7,6 +7,31 @@ import 'token_auth_service.dart';
 class SettingsService {
   static const String baseUrl = 'https://flip-backend-mnpg.onrender.com/api';
 
+  /// Get user preferences (currency, privacy, etc.)
+  static Future<Map<String, dynamic>?> getPreferences() async {
+    try {
+      final headers = await _getHeaders();
+      if (headers == null) return null;
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/users/profile'),
+        headers: headers,
+      );
+
+      if (response.statusCode != 200) return null;
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return null;
+
+      final user = (data['data'] as Map<String, dynamic>?)?['user'] as Map<String, dynamic>?;
+      final profile = user?['profile'] as Map<String, dynamic>?;
+      final prefs = profile?['preferences'] as Map<String, dynamic>?;
+      return prefs;
+    } catch (e) {
+      print('❌ SettingsService.getPreferences error: $e');
+      return null;
+    }
+  }
+
   /// Get authentication headers
   static Future<Map<String, String>?> _getHeaders() async {
     final token = await TokenAuthService.getToken();
@@ -72,11 +97,43 @@ class SettingsService {
     }
   }
 
+  /// Update currency preference
+  static Future<Map<String, dynamic>> updateCurrency(String currency) async {
+    try {
+      final headers = await _getHeaders();
+      if (headers == null) {
+        return {'success': false, 'message': 'No authentication token'};
+      }
+
+      final response = await http.put(
+        Uri.parse('$baseUrl/users/profile'),
+        headers: headers,
+        body: json.encode({
+          'profile': {
+            'preferences': {'currency': currency},
+          },
+        }),
+      );
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      return {
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? 'Currency updated',
+      };
+    } catch (e) {
+      print('❌ SettingsService.updateCurrency error: $e');
+      return {'success': false, 'message': 'An error occurred: $e'};
+    }
+  }
+
   /// Update privacy settings
   static Future<Map<String, dynamic>> updatePrivacy({
     bool? profileVisible,
     bool? showEmail,
     bool? showPhone,
+    String? messageWhoCan,
+    String? callWhoCan,
+    bool? invisibleMode,
   }) async {
     try {
       final headers = await _getHeaders();
@@ -103,6 +160,15 @@ class SettingsService {
       }
       if (showPhone != null) {
         body['profile']['preferences']['privacy']['showPhone'] = showPhone;
+      }
+      if (messageWhoCan != null) {
+        body['profile']['preferences']['privacy']['messageWhoCan'] = messageWhoCan;
+      }
+      if (callWhoCan != null) {
+        body['profile']['preferences']['privacy']['callWhoCan'] = callWhoCan;
+      }
+      if (invisibleMode != null) {
+        body['profile']['preferences']['privacy']['invisibleMode'] = invisibleMode;
       }
 
       final response = await http.put(
@@ -293,6 +359,40 @@ class SettingsService {
     }
   }
 
+  /// Get my feedback submissions
+  static Future<Map<String, dynamic>> getMyFeedback({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final headers = await _getHeaders();
+      if (headers == null) {
+        return {'success': false, 'feedback': [], 'pagination': null};
+      }
+
+      final uri = Uri.parse('$baseUrl/support/feedback').replace(
+        queryParameters: {'page': page.toString(), 'limit': limit.toString()},
+      );
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 15),
+      );
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && data['success'] == true) {
+        final d = data['data'] as Map<String, dynamic>? ?? {};
+        return {
+          'success': true,
+          'feedback': d['feedback'] as List<dynamic>? ?? [],
+          'pagination': d['pagination'] as Map<String, dynamic>?,
+        };
+      }
+      return {'success': false, 'feedback': [], 'pagination': null};
+    } catch (e) {
+      print('❌ SettingsService.getMyFeedback error: $e');
+      return {'success': false, 'feedback': [], 'pagination': null};
+    }
+  }
+
   /// Submit feedback
   static Future<Map<String, dynamic>> submitFeedback({
     required String type,
@@ -302,30 +402,65 @@ class SettingsService {
     try {
       final headers = await _getHeaders();
       if (headers == null) {
-        return {
-          'success': false,
-          'message': 'No authentication token',
-        };
+        return {'success': false, 'message': 'No authentication token'};
       }
 
-      // TODO: Implement feedback API endpoint on backend
-      // For now, return success
+      final response = await http.post(
+        Uri.parse('$baseUrl/support/feedback'),
+        headers: headers,
+        body: json.encode({
+          'subject': category ?? type,
+          'message': message,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
       return {
-        'success': true,
-        'message': 'Feedback submitted successfully',
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? 'Feedback submitted successfully',
       };
     } catch (e) {
       print('❌ SettingsService.submitFeedback error: $e');
+      return {'success': false, 'message': 'An error occurred: $e'};
+    }
+  }
+
+  /// Submit contact form (works with or without auth)
+  static Future<Map<String, dynamic>> submitContact({
+    required String subject,
+    required String message,
+    String? email,
+  }) async {
+    try {
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      final token = await TokenAuthService.getToken();
+      if (token != null) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final body = <String, dynamic>{'subject': subject, 'message': message};
+      if (email != null && email.isNotEmpty) body['email'] = email;
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/support/contact'),
+        headers: headers,
+        body: json.encode(body),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
       return {
-        'success': false,
-        'message': 'An error occurred: $e',
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? 'Message sent successfully',
       };
+    } catch (e) {
+      print('❌ SettingsService.submitContact error: $e');
+      return {'success': false, 'message': 'An error occurred: $e'};
     }
   }
 
   /// Report user or content
   static Future<Map<String, dynamic>> reportContent({
-    required String type, // 'user', 'post', 'message', etc.
+    required String type, // 'user', 'post', 'comment', 'story', 'chat'
     required String targetId,
     required String reason,
     String? description,
@@ -333,24 +468,28 @@ class SettingsService {
     try {
       final headers = await _getHeaders();
       if (headers == null) {
-        return {
-          'success': false,
-          'message': 'No authentication token',
-        };
+        return {'success': false, 'message': 'No authentication token'};
       }
 
-      // TODO: Implement report API endpoint on backend
-      // For now, return success
+      final response = await http.post(
+        Uri.parse('$baseUrl/support/report'),
+        headers: headers,
+        body: json.encode({
+          'targetType': type,
+          'targetId': targetId,
+          'reason': reason,
+          'message': description ?? reason,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
       return {
-        'success': true,
-        'message': 'Report submitted successfully',
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? 'Report submitted successfully',
       };
     } catch (e) {
       print('❌ SettingsService.reportContent error: $e');
-      return {
-        'success': false,
-        'message': 'An error occurred: $e',
-      };
+      return {'success': false, 'message': 'An error occurred: $e'};
     }
   }
 }

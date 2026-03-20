@@ -29,7 +29,7 @@ Your app was rejected from the App Store because Sign in with Apple was failing 
 1. Go to [Apple Developer Portal](https://developer.apple.com/account/)
 2. Navigate to **Certificates, Identifiers & Profiles**
 3. Click on **Identifiers** in the sidebar
-4. Find and select your app identifier: `ancientplustech.ancient.flip`
+4. Find and select your app identifier: `com.ancientplus.flip`
 5. Scroll down to **Sign in with Apple** capability
 6. Check the box to enable it
 7. Click **Save** at the top right
@@ -98,7 +98,7 @@ After enabling Sign in with Apple:
 - Sign in with Apple **requires a real iOS device** (doesn't work reliably in simulator)
 - The device must be running iOS 13 or later
 - Test on **both iPhone and iPad** to ensure it works on all device types
-- Make sure you're testing with the same bundle ID: `ancientplustech.ancient.flip`
+- Make sure you're testing with the same bundle ID: `com.ancientplus.flip`
 - Test with a fresh install (uninstall previous versions first)
 
 ## Verification Checklist Before Resubmission

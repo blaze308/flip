@@ -389,6 +389,39 @@ class UserService {
     }
   }
 
+  /// Get blocked users list
+  static Future<List<UserModel>> getBlockedUsers() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/social/blacklist');
+      final headers = await _getHeaders();
+
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(timeoutDuration);
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode != 200 || data['success'] != true) {
+        return [];
+      }
+
+      final list = (data['data'] as Map<String, dynamic>?)?['blockedUsers'] as List<dynamic>?;
+      if (list == null) return [];
+
+      return list.map((e) {
+        final m = e as Map<String, dynamic>;
+        return UserModel(
+          id: m['_id']?.toString() ?? '',
+          displayName: m['displayName']?.toString() ?? 'Unknown',
+          username: m['profile']?['username']?.toString() ?? '',
+          profileImageUrl: m['photoURL']?.toString(),
+        );
+      }).toList();
+    } catch (e) {
+      print('❌ UserService: Error getting blocked users: $e');
+      return [];
+    }
+  }
+
   /// Unblock a user
   static Future<Map<String, dynamic>> unblockUser(String userId) async {
     try {

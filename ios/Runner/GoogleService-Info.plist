@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s.apps.googleusercontent.com</string>
+	<string>490623785866-kopni8ruvds5kntqrr5tdkhqn7abftnr.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s</string>
+	<string>com.googleusercontent.apps.490623785866-kopni8ruvds5kntqrr5tdkhqn7abftnr</string>
 	<key>ANDROID_CLIENT_ID</key>
 	<string>490623785866-39822ejrst6q9putlkenb5ohb5aggm0f.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
@@ -15,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>ancientplustech.ancient.flip</string>
+	<string>com.ancientplus.flip</string>
 	<key>PROJECT_ID</key>
 	<string>ancientflip-cee4f</string>
 	<key>STORAGE_BUCKET</key>
@@ -31,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:490623785866:ios:f5372f716bb4ccb6c58673</string>
+	<string>1:490623785866:ios:dfaf92ce7f17ecbcc58673</string>
 </dict>
 </plist>

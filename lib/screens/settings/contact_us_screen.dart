@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../services/settings_service.dart';
 import '../../widgets/custom_toaster.dart';
 
 /// Contact Us Screen
@@ -39,9 +40,18 @@ class _ContactUsScreenState extends ConsumerState<ContactUsScreen> {
       return;
     }
 
-    // TODO: Implement contact submission API
-    ToasterService.showSuccess(context, 'Message sent successfully! We\'ll get back to you soon.');
-    Navigator.pop(context);
+    final result = await SettingsService.submitContact(
+      subject: '${_selectedCategory}: ${_subjectController.text.trim()}',
+      message: _messageController.text.trim(),
+    );
+
+    if (!mounted) return;
+    if (result['success'] == true) {
+      ToasterService.showSuccess(context, result['message'] ?? 'Message sent successfully!');
+      Navigator.pop(context);
+    } else {
+      ToasterService.showError(context, result['message'] ?? 'Failed to send message');
+    }
   }
 
   @override
@@ -219,7 +229,7 @@ class _ContactUsScreenState extends ConsumerState<ContactUsScreen> {
                 ),
                 trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
                 onTap: () {
-                  ToasterService.showInfo(context, 'Live chat feature coming soon');
+                  Navigator.pushNamed(context, '/settings/live-chat');
                 },
               ),
             ),

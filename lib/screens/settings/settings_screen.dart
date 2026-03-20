@@ -1,7 +1,10 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/token_auth_service.dart';
+import '../../services/settings_service.dart';
+import '../../services/in_app_update_service.dart';
 import '../../widgets/custom_toaster.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
@@ -36,6 +39,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadAppInfo();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SettingsService.getPreferences();
+    if (mounted && prefs != null) {
+      final currency = prefs['currency']?.toString() ?? 'USD';
+      final match = _currencies.firstWhere(
+        (c) => c['code'] == currency,
+        orElse: () => _currencies.first,
+      );
+      setState(() {
+        _selectedCurrency = '${match['code']} (${match['symbol']})';
+      });
+    }
   }
 
   Future<void> _loadAppInfo() async {
@@ -110,14 +128,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (selected != null) {
-      setState(() {
-        _selectedCurrency = '${selected['code']} (${selected['symbol']})';
-      });
-      ToasterService.showSuccess(
-        context,
-        'Currency updated to ${selected['name']}',
-      );
-      // TODO: Save to backend user preferences
+      final result = await SettingsService.updateCurrency(selected['code']!);
+      if (mounted) {
+        if (result['success'] == true) {
+          setState(() {
+            _selectedCurrency = '${selected['code']} (${selected['symbol']})';
+          });
+          ToasterService.showSuccess(
+            context,
+            'Currency updated to ${selected['name']}',
+          );
+        } else {
+          ToasterService.showError(context, result['message'] ?? 'Failed to update currency');
+        }
+      }
     }
   }
 
@@ -199,8 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Blocked Users',
             subtitle: 'Manage blocked users',
             onTap: () {
-              // TODO: Navigate to blocked users screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(context, '/settings/blocked');
             },
           ),
 
@@ -245,10 +268,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSettingsTile(
             icon: Icons.dark_mode,
             title: 'Theme',
-            subtitle: 'Dark mode',
+            subtitle: 'System, light, or dark',
             onTap: () {
-              // TODO: Navigate to theme screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(context, '/settings/theme');
             },
           ),
 
@@ -263,10 +285,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSettingsTile(
             icon: Icons.storage,
             title: 'Storage',
-            subtitle: 'Manage app storage',
+            subtitle: 'Cache size and clear',
             onTap: () {
-              // TODO: Navigate to storage screen
-              ToasterService.showInfo(context, 'Coming soon');
+              Navigator.pushNamed(context, '/settings/storage');
             },
           ),
 
@@ -280,6 +301,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Navigator.pushNamed(context, '/settings/about');
             },
           ),
+          if (InAppUpdateService.instance.isSupported)
+            _buildSettingsTile(
+              icon: Icons.system_update,
+              title: 'Check for update',
+              subtitle: 'Update to the latest version from Play Store',
+              onTap: () => InAppUpdateService.instance.checkForUpdate(context),
+            ),
           _buildSettingsTile(
             icon: Icons.description,
             title: 'Terms of Service',
@@ -297,10 +325,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSettingsTile(
             icon: Icons.star,
             title: 'Rate App',
-            onTap: () {
-              // TODO: Open app store for rating
-              ToasterService.showInfo(context, 'Coming soon');
-            },
+            onTap: () => _launchURL(
+              Platform.isIOS
+                  ? 'https://apps.apple.com/app/ancientflip/id000000000'
+                  : 'https://play.google.com/store/apps/details?id=com.ancientplus.flip',
+            ),
           ),
           _buildSettingsTile(
             icon: Icons.help,

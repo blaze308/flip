@@ -248,7 +248,7 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
                 ),
                 trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
                 onTap: () {
-                  ToasterService.showInfo(context, 'My feedback feature coming soon');
+                  Navigator.pushNamed(context, '/settings/my-feedback');
                 },
               ),
             ),

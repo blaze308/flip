@@ -392,6 +392,40 @@ class FirebaseAuthService {
     }
   }
 
+  /// Link phone number to existing account (for phone binding)
+  static Future<AuthResult> linkPhoneNumber({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final PhoneAuthCredential credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      final result = await linkProvider(credential);
+      if (result.success && result.user != null) {
+        try {
+          await BackendService.syncUser();
+        } catch (e) {
+          print('Backend sync failed after phone link: $e');
+        }
+      }
+      return result;
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(
+        success: false,
+        message: _getErrorMessage(e),
+        user: null,
+      );
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Phone linking failed: ${e.toString()}',
+        user: null,
+      );
+    }
+  }
+
   // Verify phone number with code
   static Future<AuthResult> verifyPhoneNumber({
     required String verificationId,
@@ -696,6 +730,205 @@ class FirebaseAuthService {
         return 'This operation requires recent authentication. Please sign in again.';
       default:
         return e.message ?? 'An error occurred. Please try again.';
+    }
+  }
+
+  /// Check if user has 2FA/MFA enrolled
+  static Future<bool> is2FAEnrolled() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    final factors = await user.multiFactor.getEnrolledFactors();
+    return factors.isNotEmpty;
+  }
+
+  /// Re-authenticate with password (required before MFA enrollment for email/password users)
+  static Future<AuthResult> reauthenticateWithPassword(String password) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Not signed in', user: null);
+      }
+      final email = user.email;
+      if (email == null || email.isEmpty) {
+        return AuthResult(
+          success: false,
+          message: 'Email/password account required for 2FA',
+          user: null,
+        );
+      }
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      await user.reauthenticateWithCredential(credential);
+      return AuthResult(success: true, message: 'Re-authenticated', user: user);
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(
+        success: false,
+        message: _getErrorMessage(e),
+        user: null,
+      );
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Re-authentication failed: ${e.toString()}',
+        user: null,
+      );
+    }
+  }
+
+  /// Send phone verification code for MFA enrollment
+  static Future<AuthResult> sendPhoneVerificationCodeForMFA({
+    required String phoneNumber,
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Not signed in', user: null);
+      }
+      final session = await user.multiFactor.getSession();
+      await _auth.verifyPhoneNumber(
+        multiFactorSession: session,
+        phoneNumber: phoneNumber,
+        verificationCompleted: (_) {},
+        verificationFailed: (FirebaseAuthException e) {
+          onVerificationFailed(_getErrorMessage(e));
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (_) {},
+        timeout: const Duration(seconds: 60),
+      );
+      return AuthResult(
+        success: true,
+        message: 'Verification code sent',
+        user: user,
+      );
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(
+        success: false,
+        message: _getErrorMessage(e),
+        user: null,
+      );
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Failed to send MFA verification: ${e.toString()}',
+        user: null,
+      );
+    }
+  }
+
+  /// Enroll 2FA with verified phone credential
+  static Future<AuthResult> enroll2FA({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Not signed in', user: null);
+      }
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      await user.multiFactor.enroll(
+        PhoneMultiFactorGenerator.getAssertion(credential),
+      );
+      return AuthResult(
+        success: true,
+        message: 'Two-factor authentication enabled',
+        user: user,
+      );
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(
+        success: false,
+        message: _getErrorMessage(e),
+        user: null,
+      );
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: '2FA enrollment failed: ${e.toString()}',
+        user: null,
+      );
+    }
+  }
+
+  /// Unenroll 2FA (removes first enrolled factor)
+  static Future<AuthResult> unenroll2FA() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Not signed in', user: null);
+      }
+      final factors = await user.multiFactor.getEnrolledFactors();
+      if (factors.isEmpty) {
+        return AuthResult(
+          success: false,
+          message: 'No 2FA factor enrolled',
+          user: null,
+        );
+      }
+      await user.multiFactor.unenroll(multiFactorInfo: factors.first);
+      return AuthResult(
+        success: true,
+        message: 'Two-factor authentication disabled',
+        user: user,
+      );
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(
+        success: false,
+        message: _getErrorMessage(e),
+        user: null,
+      );
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: '2FA removal failed: ${e.toString()}',
+        user: null,
+      );
+    }
+  }
+
+  /// Change password (email/password users only). Requires current password for re-auth.
+  static Future<AuthResult> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        return AuthResult(success: false, message: 'Not signed in', user: null);
+      }
+      if (user.email == null || user.email!.isEmpty) {
+        return AuthResult(success: false, message: 'Email/password account required', user: null);
+      }
+
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+
+      return AuthResult(success: true, message: 'Password updated successfully', user: user);
+    } on FirebaseAuthException catch (e) {
+      return AuthResult(
+        success: false,
+        message: _getErrorMessage(e),
+        user: null,
+      );
+    } catch (e) {
+      return AuthResult(
+        success: false,
+        message: 'Failed to change password: ${e.toString()}',
+        user: null,
+      );
     }
   }
 

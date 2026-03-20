@@ -52,7 +52,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDK_SKo75NpxxbnG3ZqhUjM7QFUZ6ytWQ8',
-    appId: '1:490623785866:android:c6be34bf88eb1f06c58673',
+    appId: '1:490623785866:android:1d7de92731859ba1c58673',
     messagingSenderId: '490623785866',
     projectId: 'ancientflip-cee4f',
     storageBucket: 'ancientflip-cee4f.firebasestorage.app',
@@ -60,15 +60,13 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDhav_9c_RGyxiK5aM8vP71y59B0GuJUQc',
-    appId: '1:490623785866:ios:f5372f716bb4ccb6c58673',
+    appId: '1:490623785866:ios:dfaf92ce7f17ecbcc58673',
     messagingSenderId: '490623785866',
     projectId: 'ancientflip-cee4f',
     storageBucket: 'ancientflip-cee4f.firebasestorage.app',
-    androidClientId:
-        '490623785866-39822ejrst6q9putlkenb5ohb5aggm0f.apps.googleusercontent.com',
-    iosClientId:
-        '490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s.apps.googleusercontent.com',
-    iosBundleId: 'ancientplustech.ancient.flip',
+    androidClientId: '490623785866-39822ejrst6q9putlkenb5ohb5aggm0f.apps.googleusercontent.com',
+    iosClientId: '490623785866-kopni8ruvds5kntqrr5tdkhqn7abftnr.apps.googleusercontent.com',
+    iosBundleId: 'com.ancientplus.flip',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -81,7 +79,7 @@ class DefaultFirebaseOptions {
         '490623785866-39822ejrst6q9putlkenb5ohb5aggm0f.apps.googleusercontent.com',
     iosClientId:
         '490623785866-3gd1cia437mqibb84qbgijfdqja1vq4s.apps.googleusercontent.com',
-    iosBundleId: 'ancientplustech.ancient.flip',
+    iosBundleId: 'com.ancientplus.flip',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

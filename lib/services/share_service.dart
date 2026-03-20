@@ -8,7 +8,7 @@ class ShareService {
   static const String appStoreUrl =
       'https://apps.apple.com/app/flip'; // Replace with actual App Store URL when published
   static const String playStoreUrl =
-      'https://play.google.com/store/apps/details?id=ancientplustech.ancient.flip'; // Your actual package name
+      'https://play.google.com/store/apps/details?id=com.ancientplus.flip'; // Your actual package name
 
   /// Share a post with deep link (HTTPS URL for rich preview)
   static Future<void> sharePost({

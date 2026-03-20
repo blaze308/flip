@@ -25,22 +25,30 @@ class HostService {
   static Future<Map<String, dynamic>?> getHostDashboard() async {
     try {
       final headers = await _getHeaders();
-      if (headers == null) {
-        print('❌ HostService: No auth token');
-        return null;
-      }
+      if (headers == null) return null;
 
-      // TODO: Implement backend endpoint
-      // For now, return mock data
+      final response = await http.get(
+        Uri.parse('$baseUrl/host/stats'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) return null;
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return null;
+
+      final d = (data['data'] as Map<String, dynamic>?) ?? {};
       return {
-        'totalEarnings': 0,
-        'todayEarnings': 0,
-        'totalStreams': 0,
-        'totalViewers': 0,
+        'totalEarnings': d['totalEarnings'] ?? 0,
+        'todayEarnings': d['currentMonthEarnings'] ?? 0,
+        'totalStreams': d['totalStreams'] ?? 0,
+        'totalViewers': d['totalViewersCount'] ?? 0,
         'totalDuration': 0,
-        'averageViewers': 0,
-        'hostLevel': 1,
+        'averageViewers': d['avgViewers'] ?? 0,
+        'hostLevel': d['hostLevel'] ?? 1,
         'nextLevelProgress': 0,
+        'isHost': d['isHost'] ?? false,
+        'giftsReceived': d['giftsReceived'] ?? 0,
+        'liveLevel': d['liveLevel'] ?? 0,
       };
     } catch (e) {
       print('❌ HostService.getHostDashboard error: $e');
@@ -50,26 +58,34 @@ class HostService {
 
   /// Get earnings report
   static Future<Map<String, dynamic>?> getEarningsReport({
-    String period = 'month', // 'day', 'week', 'month', 'year'
+    String period = 'month',
   }) async {
     try {
       final headers = await _getHeaders();
-      if (headers == null) {
-        print('❌ HostService: No auth token');
-        return null;
-      }
+      if (headers == null) return null;
 
-      // TODO: Implement backend endpoint
-      // For now, return mock data
+      final response = await http.get(
+        Uri.parse('$baseUrl/host/earnings').replace(
+          queryParameters: {'period': period},
+        ),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) return null;
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return null;
+
+      final d = (data['data'] as Map<String, dynamic>?) ?? {};
       return {
-        'period': period,
-        'totalEarnings': 0,
+        'period': d['period'] ?? period,
+        'totalEarnings': d['totalEarnings'] ?? 0,
         'breakdown': {
-          'gifts': 0,
-          'diamonds': 0,
+          'gifts': d['totalGifts'] ?? 0,
+          'diamonds': d['totalEarnings'] ?? 0,
           'subscriptions': 0,
         },
-        'history': [],
+        'history': d['earningsByDay'] ?? [],
+        'topGifters': d['topGifters'] ?? [],
       };
     } catch (e) {
       print('❌ HostService.getEarningsReport error: $e');
@@ -86,15 +102,23 @@ class HostService {
         return null;
       }
 
-      // TODO: Implement backend endpoint
-      // For now, return mock data
+      final response = await http.get(
+        Uri.parse('$baseUrl/host/live/$streamId/stats'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) return null;
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return null;
+
+      final d = (data['data'] as Map<String, dynamic>?) ?? {};
       return {
-        'currentViewers': 0,
-        'peakViewers': 0,
-        'totalViews': 0,
-        'duration': 0,
-        'giftsReceived': 0,
-        'newFollowers': 0,
+        'currentViewers': d['currentViewers'] ?? 0,
+        'peakViewers': d['peakViewers'] ?? 0,
+        'totalViews': d['totalViews'] ?? 0,
+        'duration': d['duration'] ?? 0,
+        'giftsReceived': d['giftsReceived'] ?? 0,
+        'newFollowers': d['newFollowers'] ?? 0,
       };
     } catch (e) {
       print('❌ HostService.getLiveStatistics error: $e');
@@ -111,24 +135,27 @@ class HostService {
     try {
       final headers = await _getHeaders();
       if (headers == null) {
-        return {
-          'success': false,
-          'message': 'No authentication token',
-        };
+        return {'success': false, 'message': 'No authentication token'};
       }
 
-      // TODO: Implement backend endpoint
-      // For now, return success
+      final response = await http.post(
+        Uri.parse('$baseUrl/host/apply'),
+        headers: headers,
+        body: json.encode({
+          'reason': reason,
+          'experience': experience,
+          if (socialMedia != null) 'socialMedia': socialMedia,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
       return {
-        'success': true,
-        'message': 'Application submitted successfully. We will review your application within 24-48 hours.',
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? 'Application submitted successfully',
       };
     } catch (e) {
       print('❌ HostService.applyForHost error: $e');
-      return {
-        'success': false,
-        'message': 'An error occurred: $e',
-      };
+      return {'success': false, 'message': 'An error occurred: $e'};
     }
   }
 
@@ -141,9 +168,21 @@ class HostService {
         return null;
       }
 
-      // TODO: Implement backend endpoint
-      // For now, return null (no application)
-      return null;
+      final response = await http.get(
+        Uri.parse('$baseUrl/host/application-status'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) return null;
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return null;
+
+      final d = (data['data'] as Map<String, dynamic>?) ?? {};
+      return {
+        'isHost': d['isHost'] ?? false,
+        'hostApprovedAt': d['hostApprovedAt'],
+        'status': d['status'] ?? 'not_applied',
+      };
     } catch (e) {
       print('❌ HostService.getHostApplicationStatus error: $e');
       return null;
@@ -159,9 +198,17 @@ class HostService {
         return [];
       }
 
-      // TODO: Implement backend endpoint
-      // For now, return empty list
-      return [];
+      final response = await http.get(
+        Uri.parse('$baseUrl/host/rewards'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) return [];
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return [];
+
+      final d = (data['data'] as Map<String, dynamic>?) ?? {};
+      return (d['rewards'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     } catch (e) {
       print('❌ HostService.getHostRewards error: $e');
       return [];

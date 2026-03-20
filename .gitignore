@@ -61,6 +61,7 @@ app.*.map.json
 /android/app/release
 
 # Sensitive files - DO NOT TRACK
+keystore/
 *.jks
 *.jks.old
 local.properties
@@ -73,3 +74,5 @@ GoogleService-Info.plist
 *.p12
 *.mobileprovision
 credentials.json
+
+.env

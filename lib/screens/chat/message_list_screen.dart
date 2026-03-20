@@ -897,37 +897,72 @@ class _MessageListScreenState extends ConsumerState<MessageListScreen> {
     );
 
     if (confirmed == true && mounted) {
-      // TODO: Implement delete chat API
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Chat deleted'),
-          backgroundColor: Colors.red.shade700,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      // Refresh the chat list
-      ref.read(chatListProvider.notifier).refresh();
+      final success = await ChatService.deleteChat(chat.id);
+      if (!mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Chat deleted'),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        ref.read(chatListProvider.notifier).refresh();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete chat')),
+        );
+      }
     }
   }
 
   void _archiveChat(ChatModel chat) async {
     if (!mounted) return;
 
-    // TODO: Implement archive functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Chat archived'),
-        backgroundColor: const Color(0xFF128C7E),
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'UNDO',
-          textColor: Colors.white,
-          onPressed: () {
-            // TODO: Undo archive
-          },
+    final success = await ChatService.updateChatSettings(chat.id, archive: true);
+    if (!mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Chat archived'),
+          backgroundColor: const Color(0xFF128C7E),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'UNDO',
+            textColor: Colors.white,
+            onPressed: () async {
+              await ChatService.updateChatSettings(chat.id, archive: false);
+              ref.read(chatListProvider.notifier).refresh();
+            },
+          ),
         ),
-      ),
-    );
+      );
+      ref.read(chatListProvider.notifier).refresh();
+    }
+  }
+
+  void _pinChat(ChatModel chat) async {
+    if (!mounted) return;
+    final success = await ChatService.updateChatSettings(chat.id, pin: true);
+    if (!mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chat pinned')),
+      );
+      ref.read(chatListProvider.notifier).refresh();
+    }
+  }
+
+  void _muteChat(ChatModel chat) async {
+    if (!mounted) return;
+    final success = await ChatService.updateChatSettings(chat.id, mute: true);
+    if (!mounted) return;
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notifications muted')),
+      );
+      ref.read(chatListProvider.notifier).refresh();
+    }
   }
 
   void _showChatMoreOptions(ChatModel chat) {
@@ -991,7 +1026,7 @@ class _MessageListScreenState extends ConsumerState<MessageListScreen> {
                     'Mute notifications',
                     () {
                       Navigator.pop(context);
-                      // TODO: Implement mute
+                      _muteChat(chat);
                     },
                   ),
                   _buildChatOptionItem(
@@ -1005,7 +1040,7 @@ class _MessageListScreenState extends ConsumerState<MessageListScreen> {
                   ),
                   _buildChatOptionItem(Icons.pin_outlined, 'Pin chat', () {
                     Navigator.pop(context);
-                    // TODO: Implement pin
+                    _pinChat(chat);
                   }),
                   _buildChatOptionItem(
                     Icons.mark_chat_unread_outlined,

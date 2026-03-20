@@ -24,6 +24,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   String _phoneNumber = '';
   String _verificationId = '';
   String _currentOtp = '';
+  bool _linkMode = false; // When true, link phone to account instead of sign-in
+  bool _mfaEnrollMode = false; // When true, enroll 2FA instead of sign-in
 
   // Button states for loading UI
   ButtonState _verifyButtonState = const ButtonState();
@@ -70,6 +72,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
         setState(() {
           _phoneNumber = args['phoneNumber'] ?? '';
           _verificationId = args['verificationId'] ?? '';
+          _linkMode = args['linkMode'] == true;
+          _mfaEnrollMode = args['mfaEnrollMode'] == true;
         });
       }
     });
@@ -173,24 +177,46 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     });
 
     try {
-      // Verify OTP using Firebase
-      final result = await FirebaseAuthService.verifyPhoneNumber(
-        verificationId: _verificationId,
-        smsCode: otpCode,
-      );
+      // Verify OTP using Firebase (sign-in, link, or MFA enroll depending on mode)
+      final AuthResult result;
+      if (_mfaEnrollMode) {
+        result = await FirebaseAuthService.enroll2FA(
+          verificationId: _verificationId,
+          smsCode: otpCode,
+        );
+      } else if (_linkMode) {
+        result = await FirebaseAuthService.linkPhoneNumber(
+          verificationId: _verificationId,
+          smsCode: otpCode,
+        );
+      } else {
+        result = await FirebaseAuthService.verifyPhoneNumber(
+          verificationId: _verificationId,
+          smsCode: otpCode,
+        );
+      }
 
       if (result.success && result.user != null) {
         if (mounted) {
+          final successMsg = _mfaEnrollMode
+              ? '2FA enabled successfully!'
+              : _linkMode
+                  ? 'Phone linked successfully!'
+                  : 'Verification successful!';
           setState(() {
             _verifyButtonState = ButtonStateExtension.success(
-              message: 'Verification successful!',
+              message: successMsg,
             );
           });
 
           // Navigate after showing success
           Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted) {
-              Navigator.of(context).pushReplacementNamed('/home');
+              if (_linkMode || _mfaEnrollMode) {
+                Navigator.of(context).popUntil(ModalRoute.withName('/settings/account'));
+              } else {
+                Navigator.of(context).pushReplacementNamed('/home');
+              }
             }
           });
         }

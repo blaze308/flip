@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
+import 'package:http/http.dart' as http;
 import 'token_auth_service.dart';
 import 'backend_service.dart';
 
@@ -71,15 +73,38 @@ class SimpleUserService {
   static Future<List<TokenUser>> searchUsers(
     String query, {
     int limit = 20,
+    int page = 1,
   }) async {
     try {
-      // This would need to be implemented in the backend service
-      // For now, return empty list
-      developer.log(
-        'User search not implemented yet',
-        name: 'SimpleUserService',
+      final headers = await TokenAuthService.getAuthHeaders();
+      if (headers == null) return [];
+
+      final uri = Uri.parse('${BackendService.baseUrl}/api/users/search').replace(
+        queryParameters: {'q': query, 'limit': limit.toString(), 'page': page.toString()},
       );
-      return [];
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 15),
+      );
+
+      if (response.statusCode != 200) return [];
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return [];
+
+      final usersData = (data['data'] as Map<String, dynamic>?)?['users'] as List<dynamic>?;
+      if (usersData == null) return [];
+
+      return usersData.map((u) {
+        final m = u as Map<String, dynamic>;
+        return TokenUser(
+          id: m['id']?.toString() ?? '',
+          firebaseUid: '',
+          displayName: m['displayName']?.toString(),
+          photoURL: m['photoURL']?.toString(),
+          emailVerified: false,
+          role: 'user',
+          isActive: true,
+        );
+      }).toList();
     } catch (e) {
       developer.log('Failed to search users: $e', name: 'SimpleUserService');
       return [];
@@ -89,12 +114,22 @@ class SimpleUserService {
   /// Get user by ID
   static Future<TokenUser?> getUserById(String userId) async {
     try {
-      // This would need to be implemented in the backend service
-      developer.log(
-        'Get user by ID not implemented yet',
-        name: 'SimpleUserService',
+      final headers = await TokenAuthService.getAuthHeaders();
+      if (headers == null) return null;
+
+      final uri = Uri.parse('${BackendService.baseUrl}/api/users/$userId');
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 15),
       );
-      return null;
+
+      if (response.statusCode != 200) return null;
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (data['success'] != true) return null;
+
+      final userData = (data['data'] as Map<String, dynamic>?)?['user'] as Map<String, dynamic>?;
+      if (userData == null) return null;
+
+      return TokenUser.fromBackendData(userData);
     } catch (e) {
       developer.log('Failed to get user by ID: $e', name: 'SimpleUserService');
       return null;

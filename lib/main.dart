@@ -28,10 +28,21 @@ import 'screens/settings/settings_screen.dart';
 import 'screens/settings/account_security_screen.dart';
 import 'screens/settings/privacy_settings_screen.dart';
 import 'screens/settings/notification_settings_screen.dart';
+import 'screens/notifications/notification_center_screen.dart';
 import 'screens/settings/language_settings_screen.dart';
 import 'screens/settings/about_screen.dart';
+import 'screens/settings/blocked_users_screen.dart';
+import 'screens/settings/theme_settings_screen.dart';
+import 'screens/settings/storage_settings_screen.dart';
+import 'screens/settings/change_password_screen.dart';
+import 'screens/settings/my_feedback_screen.dart';
+import 'screens/settings/sound_vibration_screen.dart';
+import 'screens/settings/phone_binding_screen.dart';
+import 'screens/settings/two_factor_setup_screen.dart';
+import 'screens/settings/live_chat_screen.dart';
 import 'services/app_lifecycle_manager.dart';
 import 'services/connectivity_service.dart';
+import 'providers/theme_provider.dart';
 import 'screens/utility/gift_leaderboard_screen.dart';
 
 void main() async {
@@ -83,15 +94,37 @@ void main() async {
   runApp(const ProviderScope(child: AncientFlipApp()));
 }
 
-class AncientFlipApp extends StatelessWidget {
+class AncientFlipApp extends ConsumerStatefulWidget {
   const AncientFlipApp({super.key});
 
   @override
+  ConsumerState<AncientFlipApp> createState() => _AncientFlipAppState();
+}
+
+class _AncientFlipAppState extends ConsumerState<AncientFlipApp> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => ref.read(themeProvider.notifier).load());
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final themeNotifier = ref.watch(themeProvider);
+
     return MaterialApp(
       title: 'AncientFlip',
       debugShowCheckedModeBanner: false,
+      themeMode: themeNotifier.loaded ? themeNotifier.mode : ThemeMode.dark,
       theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF4ECDC4),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+        fontFamily: 'Roboto',
+      ),
+      darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF4ECDC4),
           brightness: Brightness.dark,
@@ -125,8 +158,18 @@ class AncientFlipApp extends StatelessWidget {
         '/settings/privacy': (context) => const PrivacySettingsScreen(),
         '/settings/notifications':
             (context) => const NotificationSettingsScreen(),
+        '/notifications': (context) => const NotificationCenterScreen(),
         '/settings/language': (context) => const LanguageSettingsScreen(),
         '/settings/about': (context) => const AboutScreen(),
+        '/settings/blocked': (context) => const BlockedUsersScreen(),
+        '/settings/theme': (context) => const ThemeSettingsScreen(),
+        '/settings/storage': (context) => const StorageSettingsScreen(),
+        '/settings/change-password': (context) => const ChangePasswordScreen(),
+        '/settings/my-feedback': (context) => const MyFeedbackScreen(),
+        '/settings/sound-vibration': (context) => const SoundVibrationScreen(),
+        '/settings/phone-binding': (context) => const PhoneBindingScreen(),
+        '/settings/2fa': (context) => const TwoFactorSetupScreen(),
+        '/settings/live-chat': (context) => const LiveChatScreen(),
         '/utility/gift-leaderboard': (context) => const GiftLeaderboardScreen(),
         '/terms': (context) => const TermsAgreementScreen(showAcceptButton: false),
       },

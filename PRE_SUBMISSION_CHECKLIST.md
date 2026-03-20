@@ -14,7 +14,7 @@
 ### Step 1: Enable Sign in with Apple Capability
 - [ ] Navigate to https://developer.apple.com/account/
 - [ ] Go to Certificates, Identifiers & Profiles
-- [ ] Select Identifiers → `ancientplustech.ancient.flip`
+- [ ] Select Identifiers → `com.ancientplus.flip`
 - [ ] Enable "Sign in with Apple" capability
 - [ ] Save changes
 
@@ -173,7 +173,7 @@ Thank you for your patience.
 **Solution:**
 1. Ensure you have a valid Distribution certificate
 2. Ensure provisioning profiles are not expired
-3. Check bundle identifier matches: `ancientplustech.ancient.flip`
+3. Check bundle identifier matches: `com.ancientplus.flip`
 
 ### Issue: "Sign in with Apple fails during testing"
 **Solution:**

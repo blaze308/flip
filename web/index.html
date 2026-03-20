@@ -152,7 +152,7 @@
       <a href="https://apps.apple.com/app/flip" class="btn btn-ios">
         📱 Download on App Store
       </a>
-      <a href="https://play.google.com/store/apps/details?id=ancientplustech.ancient.flip" class="btn btn-android">
+      <a href="https://play.google.com/store/apps/details?id=com.ancientplus.flip" class="btn btn-android">
         🤖 Get it on Google Play
       </a>
     </div>
@@ -270,7 +270,7 @@
 
       // Handle Android intent fallback
       if (navigator.userAgent.match(/Android/i) && contentType) {
-        const intentUrl = `intent://open/${contentType}/${contentId}#Intent;scheme=flip;package=ancientplustech.ancient.flip;end`;
+        const intentUrl = `intent://open/${contentType}/${contentId}#Intent;scheme=flip;package=com.ancientplus.flip;end`;
         console.log('🤖 Android Intent URL:', intentUrl);
         
         setTimeout(() => {

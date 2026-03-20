@@ -10,7 +10,7 @@
 	<string>production</string>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)ancientplustech.ancient.flip</string>
+		<string>$(AppIdentifierPrefix)com.ancientplus.flip</string>
 	</array>
 </dict>
 </plist>

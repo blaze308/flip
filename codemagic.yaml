@@ -9,7 +9,7 @@ workflows:
       vars:
         XCODE_WORKSPACE: "Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
-        BUNDLE_ID: "ancientplustech.ancient.flip"
+        BUNDLE_ID: "com.ancientplus.flip"
       flutter: stable
       xcode: latest
       cocoapods: default

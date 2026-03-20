@@ -10,6 +10,7 @@ import '../services/contextual_auth_service.dart';
 import '../services/video_downloader_service.dart';
 import '../services/incoming_call_manager.dart';
 import '../services/deep_link_service.dart';
+import '../services/in_app_update_service.dart';
 import '../widgets/custom_toaster.dart';
 import '../widgets/post_menu_widget.dart';
 import '../widgets/loading_button.dart';
@@ -27,6 +28,7 @@ import 'chat/message_list_screen.dart';
 import 'live/live_list_screen.dart' as screens;
 import 'profile/profile_tab_screen.dart';
 import '../providers/app_providers.dart';
+import '../providers/notification_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -76,6 +78,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         IncomingCallManager().initialize(context);
         // Initialize deep linking for posts and reels
         DeepLinkService().initialize(context);
+        // Check for Android in-app update (no-op on iOS/web)
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            InAppUpdateService.instance.checkForUpdate(context);
+          }
+        });
       }
     });
   }
@@ -622,6 +630,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ],
       ),
       actions: [
+        Consumer(
+          builder: (context, ref, _) {
+            final unreadAsync = ref.watch(unreadCountProvider);
+            final count = unreadAsync.valueOrNull ?? 0;
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  onPressed: () => Navigator.pushNamed(context, '/notifications'),
+                  icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                ),
+                if (count > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF4ECDC4),
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      child: Text(
+                        count > 99 ? '99+' : count.toString(),
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
         IconButton(
           onPressed: () {
             // Settings

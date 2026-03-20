@@ -1,7 +1,7 @@
 # Apple Developer Portal Configuration Guide
 
 ## 🎯 Objective
-Enable Sign in with Apple capability for your app: `ancientplustech.ancient.flip`
+Enable Sign in with Apple capability for your app: `com.ancientplus.flip`
 
 ## 📋 Prerequisites
 - Apple Developer Account access
@@ -24,7 +24,7 @@ Enable Sign in with Apple capability for your app: `ancientplustech.ancient.flip
 ### Step 3: Find Your App Identifier
 1. In the left sidebar, click **"Identifiers"**
 2. You'll see a list of all your app identifiers
-3. Find and click on: **`ancientplustech.ancient.flip`**
+3. Find and click on: **`com.ancientplus.flip`**
    - Use the search box if you have many identifiers
    - It should show as an "App ID" type
 
@@ -54,7 +54,7 @@ Enable Sign in with Apple capability for your app: `ancientplustech.ancient.flip
 2. You'll see a list of all your provisioning profiles
 
 ### Step 2: Regenerate Development Profile
-1. Find your **Development** profile for `ancientplustech.ancient.flip`
+1. Find your **Development** profile for `com.ancientplus.flip`
    - Usually named something like "iOS Team Provisioning Profile" or "Development Profile"
 2. Click on the profile name to open it
 3. Click the **"Edit"** button
@@ -63,7 +63,7 @@ Enable Sign in with Apple capability for your app: `ancientplustech.ancient.flip
 6. **Double-click** the downloaded file to install it in Xcode
 
 ### Step 3: Regenerate Distribution Profile
-1. Find your **Distribution** profile for `ancientplustech.ancient.flip`
+1. Find your **Distribution** profile for `com.ancientplus.flip`
    - Usually named something like "App Store Distribution" or "Distribution Profile"
 2. Click on the profile name to open it
 3. Click the **"Edit"** button
@@ -127,7 +127,7 @@ developer.apple.com/account
     ↓
 Certificates, Identifiers & Profiles
     ↓
-Identifiers → Select App ID → ancientplustech.ancient.flip
+Identifiers → Select App ID → com.ancientplus.flip
     ↓
 Scroll down → Find "Sign in with Apple" → ✅ Check it
     ↓
@@ -252,5 +252,5 @@ You've successfully completed this guide when:
 ---
 
 **Last Updated:** February 18, 2026
-**For App:** Flip (ancientplustech.ancient.flip)
+**For App:** Flip (com.ancientplus.flip)
 **Issue:** App Store rejection - Sign in with Apple not working on iPad

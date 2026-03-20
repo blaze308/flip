@@ -59,21 +59,27 @@ class NotificationSettingsNotifier extends StateNotifier<AsyncValue<Map<String, 
 
 /// Privacy Settings Provider
 final privacySettingsProvider =
-    StateNotifierProvider<PrivacySettingsNotifier, AsyncValue<Map<String, bool>>>((ref) {
+    StateNotifierProvider<PrivacySettingsNotifier, AsyncValue<Map<String, dynamic>>>((ref) {
   return PrivacySettingsNotifier();
 });
 
-class PrivacySettingsNotifier extends StateNotifier<AsyncValue<Map<String, bool>>> {
+class PrivacySettingsNotifier extends StateNotifier<AsyncValue<Map<String, dynamic>>> {
   PrivacySettingsNotifier() : super(const AsyncValue.data({
     'profileVisible': true,
     'showEmail': false,
     'showPhone': false,
+    'messageWhoCan': 'everyone',
+    'callWhoCan': 'everyone',
+    'invisibleMode': false,
   }));
 
   Future<Map<String, dynamic>> updatePrivacy({
     bool? profileVisible,
     bool? showEmail,
     bool? showPhone,
+    String? messageWhoCan,
+    String? callWhoCan,
+    bool? invisibleMode,
   }) async {
     try {
       state = const AsyncValue.loading();
@@ -90,6 +96,9 @@ class PrivacySettingsNotifier extends StateNotifier<AsyncValue<Map<String, bool>
           'profileVisible': profileVisible ?? currentSettings['profileVisible'] ?? true,
           'showEmail': showEmail ?? currentSettings['showEmail'] ?? false,
           'showPhone': showPhone ?? currentSettings['showPhone'] ?? false,
+          'messageWhoCan': messageWhoCan ?? currentSettings['messageWhoCan'] ?? 'everyone',
+          'callWhoCan': callWhoCan ?? currentSettings['callWhoCan'] ?? 'everyone',
+          'invisibleMode': invisibleMode ?? currentSettings['invisibleMode'] ?? false,
         });
       } else {
         state = AsyncValue.error(
@@ -108,8 +117,67 @@ class PrivacySettingsNotifier extends StateNotifier<AsyncValue<Map<String, bool>
     }
   }
 
-  void updateLocal(Map<String, bool> settings) {
+  void updateLocal(Map<String, dynamic> settings) {
     state = AsyncValue.data(settings);
+  }
+
+  Future<void> loadFromBackend() async {
+    try {
+      state = const AsyncValue.loading();
+      final prefs = await SettingsService.getPreferences();
+      if (prefs != null) {
+        final privacy = prefs['privacy'] as Map<String, dynamic>? ?? {};
+        state = AsyncValue.data({
+          'profileVisible': privacy['profileVisible'] ?? true,
+          'showEmail': privacy['showEmail'] ?? false,
+          'showPhone': privacy['showPhone'] ?? false,
+          'messageWhoCan': privacy['messageWhoCan'] ?? 'everyone',
+          'callWhoCan': privacy['callWhoCan'] ?? 'everyone',
+          'invisibleMode': privacy['invisibleMode'] ?? false,
+        });
+      } else {
+        state = const AsyncValue.data({
+          'profileVisible': true,
+          'showEmail': false,
+          'showPhone': false,
+          'messageWhoCan': 'everyone',
+          'callWhoCan': 'everyone',
+          'invisibleMode': false,
+        });
+      }
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+}
+
+/// Currency Settings Provider
+final currencySettingsProvider =
+    StateNotifierProvider<CurrencySettingsNotifier, AsyncValue<String>>((ref) {
+  return CurrencySettingsNotifier();
+});
+
+class CurrencySettingsNotifier extends StateNotifier<AsyncValue<String>> {
+  CurrencySettingsNotifier() : super(const AsyncValue.data('USD'));
+
+  Future<Map<String, dynamic>> updateCurrency(String currency) async {
+    try {
+      state = const AsyncValue.loading();
+      final result = await SettingsService.updateCurrency(currency);
+      if (result['success'] == true) {
+        state = AsyncValue.data(currency);
+      } else {
+        state = AsyncValue.error(result['message'] ?? 'Failed', StackTrace.current);
+      }
+      return result;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  void setLocal(String currency) {
+    state = AsyncValue.data(currency);
   }
 }
 

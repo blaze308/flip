@@ -137,7 +137,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                   title: 'Sound Settings',
                   subtitle: 'Manage notification sounds',
                   onTap: () {
-                    ToasterService.showInfo(context, 'Sound settings feature coming soon');
+                    Navigator.pushNamed(context, '/settings/sound-vibration');
                   },
                 ),
                 _buildSettingsTile(
@@ -145,7 +145,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                   title: 'Vibration Settings',
                   subtitle: 'Manage vibration patterns',
                   onTap: () {
-                    ToasterService.showInfo(context, 'Vibration settings feature coming soon');
+                    Navigator.pushNamed(context, '/settings/sound-vibration');
                   },
                 ),
                 const SizedBox(height: 24),
@@ -154,10 +154,10 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                 _buildSectionHeader('In-App'),
                 _buildSettingsTile(
                   icon: Icons.notifications_active,
-                  title: 'In-App Notifications',
-                  subtitle: 'Show notifications while using the app',
+                  title: 'Notification Center',
+                  subtitle: 'View likes, comments, follows and gifts',
                   onTap: () {
-                    ToasterService.showInfo(context, 'In-app notifications feature coming soon');
+                    Navigator.pushNamed(context, '/notifications');
                   },
                 ),
               ],

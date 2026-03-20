@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/settings_providers.dart';
+import '../../services/firebase_auth_service.dart';
 import '../../widgets/custom_toaster.dart';
 
 /// Account & Security Screen
@@ -90,15 +91,22 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
               title: 'Change Password',
               subtitle: 'Update your password',
               onTap: () {
-                ToasterService.showInfo(context, 'Change password feature coming soon');
+                Navigator.pushNamed(context, '/settings/change-password');
               },
             ),
             _buildSettingsTile(
               icon: Icons.email,
               title: 'Email Verification',
-              subtitle: 'Verify your email address',
-              onTap: () {
-                ToasterService.showInfo(context, 'Email verification feature coming soon');
+              subtitle: 'Send verification link to your email',
+              onTap: () async {
+                final result = await FirebaseAuthService.sendEmailVerification();
+                if (mounted) {
+                  if (result.success) {
+                    ToasterService.showSuccess(context, 'Verification email sent. Check your inbox.');
+                  } else {
+                    ToasterService.showError(context, result.message);
+                  }
+                }
               },
             ),
             _buildSettingsTile(
@@ -106,7 +114,7 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
               title: 'Phone Binding',
               subtitle: 'Link your phone number',
               onTap: () {
-                ToasterService.showInfo(context, 'Phone binding feature coming soon');
+                Navigator.pushNamed(context, '/settings/phone-binding');
               },
             ),
             _buildSettingsTile(
@@ -114,7 +122,7 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
               title: 'Two-Factor Authentication',
               subtitle: 'Add an extra layer of security',
               onTap: () {
-                ToasterService.showInfo(context, '2FA feature coming soon');
+                Navigator.pushNamed(context, '/settings/2fa');
               },
             ),
             const SizedBox(height: 24),

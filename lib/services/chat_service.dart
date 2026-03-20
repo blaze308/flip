@@ -81,6 +81,7 @@ class ChatService {
     int page = 1,
     int limit = 20,
     String? search,
+    bool includeArchived = false,
   }) async {
     try {
       print('💬 ChatService: Fetching chats (page: $page, limit: $limit)');
@@ -93,6 +94,9 @@ class ChatService {
 
       if (search != null && search.isNotEmpty) {
         queryParams['search'] = search;
+      }
+      if (includeArchived) {
+        queryParams['includeArchived'] = 'true';
       }
 
       final uri = Uri.parse(
@@ -783,6 +787,56 @@ class ChatService {
       }
     } catch (e) {
       print('💬 ChatService: Error deleting message: $e');
+      return false;
+    }
+  }
+
+  /// Delete/leave a chat
+  static Future<bool> deleteChat(String chatId) async {
+    try {
+      print('💬 ChatService: Deleting chat $chatId');
+
+      final headers = await _getAuthHeaders();
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/chats/$chatId'),
+        headers: headers,
+      ).timeout(timeoutDuration);
+
+      if (response.statusCode == 200) {
+        clearMessageCache(chatId);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('💬 ChatService: Error deleting chat: $e');
+      return false;
+    }
+  }
+
+  /// Update chat settings (archive, pin, mute)
+  static Future<bool> updateChatSettings(
+    String chatId, {
+    bool? archive,
+    bool? pin,
+    bool? mute,
+  }) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final body = <String, dynamic>{};
+      if (archive != null) body['archive'] = archive;
+      if (pin != null) body['pin'] = pin;
+      if (mute != null) body['mute'] = mute;
+      if (body.isEmpty) return true;
+
+      final response = await http.patch(
+        Uri.parse('$baseUrl/api/chats/$chatId'),
+        headers: headers,
+        body: json.encode(body),
+      ).timeout(timeoutDuration);
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('💬 ChatService: Error updating chat settings: $e');
       return false;
     }
   }

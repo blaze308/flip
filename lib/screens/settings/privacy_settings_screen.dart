@@ -14,6 +14,12 @@ class PrivacySettingsScreen extends ConsumerStatefulWidget {
 
 class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
   @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => ref.read(privacySettingsProvider.notifier).loadFromBackend());
+  }
+
+  @override
   Widget build(BuildContext context) {
     final privacyAsync = ref.watch(privacySettingsProvider);
 
@@ -132,33 +138,79 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
 
                 // Communication
                 _buildSectionHeader('Communication'),
-                _buildSettingsTile(
+                _buildWhoCanTile(
                   icon: Icons.message,
                   title: 'Who Can Message Me',
-                  subtitle: 'Control who can send you messages',
-                  onTap: () {
-                    ToasterService.showInfo(context, 'Message privacy feature coming soon');
+                  value: settings['messageWhoCan'] ?? 'everyone',
+                  options: const [
+                    ('everyone', 'Everyone'),
+                    ('followers', 'Followers only'),
+                    ('friends', 'Friends only'),
+                    ('nobody', 'Nobody'),
+                  ],
+                  onSelect: (value) async {
+                    final result = await ref.read(privacySettingsProvider.notifier).updatePrivacy(
+                          messageWhoCan: value,
+                        );
+                    if (mounted) {
+                      if (result['success'] == true) {
+                        ToasterService.showSuccess(context, 'Message privacy updated');
+                      } else {
+                        ToasterService.showError(context, result['message'] ?? 'Failed');
+                      }
+                    }
                   },
                 ),
-                _buildSettingsTile(
+                _buildWhoCanTile(
                   icon: Icons.call,
                   title: 'Who Can Call Me',
-                  subtitle: 'Control who can call you',
-                  onTap: () {
-                    ToasterService.showInfo(context, 'Call privacy feature coming soon');
+                  value: settings['callWhoCan'] ?? 'everyone',
+                  options: const [
+                    ('everyone', 'Everyone'),
+                    ('followers', 'Followers only'),
+                    ('friends', 'Friends only'),
+                    ('nobody', 'Nobody'),
+                  ],
+                  onSelect: (value) async {
+                    final result = await ref.read(privacySettingsProvider.notifier).updatePrivacy(
+                          callWhoCan: value,
+                        );
+                    if (mounted) {
+                      if (result['success'] == true) {
+                        ToasterService.showSuccess(context, 'Call privacy updated');
+                      } else {
+                        ToasterService.showError(context, result['message'] ?? 'Failed');
+                      }
+                    }
                   },
                 ),
                 const SizedBox(height: 24),
 
                 // Invisible Mode
                 _buildSectionHeader('Visibility'),
-                _buildSettingsTile(
-                  icon: Icons.visibility_off,
-                  title: 'Invisible Mode',
-                  subtitle: 'Hide your online status',
-                  onTap: () {
-                    ToasterService.showInfo(context, 'Invisible mode feature coming soon');
-                  },
+                Card(
+                  color: const Color(0xFF1D1E33),
+                  child: SwitchListTile(
+                    value: settings['invisibleMode'] == true,
+                    onChanged: (value) async {
+                      final result = await ref.read(privacySettingsProvider.notifier).updatePrivacy(
+                            invisibleMode: value,
+                          );
+                      if (mounted) {
+                        if (result['success'] == true) {
+                          ToasterService.showSuccess(context, 'Invisible mode ${value ? "on" : "off"}');
+                        } else {
+                          ToasterService.showError(context, result['message'] ?? 'Failed');
+                        }
+                      }
+                    },
+                    title: const Text('Invisible Mode', style: TextStyle(color: Colors.white)),
+                    subtitle: const Text(
+                      'Hide your online status from others',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    activeColor: const Color(0xFF4ECDC4),
+                  ),
                 ),
               ],
             ),
@@ -197,6 +249,45 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
         subtitle: Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 12)),
         trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
         onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _buildWhoCanTile({
+    required IconData icon,
+    required String title,
+    required String value,
+    required List<(String, String)> options,
+    required Future<void> Function(String) onSelect,
+  }) {
+    final label = options.firstWhere(
+      (o) => o.$1 == value,
+      orElse: () => options.first,
+    ).$2;
+    return Card(
+      color: const Color(0xFF1D1E33),
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFF4ECDC4)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        subtitle: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+        onTap: () async {
+          final selected = await showModalBottomSheet<String>(
+            context: context,
+            backgroundColor: const Color(0xFF1D1E33),
+            builder: (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: options.map((o) => ListTile(
+                  title: Text(o.$2, style: const TextStyle(color: Colors.white)),
+                  onTap: () => Navigator.pop(ctx, o.$1),
+                )).toList(),
+              ),
+            ),
+          );
+          if (selected != null) await onSelect(selected);
+        },
       ),
     );
   }

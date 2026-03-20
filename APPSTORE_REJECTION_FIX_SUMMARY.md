@@ -75,7 +75,7 @@ This ensures Xcode includes the entitlements in every build.
 **Steps:**
 1. Go to https://developer.apple.com/account/
 2. Navigate to **Certificates, Identifiers & Profiles**
-3. Click **Identifiers** → Select `ancientplustech.ancient.flip`
+3. Click **Identifiers** → Select `com.ancientplus.flip`
 4. Find **Sign in with Apple** in the capabilities list
 5. ✅ Check the box to enable it
 6. Click **Save**
@@ -150,7 +150,7 @@ open ios/Runner.xcworkspace
 1. Go to Firebase Console
 2. Navigate to **Authentication** → **Sign-in method**
 3. Ensure **Apple** is enabled as a provider
-4. Your Service ID should be: `ancientplustech.ancient.flip`
+4. Your Service ID should be: `com.ancientplus.flip`
 
 ## Testing Checklist
 

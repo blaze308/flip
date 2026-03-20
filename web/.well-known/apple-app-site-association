@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "TEAM_ID.ancientplustech.ancient.flip",
+        "appID": "TEAM_ID.com.ancientplus.flip",
         "paths": [
           "/post/*",
           "/reel/*",

@@ -25,16 +25,28 @@ class NotificationService {
   static Future<List<Map<String, dynamic>>> getNotifications({
     int page = 1,
     int limit = 20,
+    bool unreadOnly = false,
   }) async {
     try {
       final headers = await _getHeaders();
-      if (headers == null) {
-        print('❌ NotificationService: No auth token');
-        return [];
-      }
+      if (headers == null) return [];
 
-      // TODO: Implement backend endpoint
-      // For now, return empty list
+      final uri = Uri.parse('$baseUrl/notifications').replace(
+        queryParameters: {
+          'page': page.toString(),
+          'limit': limit.toString(),
+          if (unreadOnly) 'unreadOnly': 'true',
+        },
+      );
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 15),
+      );
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && data['success'] == true) {
+        final list = (data['data'] as Map<String, dynamic>?)?['notifications'] as List<dynamic>?;
+        return list?.cast<Map<String, dynamic>>() ?? [];
+      }
       return [];
     } catch (e) {
       print('❌ NotificationService.getNotifications error: $e');
@@ -47,24 +59,22 @@ class NotificationService {
     try {
       final headers = await _getHeaders();
       if (headers == null) {
-        return {
-          'success': false,
-          'message': 'No authentication token',
-        };
+        return {'success': false, 'message': 'No authentication token'};
       }
 
-      // TODO: Implement backend endpoint
-      // For now, return success
+      final response = await http.put(
+        Uri.parse('$baseUrl/notifications/$notificationId/read'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
       return {
-        'success': true,
-        'message': 'Notification marked as read',
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? '',
       };
     } catch (e) {
       print('❌ NotificationService.markAsRead error: $e');
-      return {
-        'success': false,
-        'message': 'An error occurred: $e',
-      };
+      return {'success': false, 'message': 'An error occurred: $e'};
     }
   }
 
@@ -73,24 +83,22 @@ class NotificationService {
     try {
       final headers = await _getHeaders();
       if (headers == null) {
-        return {
-          'success': false,
-          'message': 'No authentication token',
-        };
+        return {'success': false, 'message': 'No authentication token'};
       }
 
-      // TODO: Implement backend endpoint
-      // For now, return success
+      final response = await http.put(
+        Uri.parse('$baseUrl/notifications/read-all'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
       return {
-        'success': true,
-        'message': 'All notifications marked as read',
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? '',
       };
     } catch (e) {
       print('❌ NotificationService.markAllAsRead error: $e');
-      return {
-        'success': false,
-        'message': 'An error occurred: $e',
-      };
+      return {'success': false, 'message': 'An error occurred: $e'};
     }
   }
 
@@ -99,24 +107,22 @@ class NotificationService {
     try {
       final headers = await _getHeaders();
       if (headers == null) {
-        return {
-          'success': false,
-          'message': 'No authentication token',
-        };
+        return {'success': false, 'message': 'No authentication token'};
       }
 
-      // TODO: Implement backend endpoint
-      // For now, return success
+      final response = await http.delete(
+        Uri.parse('$baseUrl/notifications/$notificationId'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
       return {
-        'success': true,
-        'message': 'Notification deleted',
+        'success': response.statusCode == 200 && data['success'] == true,
+        'message': data['message']?.toString() ?? '',
       };
     } catch (e) {
       print('❌ NotificationService.deleteNotification error: $e');
-      return {
-        'success': false,
-        'message': 'An error occurred: $e',
-      };
+      return {'success': false, 'message': 'An error occurred: $e'};
     }
   }
 
@@ -124,13 +130,17 @@ class NotificationService {
   static Future<int> getUnreadCount() async {
     try {
       final headers = await _getHeaders();
-      if (headers == null) {
-        print('❌ NotificationService: No auth token');
-        return 0;
-      }
+      if (headers == null) return 0;
 
-      // TODO: Implement backend endpoint
-      // For now, return 0
+      final response = await http.get(
+        Uri.parse('$baseUrl/notifications/unread-count'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 15));
+
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && data['success'] == true) {
+        return (data['data'] as Map<String, dynamic>?)?['unreadCount'] as int? ?? 0;
+      }
       return 0;
     } catch (e) {
       print('❌ NotificationService.getUnreadCount error: $e');
